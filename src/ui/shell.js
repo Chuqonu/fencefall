@@ -355,10 +355,11 @@ export function mountShell(root, api) {
     soundButton.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
     soundButton.classList.toggle('is-active', soundOn);
 
-    const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing');
+    const mergeOpen = Boolean(ui?.mergePreview);
+    const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing' || mergeOpen);
     overlayRoot.classList.toggle('is-open', overlayOpen);
-    overlayRoot.classList.toggle('is-modal', phaseName === 'draft' && overlayOpen);
-    overlayRoot.classList.toggle('is-banner', phaseName === 'placing' && overlayOpen);
+    overlayRoot.classList.toggle('is-modal', (phaseName === 'draft' || mergeOpen) && overlayOpen);
+    overlayRoot.classList.toggle('is-banner', phaseName === 'placing' && !mergeOpen && overlayOpen);
     menuRoot.classList.toggle('is-open', screen !== 'battle');
 
     canvas.setAttribute('aria-label', [text('fence'), text('helpPlacement'), text('helpRange')].filter(Boolean).join(' · '));

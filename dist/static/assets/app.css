@@ -427,6 +427,10 @@ img, svg, video { max-width: 100%; height: auto; }
 [data-ui="overlay"].is-open,
 [data-ui="menu"].is-open { display: block; }
 
+.shell.is-draft [data-ui="overlay"] {
+  padding: 8px 8px 10px;
+}
+
 /* Placing stays a top banner so the defender slots (bottom of the field) still receive taps.
    Direct children keep clicks; empty overlay space does not block the canvas. */
 .shell.is-placing [data-ui="overlay"] {

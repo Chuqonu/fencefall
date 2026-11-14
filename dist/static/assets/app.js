@@ -13398,9 +13398,17 @@ const CSS = `
 .ff-build .ff-actions{display:flex;flex-wrap:wrap;gap:8px}
 .ff-build .ff-actions .btn{flex:1 1 140px}
 .ff-build .card>.btn,.ff-build .ff-choice .btn{width:100%}
-.ff-build .ff-draft-list{margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:8px}
+.ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
 .ff-build .ff-effect{white-space:pre-line}
+.ff-build.is-draft{gap:6px}
+.ff-build.is-draft .ff-title{font-size:18px}
+.ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
+.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
+.ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
+.ff-build.is-draft .ff-statline{color:#c5d5da}
+.ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -14182,7 +14190,7 @@ function slowValue(slow, lang, tr) {
   const duration = Number(slow?.duration);
   if (Number.isFinite(factor) && factor > 0 && factor <= 1) {
     const reduced = (1 - factor) * 100;
-    return `${fmtNum(reduced, lang)}% ${tr('reduction')} · ${tr('speed')} ×${fmtNum(factor, lang)} · ${fmtNum(duration, lang)}s`;
+    return `${fmtNum(reduced, lang)}% · ×${fmtNum(factor, lang)} · ${fmtNum(duration, lang)}s`;
   }
   return `${fmtNum(factor, lang)} · ${fmtNum(duration, lang)}s`;
 }
@@ -14783,36 +14791,74 @@ function renderMergeConfirm(state, ui, lang, tr) {
   return card;
 }
 
+function draftIntro(lang) {
+  return lang === 'zh'
+    ? '选一张。塔接着放置，英雄升级立刻生效。'
+    : 'Pick one. Towers are placed next. Hero upgrades apply now.';
+}
+
+function shotLine(lang) {
+  return lang === 'zh' ? '单体射击' : 'Single-target shot';
+}
+
+function compactOffer(state, option, lang, tr) {
+  if (option?.kind === 'hero_upgrade') {
+    const id = resolveUpgradeId(option);
+    const record = upgradeRecord(id);
+    const hero = findHero(state);
+    const before = hero ? safeStats(hero, state) : null;
+    const after = hero && id ? safeStats(withUpgrade(hero, id), state) : null;
+    const deltas = deltaLines(before, after, lang, tr);
+    const fallback = effectObjectLines(record, lang, tr);
+    const facts = deltas.length ? deltas : fallback;
+    const level = upgradeLevel(hero, id);
+    const cap = Number(record?.cap);
+    const levelText = Number.isFinite(cap) ? `${tr('level')} ${fmtNum(level, lang)}/${fmtNum(cap, lang)}` : '';
+    const blurb = facts[0] || tr('chooseUpgrade');
+    const stats = facts.slice(1, 3);
+    if (levelText) stats.push(levelText);
+    return { blurb, stats: stats.slice(0, 3) };
+  }
+  const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
+  const preview = option?.unit && typeof option.unit === 'object'
+    ? option.unit
+    : { id: `preview-${option?.type || 'tower'}`, kind: 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
+  const described = describeStats(safeStats(preview, state), lang, tr);
+  const special = described.specials[0] || shotLine(lang);
+  const blurb = option?.replace ? `${tr('replace')} · ${special}` : special;
+  const stats = [];
+  const damage = described.rows.find((item) => item.id === 'stat-damage');
+  const range = described.rows.find((item) => item.id === 'stat-range');
+  if (damage) stats.push(`${damage.label} ${damage.value}`);
+  const interval = Number(safeStats(preview, state)?.interval);
+  if (interval > 0) stats.push(`${tr('attackSpeed')} ${fmtNum(1 / interval, lang)}${perSecond(lang)}`);
+  if (range) stats.push(`${range.label} ${range.value}`);
+  return { blurb, stats };
+}
+
 function renderDraft(state, lang, tr, idSuffix) {
-  const section = el('section', { 'data-testid': 'build-draft' });
+  const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
   section.append(title);
   section.setAttribute('aria-labelledby', titleId);
-  section.append(el('p', { class: 'muted', text: tr('helpDraft') }));
-  section.append(el('p', { class: 'badge hero-lock', 'data-testid': 'hero-protected', text: tr('heroProtected') }));
-  section.append(el('p', { class: 'muted', text: tr('heroNoMerge') }));
+  section.append(el('p', { class: 'muted ff-draft-hint', 'data-testid': 'draft-hint', text: draftIntro(lang) }));
   const options = Array.isArray(state.draft?.options) ? state.draft.options : null;
   if (!options || !options.length) {
     section.append(el('p', { 'data-testid': 'draft-empty', text: tr('noDraft') }));
     return section;
   }
-  const upgrades = options.filter((option) => option?.kind === 'hero_upgrade').length;
-  if (upgrades === options.length) section.append(el('p', { text: tr('chooseUpgrade') }));
   const list = el('ol', { class: 'ff-draft-list', 'data-testid': 'draft-list', 'data-count': String(options.length) });
   options.forEach((option, index) => {
     const name = draftOptionName(option, lang, tr);
-    const lines = draftEffectLines(state, option, lang, tr);
+    const offer = compactOffer(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
     const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
-    const kind = option?.kind === 'hero_upgrade' ? tr('kindUpgrade') : (option?.replace ? tr('replace') : tr('kindTower'));
-    card.append(el('span', { class: 'badge', 'data-testid': `draft-choice-${index}-badge`, text: kind }));
     card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
-    const description = option?.kind === 'hero_upgrade'
-      ? localizeSafe(upgradeRecord(resolveUpgradeId(option))?.description, lang)
-      : localizeSafe(towerRecord(option?.type)?.description, lang);
-    if (description) card.append(el('p', { class: 'muted', 'data-testid': `draft-choice-${index}-description`, text: description }));
-    card.append(el('p', { id: effectId, class: 'ff-effect', 'data-testid': `draft-choice-${index}-effect`, text: lines.join('\n') }));
+    card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
+    if (offer.stats.length) {
+      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: offer.stats.join(' · ') }));
+    }
     const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
     card.append(button({
       primary: true,
@@ -14825,13 +14871,12 @@ function renderDraft(state, lang, tr, idSuffix) {
       'data-option-id': option?.id || '',
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
-      'aria-label': `${name}. ${actionLabel}`,
+      'aria-label': `${name}. ${offer.blurb}. ${actionLabel}`,
       text: actionLabel,
     }));
     list.append(el('li', {}, card));
   });
   section.append(list);
-  section.append(el('p', { class: 'muted', text: tr('draftWaiting') }));
   return section;
 }
 
@@ -15236,7 +15281,7 @@ function renderBuildPanel(container, state, api) {
   const showProgress = role === 'overlay' ? modalHere : !(overlayMounted && modalWanted);
 
   const root = el('section', {
-    class: `ff-build panel${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
+    class: `ff-build panel${state.phase === 'draft' ? ' is-draft' : ''}${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
     'data-testid': 'build-panel',
     'data-ff-build': '1',
     'data-phase': state.phase || '',
@@ -15252,9 +15297,6 @@ function renderBuildPanel(container, state, api) {
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
   if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main'));
   if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr));
-  if (actionsHere && modalHere && modalKind === 'draft' && !confirming) {
-    root.append(renderRearrange(state, ui, lang, tr, false));
-  }
   if (includeDetails) {
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;
     root.append(renderDetails(state, ui, lang, tr, {
@@ -17244,10 +17286,11 @@ function mountShell(root, api) {
     soundButton.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
     soundButton.classList.toggle('is-active', soundOn);
 
-    const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing');
+    const mergeOpen = Boolean(ui?.mergePreview);
+    const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing' || mergeOpen);
     overlayRoot.classList.toggle('is-open', overlayOpen);
-    overlayRoot.classList.toggle('is-modal', phaseName === 'draft' && overlayOpen);
-    overlayRoot.classList.toggle('is-banner', phaseName === 'placing' && overlayOpen);
+    overlayRoot.classList.toggle('is-modal', (phaseName === 'draft' || mergeOpen) && overlayOpen);
+    overlayRoot.classList.toggle('is-banner', phaseName === 'placing' && !mergeOpen && overlayOpen);
     menuRoot.classList.toggle('is-open', screen !== 'battle');
 
     canvas.setAttribute('aria-label', [text('fence'), text('helpPlacement'), text('helpRange')].filter(Boolean).join(' · '));
