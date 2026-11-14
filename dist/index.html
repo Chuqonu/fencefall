@@ -8388,6 +8388,14 @@ function drawProjectile(ctx, projectile, target, reduced) {
     }
   }
   if (crit) {
+    plot(ctx, x, y - 4, '#f0d35a');
+    plot(ctx, x, y + 4, '#f0d35a');
+    plot(ctx, x - 4, y, '#f0d35a');
+    plot(ctx, x + 4, y, '#f0d35a');
+    plot(ctx, x - 2, y - 2, '#fff6c8');
+    plot(ctx, x + 2, y - 2, '#fff6c8');
+    plot(ctx, x - 2, y + 2, '#fff6c8');
+    plot(ctx, x + 2, y + 2, '#fff6c8');
     plot(ctx, x, y - 3, '#ffffff');
     plot(ctx, x, y + 3, '#ffffff');
     plot(ctx, x - 3, y, '#ffffff');
