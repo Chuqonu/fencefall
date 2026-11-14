@@ -405,7 +405,9 @@ function payDot(state, enemy, status, dps, damageCallback) {
   const tick = STATUS_LIMITS.dotTick;
   let guard = 0;
   while (status.tickTimer >= tick - 1e-8 && !isDead(enemy) && guard++ < 160) {
-    status.tickTimer -= tick;
+    // The cadence tolerance may pay a tick a fraction before the boundary.
+    // Keep the remainder non-negative so every live frame is saveable.
+    status.tickTimer = Math.max(0, status.tickTimer - tick);
     damageCallback(state, enemy, dps * tick, damageOptions(status));
   }
   // Leftover below one tick is paid only when the effect ends, so totals match

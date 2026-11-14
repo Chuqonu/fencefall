@@ -1,6 +1,6 @@
 # Delivery / 交付
 
-Worker 23 owns packaging only: `scripts/build.mjs`, `.github/workflows/ci.yml`, `README.md`, and this file. It does not own `package.json`, the game systems, or git history.
+The release includes the complete game and a portable browser build. This document describes packaging; executed game checks are recorded in `BROWSER_ACCEPTANCE.md`.
 
 ## English
 
@@ -42,9 +42,9 @@ GitHub Actions is optional. The example is `docs/ci.example.yml`: Node 22, `npm 
 2. Do not add an esbuild devDependency for the current build script.
 3. Re-run `npm run build` after the other workers land. `dist/` from this workspace only packages files present at build time.
 4. Keep browser runtime imports relative to the repo. `src/boot.js` remains the page entry unless `index.html` points elsewhere.
-5. The scaffold boot screen is not the bilingual product UI.
+5. The production entry mounts the complete bilingual game UI.
 
-### Verification in this worker
+### Original packaging checks (before integration)
 
 Ran locally:
 
@@ -52,7 +52,7 @@ Ran locally:
 - `node scripts/build.mjs --self-test-only` (virtual module graph, cyclic function declarations, static `import()`, and the real `src/engine.js` graph: 10 slots, one hero in slot 7, fence 600, pause, speeds 3 and rejected 2)
 - `node scripts/build.mjs --exec` (writes `dist/`, `node --check` on `dist/static/assets/app.js`, then runs the scaffold bundle in Node under a DOM stand-in until `innerHTML` is set)
 
-Not run: browser, `npm test`, `npm ci`, phone or desktop layout, balance, git, or any network install. The DOM stand-in is not a browser.
+Those original packaging checks did not exercise a browser. Later integration testing is recorded in `BROWSER_ACCEPTANCE.md`. The DOM stand-in is not a browser.
 
 ### 中文
 
@@ -68,4 +68,4 @@ GitHub Actions 是可选的。示例在 `docs/ci.example.yml`：Node 22、`npm c
 
 集成其他模块后要重新构建。
 
-本工人实际跑过 `node --check scripts/build.mjs`、`node scripts/build.mjs --self-test-only` 和 `node scripts/build.mjs --exec`。没有跑浏览器、`npm test`、`npm ci` 或联网安装。
+最初的打包检查跑过 `node --check scripts/build.mjs`、`node scripts/build.mjs --self-test-only` 和 `node scripts/build.mjs --exec`。后续完整游戏的检查记录见 `BROWSER_ACCEPTANCE.md`。

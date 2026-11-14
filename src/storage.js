@@ -452,8 +452,10 @@ function validateProjectile(projectile, ids, mark) {
   noteUid(projectile.id, mark);
   if (!isId(projectile.sourceId, 64)) return fail('invalid_run');
   if (!(projectile.targetId === null || isId(projectile.targetId, 64))) return fail('invalid_run');
-  if (!isNum(projectile.x, -80, ARENA.width + 80)) return fail('invalid_bounds');
-  if (!isNum(projectile.y, -120, ARENA.height + 40)) return fail('invalid_bounds');
+  // Match the live projectile culling bounds in combat, including piercing
+  // shots that briefly travel beyond the visible field.
+  if (!isNum(projectile.x, -100, ARENA.width + 100)) return fail('invalid_bounds');
+  if (!isNum(projectile.y, -120, ARENA.height + 80)) return fail('invalid_bounds');
   if (!isNum(projectile.speed, 1e-6, 20000)) return fail('invalid_bounds');
   if (!isNum(projectile.damage, 0, 1e9)) return fail('invalid_bounds');
   if (!isBool(projectile.crit)) return fail('invalid_run');
