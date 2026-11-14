@@ -531,7 +531,7 @@ img, svg, video { max-width: 100%; height: auto; }
   background: transparent;
   pointer-events: none;
   bottom: auto;
-  max-height: min(42vh, 280px);
+  max-height: min(48vh, 380px);
   overflow: auto;
 }
 

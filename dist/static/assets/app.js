@@ -15659,6 +15659,7 @@ function freezeDeep(value) {
 };
 __ff_factories["src/ui/build-panel.js"] = function(__ff_exports, __ff_load) {
 "use strict";
+__ff_exports["draftPower"] = draftPower;
 __ff_exports["renderBuildPanel"] = renderBuildPanel;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/data/towers.js");
@@ -15675,6 +15676,7 @@ const previewMerge = __ff_m3["previewMerge"];
 const HERO_UPGRADES = __ff_m4["HERO_UPGRADES"];
 const localize = __ff_m5["localize"];
 const formatNumber = __ff_m5["formatNumber"];
+const translate = __ff_m5["t"];
 /**
  * Placement, draft, and merge UI.
  *
@@ -15683,8 +15685,9 @@ const formatNumber = __ff_m5["formatNumber"];
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
  * while playing. A draft overlay keeps three short choice cards and does not
  * include the 10-slot rearrange grid. Each card is the choice: tap the card,
- * there is no confirm or cancel under it. A mark shows the power. A tower card
- * says whether that base type is already on the board. Merge confirmation, when
+ * there is no confirm or cancel under it. A mark and a meter show the power:
+ * damage, attack speed, and range, or the one stat a hero upgrade changes.
+ * A tower card says whether that base type is already on the board. Merge confirmation, when
  * a preview is open, shows the result name and rank, then at most two more lines.
  * It does not paste the catalog essay. Confirm and cancel stay 44px buttons.
  * A container without data-ui shows the modal and the inspection together.
@@ -15730,6 +15733,19 @@ const CSS = `
 .ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
 .ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:1px solid currentColor;font-size:16px;line-height:1}
 .ff-build.is-draft .ff-mark small{font-size:9px;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ff-build.is-draft .ff-meter{width:64px;height:44px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.ff-build.is-draft .ff-meter-row{display:flex;align-items:center;gap:3px;height:10px;min-height:0}
+.ff-build.is-draft .ff-meter-row>span{flex:none;min-width:14px;font-size:9px;line-height:1;color:#c5d5da}
+.ff-build.is-draft .ff-meter-track{flex:1;height:6px;background:#24383e}
+.ff-build.is-draft .ff-meter-fill{display:block;height:6px;width:0}
+.ff-build.is-draft [data-meter="damage"] .ff-meter-fill{background:#f0d56a}
+.ff-build.is-draft [data-meter="speed"] .ff-meter-fill{background:#f0cb72}
+.ff-build.is-draft [data-meter="range"] .ff-meter-fill{background:#9fd7e8}
+.ff-build.is-draft [data-meter="crit"] .ff-meter-fill{background:#f0cb72}
+.ff-build.is-draft [data-meter="critDamage"] .ff-meter-fill{background:#e7a08a}
+.ff-build.is-draft [data-meter="pierce"] .ff-meter-fill{background:#d7e4ea}
+.ff-build.is-draft [data-meter="poison"] .ff-meter-fill{background:#7dce6a}
+.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-track,.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-fill{height:14px}
 .ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
@@ -17478,21 +17494,115 @@ function draftFieldLabel(state, option, lang, tr) {
   return { onField, type, text };
 }
 
-const DRAFT_MARKS = {
-  bolt: ['➤', '#f0d56a'],
-  fire: ['▲', '#e25b2a'],
-  frost: ['❄', '#9fd7e8'],
-  lightning: ['↯', '#f4e27a'],
-  poison: ['●', '#7dce6a'],
-  support: ['✚', '#8fd0c6'],
+const ROLE_CUES = {
+  bolt: { glyph: '➤', color: '#f0d56a', en: 'Shot', zh: '投射' },
+  fire: { glyph: '▲', color: '#e25b2a', en: 'Burn', zh: '燃烧' },
+  frost: { glyph: '❄', color: '#9fd7e8', en: 'Slow', zh: '减速' },
+  lightning: { glyph: '↯', color: '#f4e27a', en: 'Chain', zh: '连锁' },
+  poison: { glyph: '●', color: '#7dce6a', en: 'Stack', zh: '叠毒' },
+  support: { glyph: '✚', color: '#8fd0c6', en: 'Aura', zh: '光环' },
 };
 
-function heroStatCue(option, lang, tr) {
+const METER_CAPTION = {
+  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox' },
+  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒' },
+};
+
+function fillPct(part, whole) {
+  if (!Number.isFinite(part) || !Number.isFinite(whole) || whole <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(part / whole * 100)));
+}
+
+function threeBars(damage, speed, range) {
+  return [
+    { key: 'damage', fill: damage },
+    { key: 'speed', fill: speed },
+    { key: 'range', fill: range },
+  ];
+}
+
+function towerPowerBars(state, option) {
+  const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
+  const preview = option?.unit && typeof option.unit === 'object'
+    ? option.unit
+    : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
+  const stats = safeStats(preview, state) || {};
+  const interval = Number(stats.interval);
+  return threeBars(
+    fillPct(Number(stats.damage) || 0, 12),
+    fillPct(interval > 0 ? 1 / interval : 0, 1.6),
+    fillPct(Number(stats.range) || 0, 280),
+  );
+}
+
+function heroPowerBars(option) {
+  const record = upgradeRecord(resolveUpgradeId(option));
+  const effect = record?.effect || {};
+  const cap = Number(record?.cap ?? option?.cap);
+  const next = Number(option?.nextLevel);
+  const progress = Number.isFinite(cap) && cap > 0 && Number.isFinite(next) ? next / cap : 0.75;
+  const strong = Math.max(36, Math.min(100, Math.round(36 + 64 * progress)));
+  const dim = 14;
+  if (effect.damageAdd) return threeBars(strong, dim, dim);
+  if (effect.haste) return threeBars(dim, strong, dim);
+  if (effect.range) return threeBars(dim, dim, strong);
+  if (effect.critChance) return [{ key: 'crit', fill: strong }];
+  if (effect.critMultiplier) return [{ key: 'critDamage', fill: strong }];
+  if (Number(effect.pierce) > 0) return [{ key: 'pierce', fill: strong }];
+  if (effect.poison) return [{ key: 'poison', fill: strong }];
+  return [{ key: 'damage', fill: strong }];
+}
+
+function powerBars(state, option) {
+  if (option?.kind === 'hero_upgrade') return heroPowerBars(option);
+  return towerPowerBars(state, option);
+}
+
+function meterCaption(key, lang) {
+  const table = lang === 'zh' ? METER_CAPTION.zh : METER_CAPTION.en;
+  return table[key] || '';
+}
+
+function renderMeter(state, option, lang, index) {
+  const bars = powerBars(state, option);
+  const meter = el('span', {
+    class: 'ff-meter',
+    'data-testid': `draft-choice-${index}-meter`,
+    'data-bars': String(bars.length),
+    'aria-hidden': 'true',
+  });
+  for (const bar of bars) {
+    const row = el('span', { class: 'ff-meter-row', 'data-meter': bar.key, 'data-fill': String(bar.fill) });
+    row.append(el('span', { text: meterCaption(bar.key, lang) }));
+    row.append(el('span', { class: 'ff-meter-track' }, el('span', {
+      class: 'ff-meter-fill',
+      style: `width:${bar.fill}%`,
+    })));
+    meter.append(row);
+  }
+  return meter;
+}
+
+function heroMarkLabel(effect, lang) {
+  let key = '';
+  if (effect.damageAdd) key = 'damage';
+  else if (effect.haste) key = 'speed';
+  else if (effect.range) key = 'range';
+  else if (effect.critChance) key = 'crit';
+  else if (effect.critMultiplier) key = 'critDamage';
+  else if (Number(effect.pierce) > 0) key = 'pierce';
+  else if (effect.poison) key = 'poison';
+  const labels = lang === 'zh'
+    ? { damage: '伤害', speed: '攻速', range: '射程', crit: '暴击', critDamage: '暴伤', pierce: '穿透', poison: '毒素' }
+    : { damage: 'Damage', speed: 'Speed', range: 'Range', crit: 'Crit', critDamage: 'Crit×', pierce: 'Pierce', poison: 'Poison' };
+  return labels[key] || '';
+}
+
+function heroStatCue(option, lang) {
   const id = resolveUpgradeId(option);
   const record = upgradeRecord(id);
   const effect = record?.effect || {};
-  const line = heroEffectLine(record, lang, tr);
-  const label = line ? line.split(/[+＋]/)[0].trim().slice(0, 8) : '';
+  const label = heroMarkLabel(effect, lang);
   if (effect.damageAdd) return { glyph: '＋', color: '#f0d56a', label };
   if (effect.haste) return { glyph: '»', color: '#f0cb72', label };
   if (effect.range) return { glyph: '→', color: '#9fd7e8', label };
@@ -17505,9 +17615,26 @@ function heroStatCue(option, lang, tr) {
 
 function draftMark(option, lang, tr) {
   if (option?.kind === 'hero_upgrade') return heroStatCue(option, lang, tr);
-  const pair = DRAFT_MARKS[option?.type];
-  if (pair) return { glyph: pair[0], color: pair[1], label: '' };
-  return { glyph: '◆', color: '#d7e4ea', label: '' };
+  const cue = ROLE_CUES[option?.type];
+  if (!cue) return { glyph: '◆', color: '#d7e4ea', label: '' };
+  return { glyph: cue.glyph, color: cue.color, label: lang === 'zh' ? cue.zh : cue.en };
+}
+
+/** Glanceable mark and meter for one of the three draft cards. */
+function draftPower(state, option, language) {
+  const lang = language === 'zh' ? 'zh' : 'en';
+  const tr = (key, vars) => translate(lang, key, vars);
+  const mark = draftMark(option, lang, tr);
+  return {
+    glyph: mark.glyph,
+    label: mark.label,
+    color: mark.color,
+    bars: powerBars(state, option).map((bar) => ({
+      key: bar.key,
+      fill: bar.fill,
+      caption: meterCaption(bar.key, lang),
+    })),
+  };
 }
 
 function renderDraft(state, lang, tr, idSuffix) {
@@ -17554,7 +17681,7 @@ function renderDraft(state, lang, tr, idSuffix) {
     });
     markNode.append(el('b', { text: mark.glyph }));
     if (mark.label) markNode.append(el('small', { text: mark.label }));
-    card.append(markNode);
+    card.append(markNode, renderMeter(state, option, lang, index));
     const copy = el('span', { class: 'ff-choice-copy' });
     copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     if (field) {
