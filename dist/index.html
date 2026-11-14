@@ -7863,6 +7863,7 @@ const MAX_PROJECTILES = 300;
 const MAX_ENEMIES = 400;
 const MAX_CLOUDS = 32;
 const CUE_MS = 240;
+const MERGE_CUE_MS = 900;
 const FLASH_MS = 150;
 const RANGE_LIMIT = 900;
 const HP_FILL = 3;
@@ -8009,7 +8010,8 @@ function cueStrength(at, now, duration) {
 function pruneList(list, now) {
   let write = 0;
   for (let i = 0; i < list.length; i++) {
-    if (now - list[i].at <= CUE_MS) list[write++] = list[i];
+    const duration = list[i].duration || CUE_MS;
+    if (now - list[i].at <= duration) list[write++] = list[i];
   }
   list.length = write;
 }
@@ -8105,6 +8107,17 @@ function orderedEnemies(state) {
   return list;
 }
 
+function plotRing(ctx, cx, cy, x, y) {
+  ctx.fillRect(cx + x, cy + y, 1, 1);
+  ctx.fillRect(cx + y, cy + x, 1, 1);
+  ctx.fillRect(cx - x, cy + y, 1, 1);
+  ctx.fillRect(cx - y, cy + x, 1, 1);
+  ctx.fillRect(cx + x, cy - y, 1, 1);
+  ctx.fillRect(cx + y, cy - x, 1, 1);
+  ctx.fillRect(cx - x, cy - y, 1, 1);
+  ctx.fillRect(cx - y, cy - x, 1, 1);
+}
+
 function drawPixelCircle(ctx, cx, cy, radius, color) {
   const r = Math.round(radius);
   if (r <= 0) return;
@@ -8113,14 +8126,8 @@ function drawPixelCircle(ctx, cx, cy, radius, color) {
   let decision = 1 - r;
   ctx.fillStyle = color;
   while (x >= y) {
-    ctx.fillRect(cx + x, cy + y, 1, 1);
-    ctx.fillRect(cx + y, cy + x, 1, 1);
-    ctx.fillRect(cx - x, cy + y, 1, 1);
-    ctx.fillRect(cx - y, cy + x, 1, 1);
-    ctx.fillRect(cx + x, cy - y, 1, 1);
-    ctx.fillRect(cx + y, cy - x, 1, 1);
-    ctx.fillRect(cx - x, cy - y, 1, 1);
-    ctx.fillRect(cx - y, cy - x, 1, 1);
+    plotRing(ctx, cx, cy, x, y);
+    if (r > 2) plotRing(ctx, cx, cy, x - 1, y);
     y += 1;
     if (decision <= 0) decision += 2 * y + 1;
     else {
@@ -8795,11 +8802,17 @@ function unitFlash(unitId, shots, now, duration) {
 
 function slotPulse(index, slots, now) {
   let best = 0;
+  let role = '';
   for (let i = slots.length - 1; i >= 0; i--) {
     if (slots[i].index !== index) continue;
-    best = Math.max(best, cueStrength(slots[i].at, now, CUE_MS));
+    const duration = slots[i].duration || CUE_MS;
+    const strength = cueStrength(slots[i].at, now, duration);
+    if (strength > best) {
+      best = strength;
+      role = slots[i].role || '';
+    }
   }
-  return best;
+  return {strength: best, role};
 }
 
 function createRenderer(canvas) {
@@ -8863,10 +8876,13 @@ function createRenderer(canvas) {
       } else if (type === 'fence_hit') {
         fenceAt = at;
       } else if (type === 'merge') {
-        const indices = [event.from, event.to, event.fromIndex, event.toIndex];
-        for (let n = 0; n < indices.length; n++) {
-          const index = indices[n];
-          if (Number.isInteger(index) && index >= 0 && index < 10) pushCapped(slotCues, {at, index});
+        const from = Number.isInteger(event.from) ? event.from : event.fromIndex;
+        const to = Number.isInteger(event.to) ? event.to : event.toIndex;
+        if (Number.isInteger(from) && from >= 0 && from < 10) {
+          pushCapped(slotCues, {at, index: from, role: 'empty', duration: MERGE_CUE_MS});
+        }
+        if (Number.isInteger(to) && to >= 0 && to < 10) {
+          pushCapped(slotCues, {at, index: to, role: 'kept', duration: MERGE_CUE_MS});
         }
       }
     }
@@ -9086,7 +9102,18 @@ function createRenderer(canvas) {
     for (let index = 0; index < 10; index++) {
       const box = slotBox(slots[index], index);
       const pulse = slotPulse(index, slotCues, now);
-      if (pulse > 0 && index !== selected) strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse})`, 2);
+      if (pulse.strength <= 0) continue;
+      if (pulse.role === 'empty') {
+        ctx.fillStyle = `rgba(20, 14, 12, ${0.35 + 0.45 * pulse.strength})`;
+        ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
+        strokeSlot(ctx, box, `rgba(231, 160, 138, ${0.55 + 0.45 * pulse.strength})`, 3);
+      } else if (pulse.role === 'kept') {
+        ctx.fillStyle = `rgba(240, 203, 114, ${0.18 + 0.28 * pulse.strength})`;
+        ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
+        strokeSlot(ctx, box, '#f0cb72', 3);
+      } else if (index !== selected) {
+        strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse.strength})`, 2);
+      }
     }
     if (hover >= 0 && hover !== selected) {
       const intent = ui.hoverIntent;
@@ -21098,6 +21125,7 @@ function mountShell(root, api) {
     if (state.phase === 'defeat') return text('defeat');
     if (state.phase === 'draft') return text('chooseOneOfThree');
     if (state.phase === 'placing') return text('chooseSlot');
+    if (state.paused && state.phase === 'playing') return text('paused');
     if (planning) return text('planning');
     return '';
   }

@@ -742,6 +742,7 @@ export function mountShell(root, api) {
     if (state.phase === 'defeat') return text('defeat');
     if (state.phase === 'draft') return text('chooseOneOfThree');
     if (state.phase === 'placing') return text('chooseSlot');
+    if (state.paused && state.phase === 'playing') return text('paused');
     if (planning) return text('planning');
     return '';
   }
