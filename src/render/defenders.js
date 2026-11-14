@@ -651,19 +651,22 @@ function drawPlinth(p, rank) {
 }
 
 function drawRankGems(p, rank) {
-  // One chevron per rank, centered on a black plaque. The count is the rank.
-  // The plaque keeps rank 1 from reading as a stone chip and rank 4 off the gold trim.
+  // One upward chevron per rank. White reads on the ink plaque and on dark
+  // stone. The crimson edge reads on gold trim, so the count stays a mark
+  // rather than another gold highlight. An ink row sits between the marks
+  // and the rank-4 band.
   const mark = 3;
   const gap = 2;
   const total = rank * mark + (rank - 1) * gap;
   let x = Math.floor((W - total) / 2);
-  p.fill(x - 1, 34, total + 2, 3, 'K');
+  p.fill(x - 1, 34, total + 2, 4, 'K');
   for (let i = 0; i < rank; i++) {
-    p.px(x + 1, 34, 'W');
-    p.px(x, 35, 'H');
-    p.px(x + 1, 35, 'h');
-    p.px(x + 2, 35, 'H');
-    p.px(x + 1, 36, 'b');
+    p.px(x, 35, 'W');
+    p.px(x + 2, 35, 'W');
+    p.px(x + 1, 36, 'W');
+    p.px(x, 36, 'c');
+    p.px(x + 2, 36, 'c');
+    p.px(x + 1, 37, 'c');
     x += mark + gap;
   }
 }

@@ -26,6 +26,9 @@ const collectFeedback = __ff_m0["collectFeedback"];
  * Sound is off until setEnabled(true). unlock() must run inside a user gesture
  * (pointer or key) before playEvents can be heard. Both calls are safe to repeat.
  * playEvents does not mutate the event array and never throws.
+ * When the profile or an event says reducedMotion, each tone is shorter and
+ * quieter. A critical hit stays its own high chime, apart from a normal hit.
+ * setEnabled(false) still silences every cue, including a softened one.
  *
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
@@ -45,6 +48,11 @@ const MAX_VOICES = 16;
 const SHOT_BED = 0.2;
 const SHOT_REPEAT_WINDOW = 1.35;
 const SHOT_REPEAT_STEPS = Object.freeze([1, 0.58, 0.42]);
+// Reduced motion keeps the same contours and the same relative mix.
+// Length and peak both drop, so a crit chime stays higher than a hit and still under a fence hit.
+const REDUCED_GAIN = 0.5;
+const REDUCED_TIME = 0.55;
+const REDUCED_FLOOR = 0.016;
 
 const AUDIO_LIMITS = Object.freeze({
   shot: 3,
@@ -134,6 +142,33 @@ function clampFreq(value) {
   return Math.max(50, Math.min(2800, value));
 }
 
+function reducedFlag(value, depth = 0) {
+  if (value === true || value === false) return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return null;
+  if (typeof value.reducedMotion === 'boolean') return value.reducedMotion;
+  const settings = value.settings;
+  if (settings && typeof settings === 'object' && typeof settings.reducedMotion === 'boolean') return settings.reducedMotion;
+  if (depth < 2 && value.profile && typeof value.profile === 'object') {
+    const nested = reducedFlag(value.profile, depth + 1);
+    if (nested != null) return nested;
+  }
+  if (depth < 2 && value.profileSnapshot && typeof value.profileSnapshot === 'object') {
+    const nested = reducedFlag(value.profileSnapshot, depth + 1);
+    if (nested != null) return nested;
+  }
+  return null;
+}
+
+function listSaysReduced(list) {
+  if (Array.isArray(list)) {
+    for (let i = 0; i < list.length; i++) {
+      if (reducedFlag(list[i]) === true) return true;
+    }
+    return false;
+  }
+  return reducedFlag(list) === true;
+}
+
 function makeNoiseBuffer(context) {
   const rate = context.sampleRate || 44100;
   const length = Math.max(1, Math.floor(rate * 0.2));
@@ -147,7 +182,7 @@ function makeNoiseBuffer(context) {
   return buffer;
 }
 
-function createAudio() {
+function createAudio(options) {
   let enabled = false;
   let alive = true;
   let context = null;
@@ -157,6 +192,10 @@ function createAudio() {
   const lastAt = new Map();
   let shotStamp = -1;
   let shotRun = 0;
+  let profileReduced = false;
+  let soften = false;
+  const initialReduced = reducedFlag(options);
+  if (initialReduced != null) profileReduced = initialReduced;
 
   function desiredGain() {
     return enabled && context && context.state === 'running' ? MASTER : 0;
@@ -282,9 +321,18 @@ function createAudio() {
     };
   }
 
+  function cueLength(dur, cap) {
+    if (!soften) return Math.max(0.03, Math.min(cap, dur));
+    return Math.max(REDUCED_FLOOR, Math.min(cap * REDUCED_TIME, dur * REDUCED_TIME));
+  }
+
+  function cueGain(gain) {
+    return Math.max(0.0001, soften ? gain * REDUCED_GAIN : gain);
+  }
+
   function tone({ freq, dur, type = 'square', gain = 0.05, slide = 0, delay = 0 }) {
     if (!enabled || !context || !master) return false;
-    const length = Math.max(0.03, Math.min(0.6, dur));
+    const length = cueLength(dur, 0.6);
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
     const frequency = clampFreq(freq);
@@ -297,7 +345,7 @@ function createAudio() {
     if (Math.abs(destination - frequency) > 1) {
       osc.frequency.exponentialRampToValueAtTime(destination, start + length);
     }
-    const peak = Math.max(0.0001, gain);
+    const peak = cueGain(gain);
     amp.gain.setValueAtTime(0.0001, start);
     amp.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.012, length * 0.35));
     amp.gain.exponentialRampToValueAtTime(0.0001, start + length);
@@ -311,7 +359,7 @@ function createAudio() {
 
   function noise({ dur, gain, delay = 0, band = 800, q = 0.8 }) {
     if (!enabled || !context || !master || !noiseBuffer) return false;
-    const length = Math.max(0.03, Math.min(0.45, dur));
+    const length = cueLength(dur, 0.45);
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
     if (!Number.isFinite(start) || !takeVoice(start, length)) return false;
@@ -323,7 +371,7 @@ function createAudio() {
     filter.frequency.value = Math.max(80, Math.min(4000, band));
     filter.Q.value = Math.max(0.2, q);
     const amp = context.createGain();
-    const peak = Math.max(0.0001, gain);
+    const peak = cueGain(gain);
     amp.gain.setValueAtTime(0.0001, start);
     amp.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.01, length * 0.3));
     amp.gain.exponentialRampToValueAtTime(0.0001, start + length);
@@ -414,6 +462,7 @@ function createAudio() {
     const body = wobble(tint, desc.time + 0.17);
     if (desc.crit) {
       // Rising chime, not the low hit thud. Both layers stay under the fence sine at 0.072.
+      // Reduced motion shortens and quiets this chime in tone(); it does not become the thud.
       return safe(() => layers(
         tone({ freq: 1174, dur: 0.04, type: 'triangle', gain: 0.044, slide: 196, delay }),
         tone({ freq: 1760, dur: 0.032, type: 'square', gain: 0.018, delay: delay + 0.016 }),
@@ -528,7 +577,25 @@ function createAudio() {
     }
   }
 
-  function playEvents(events) {
+  function playbackList(events) {
+    if (!events || typeof events !== 'object' || Array.isArray(events)) return events;
+    if (typeof events.type === 'string' || typeof events.event === 'string' || typeof events.eventType === 'string') return events;
+    if (!Array.isArray(events.events)) return events;
+    const direct = typeof events.reducedMotion === 'boolean'
+      || (events.settings && typeof events.settings === 'object' && typeof events.settings.reducedMotion === 'boolean')
+      || (events.profile && typeof events.profile === 'object');
+    if (!direct) return events;
+    const wrapped = reducedFlag(events);
+    if (wrapped != null) profileReduced = wrapped;
+    return events.events;
+  }
+
+  function playEvents(events, hint) {
+    const fromHint = reducedFlag(hint);
+    if (fromHint != null) profileReduced = fromHint;
+    const list = playbackList(events);
+    // An event flag softens this batch only. A profile flag stays until another profile says otherwise.
+    soften = profileReduced || listSaysReduced(list);
     if (!alive || enabled !== true) return;
     if (!context || context.state !== 'running' || !master) return;
     let now;
@@ -536,7 +603,7 @@ function createAudio() {
     catch { return; }
     if (!Number.isFinite(now)) return;
     reap(now);
-    const batch = collectFeedback(events, AUDIO_LIMITS);
+    const batch = collectFeedback(list, AUDIO_LIMITS);
     batch.sort((a, b) => (PRIORITY[a.type] ?? 50) - (PRIORITY[b.type] ?? 50) || Number(b.crit) - Number(a.crit));
     const counts = new Map();
     const armed = new Set();
@@ -4243,19 +4310,22 @@ function drawPlinth(p, rank) {
 }
 
 function drawRankGems(p, rank) {
-  // One chevron per rank, centered on a black plaque. The count is the rank.
-  // The plaque keeps rank 1 from reading as a stone chip and rank 4 off the gold trim.
+  // One upward chevron per rank. White reads on the ink plaque and on dark
+  // stone. The crimson edge reads on gold trim, so the count stays a mark
+  // rather than another gold highlight. An ink row sits between the marks
+  // and the rank-4 band.
   const mark = 3;
   const gap = 2;
   const total = rank * mark + (rank - 1) * gap;
   let x = Math.floor((W - total) / 2);
-  p.fill(x - 1, 34, total + 2, 3, 'K');
+  p.fill(x - 1, 34, total + 2, 4, 'K');
   for (let i = 0; i < rank; i++) {
-    p.px(x + 1, 34, 'W');
-    p.px(x, 35, 'H');
-    p.px(x + 1, 35, 'h');
-    p.px(x + 2, 35, 'H');
-    p.px(x + 1, 36, 'b');
+    p.px(x, 35, 'W');
+    p.px(x + 2, 35, 'W');
+    p.px(x + 1, 36, 'W');
+    p.px(x, 36, 'c');
+    p.px(x + 2, 36, 'c');
+    p.px(x + 1, 37, 'c');
     x += mark + gap;
   }
 }
@@ -4849,8 +4919,9 @@ const slotGeometry = __ff_m0["slotGeometry"];
  * Missing fields are skipped. emit() copies payload after `type`, so a payload
  * `type` of bolt/fire/frost/lightning/poison/support/hero/burn/slow/stun/brittle
  * is recovered as shot, hit, or status when position or damage is present.
- * Reduced motion keeps markers, rings at their start size, crits, and numbers,
- * and drops traveling debris.
+ * Reduced motion skips decorative particle trails and keeps a short impact mark,
+ * rings at their start size, crits, and numbers. A critical mark is a longer gold
+ * plus; a normal mark is a shorter plus. Traveling debris is dropped.
  * A plain shot is a short arrow. A pierce shot is a thin needle along the aim.
  * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
  * stay starbursts with a damage number. A critical hit adds one gold diamond
@@ -4929,6 +5000,10 @@ const FEEDBACK = new Set([
   'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
   'victory', 'defeat', 'ui', 'status', 'boss',
 ]);
+
+// Full-motion shapes. Reduced motion does not draw these; a short impact stands in
+// when the particle was the hit or shot itself.
+const REDUCED_TRAILS = new Set(['spark', 'mote', 'orbit', 'arc', 'streak', 'needle', 'jump', 'burst']);
 
 const ALIAS = Object.freeze({
   fencehit: 'fence_hit',
@@ -5446,6 +5521,9 @@ function createEffects() {
       edge: palette.dim,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
@@ -5467,12 +5545,15 @@ function createEffects() {
       edge: palette.dim,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
 
   // Splash is a hollow ring. The radius stays small so one burst is a few pixels.
-  function pushBurst(x, y, radius, palette, life) {
+  function pushBurst(x, y, radius, palette, life, crit) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     pushParticle({
       kind: 'burst',
@@ -5482,13 +5563,17 @@ function createEffects() {
       color: palette.hot,
       core: palette.core,
       edge: palette.mid,
+      shaft: palette.hot,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
 
-  function pushJump(points, palette, life) {
+  function pushJump(points, palette, life, mark) {
     if (!points || points.length < 2) return;
     const clean = [];
     for (let i = 0; i < points.length && clean.length < 4; i++) {
@@ -5497,6 +5582,7 @@ function createEffects() {
       clean.push({ x: point.x, y: point.y });
     }
     if (clean.length < 2) return;
+    const placed = !!(mark && Number.isFinite(mark.x) && Number.isFinite(mark.y));
     pushParticle({
       kind: 'jump',
       x: clean[0].x,
@@ -5504,6 +5590,13 @@ function createEffects() {
       points: clean,
       color: palette.core,
       edge: palette.hot,
+      shaft: palette.hot,
+      core: palette.core,
+      crit: !!(mark && mark.crit),
+      trail: true,
+      markWhenReduced: placed,
+      markX: placed ? mark.x : null,
+      markY: placed ? mark.y : null,
       life,
       maxLife: life,
       motionOnly: false,
@@ -5628,7 +5721,7 @@ function createEffects() {
       points.push({ x: x0 + (x1 - x0) * t + jx, y: y0 + (y1 - y0) * t + jy });
     }
     points.push({ x: x1, y: y1 });
-    particles.push({ kind: 'arc', points, color, life, maxLife: life, motionOnly: false });
+    particles.push({ kind: 'arc', points, color, life, maxLife: life, trail: true, motionOnly: false });
   }
 
   function pushPlus(x, y, arm, color, core, life) {
@@ -5732,11 +5825,11 @@ function createEffects() {
       return;
     }
     if (desc.delivery === 'splash') {
-      pushBurst(point.x, point.y, 6, palette, life);
+      pushBurst(point.x, point.y, 6, palette, life, desc.crit);
       return;
     }
     if (desc.delivery === 'chain') {
-      pushJump(aimedJump(point.x, point.y, aim.x, aim.y), palette, life);
+      pushJump(aimedJump(point.x, point.y, aim.x, aim.y), palette, life, { x: point.x, y: point.y, crit: desc.crit });
       return;
     }
     pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, life);
@@ -5752,20 +5845,21 @@ function createEffects() {
     } else if (desc.delivery === 'splash') {
       const radius = desc.splash > 0 ? desc.splash : 12;
       pushRing(point.x, point.y, radius, desc.splash > 0 ? 10 : 16, palette.mid, 0.28, 2);
-      pushBurst(point.x, point.y, 7, palette, 0.24);
+      pushBurst(point.x, point.y, 7, palette, 0.24, desc.crit);
     } else if (desc.delivery === 'chain') {
+      const mark = { x: point.x, y: point.y, crit: desc.crit };
       if (desc.points.length) {
         const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : desc.points.length, 3);
         let prev = point;
         for (let i = 0; i < hops; i++) {
           const hop = desc.points[i];
-          pushJump(kinkedJump(prev.x, prev.y, hop.x, hop.y), palette, 0.18);
+          pushJump(kinkedJump(prev.x, prev.y, hop.x, hop.y), palette, 0.18, i === 0 ? mark : null);
           prev = hop;
         }
       } else if (desc.target) {
-        pushJump(kinkedJump(point.x, point.y, desc.target.x, desc.target.y), palette, 0.18);
+        pushJump(kinkedJump(point.x, point.y, desc.target.x, desc.target.y), palette, 0.18, mark);
       } else {
-        pushJump(kinkedJump(point.x, point.y, point.x, point.y), palette, 0.18);
+        pushJump(kinkedJump(point.x, point.y, point.x, point.y), palette, 0.18, mark);
       }
     } else {
       if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
@@ -6138,23 +6232,26 @@ function createEffects() {
     ctx.fillRect(cx, cy + 10, 1, 2);
   }
 
-  function drawImpact(ctx, particle, alpha) {
+  function drawImpact(ctx, particle, alpha, short) {
     if (alpha < 0.02) return;
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
-    const arm = Math.max(3, particle.arm | 0);
+    let arm = Math.max(3, particle.arm | 0);
+    if (short) arm = particle.crit ? 4 : 3;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#140e0c';
     ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
     ctx.fillRect(cx - 1, cy - arm, 3, arm * 2 + 1);
-    ctx.fillStyle = particle.color;
+    ctx.fillStyle = short && particle.crit ? '#ffe56a' : particle.color;
     ctx.fillRect(cx - arm, cy, arm * 2 + 1, 1);
     ctx.fillRect(cx, cy - arm, 1, arm * 2 + 1);
-    for (let i = 2; i < arm; i++) {
-      ctx.fillRect(cx + i, cy + i, 1, 1);
-      ctx.fillRect(cx - i, cy + i, 1, 1);
-      ctx.fillRect(cx + i, cy - i, 1, 1);
-      ctx.fillRect(cx - i, cy - i, 1, 1);
+    if (!short) {
+      for (let i = 2; i < arm; i++) {
+        ctx.fillRect(cx + i, cy + i, 1, 1);
+        ctx.fillRect(cx - i, cy + i, 1, 1);
+        ctx.fillRect(cx + i, cy - i, 1, 1);
+        ctx.fillRect(cx - i, cy - i, 1, 1);
+      }
     }
     ctx.fillStyle = particle.core || particle.color;
     ctx.fillRect(cx - 1, cy - 1, 3, 3);
@@ -6164,6 +6261,12 @@ function createEffects() {
       ctx.fillRect(cx + arm, cy, 1, 1);
       ctx.fillRect(cx, cy - arm, 1, 1);
       ctx.fillRect(cx, cy + arm, 1, 1);
+      if (short) {
+        ctx.fillRect(cx - 2, cy - 2, 1, 1);
+        ctx.fillRect(cx + 2, cy - 2, 1, 1);
+        ctx.fillRect(cx - 2, cy + 2, 1, 1);
+        ctx.fillRect(cx + 2, cy + 2, 1, 1);
+      }
     }
   }
 
@@ -6323,8 +6426,24 @@ function createEffects() {
     drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
   }
 
+  function drawReducedMark(ctx, particle, alpha) {
+    const x = Number.isFinite(particle.markX) ? particle.markX : particle.x;
+    const y = Number.isFinite(particle.markY) ? particle.markY : particle.y;
+    drawImpact(ctx, {
+      x,
+      y,
+      arm: particle.crit ? 4 : 3,
+      color: particle.crit ? '#ffe56a' : (particle.shaft || particle.color || particle.head || '#d5ddd8'),
+      core: particle.crit ? '#fff6d2' : (particle.core || particle.head || '#f2f5f4'),
+      crit: !!particle.crit,
+    }, alpha, true);
+  }
+
   function drawParticle(ctx, particle, reduced) {
-    if (reduced && particle.motionOnly) return;
+    if (reduced && (particle.motionOnly || REDUCED_TRAILS.has(particle.kind))) {
+      if (particle.markWhenReduced) drawReducedMark(ctx, particle, fade(particle));
+      return;
+    }
     const alpha = fade(particle);
     switch (particle.kind) {
       case 'spark':
@@ -6363,7 +6482,7 @@ function createEffects() {
         drawJump(ctx, particle, alpha);
         break;
       case 'impact':
-        drawImpact(ctx, particle, alpha);
+        drawImpact(ctx, particle, alpha, reduced);
         break;
       case 'flash':
         drawFlash(ctx, particle, alpha);
@@ -8389,7 +8508,9 @@ const slotGeometry = __ff_m0["slotGeometry"];
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
  * Animation uses the `time` argument.
  * When state.director.hasBoss is true, the sky, the top edge, and the open field
- * take a boss-wave tint. The cached night backdrop stays unchanged for other waves.
+ * take a boss-wave tint. The wash stays translucent so the night sky still reads,
+ * and every boss band stays dimmer than the fence rail, which remains the brightest
+ * full-width band. The cached night backdrop stays unchanged for other waves.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 
@@ -8873,37 +8994,39 @@ function directorHasBoss(state) {
 
 // Wash laid over the cached night, only while a boss wave is current.
 // Full-width bands, never columns. Fence posts begin at y=418, so the veil stops above them.
+// The sky and the open field stay translucent so the moon, stars, and tree line still read.
+// The pale entry stones are the one bright band above the fence; a dark crimson cover
+// keeps that lip under the fence rail, including after the rail has worn down.
 function drawBossWave(ctx, time, reduced) {
   const base = readAlpha(ctx);
-  const breathe = reduced ? 0.9 : 0.82 + 0.1 * (0.5 + 0.5 * Math.sin(time * 1.15));
-  ctx.globalAlpha = base * breathe;
-  ctx.fillStyle = '#40101c';
-  ctx.fillRect(0, 0, W, 12);
-  ctx.fillStyle = '#781828';
-  ctx.fillRect(0, 12, W, 14);
-  ctx.fillStyle = '#a82838';
-  ctx.fillRect(0, 26, W, 16);
-  ctx.fillStyle = '#c43840';
-  ctx.fillRect(0, 42, W, 10);
-  ctx.globalAlpha = base * 0.4;
-  ctx.fillStyle = '#902838';
-  ctx.fillRect(0, 64, W, 170);
+  const pulse = reduced ? 0 : (0.5 + 0.5 * Math.sin(time * 1.15));
+  const sky = 0.44 + pulse * 0.08;
+  ctx.globalAlpha = base * sky;
+  ctx.fillStyle = '#9a3040';
+  ctx.fillRect(0, 0, W, 24);
+  ctx.fillStyle = '#b03848';
+  ctx.fillRect(0, 24, W, 16);
+  ctx.globalAlpha = base * (0.28 + pulse * 0.06);
+  ctx.fillStyle = '#8a2838';
+  ctx.fillRect(0, 64, W, 154);
+  ctx.globalAlpha = base * 0.2;
+  ctx.fillStyle = '#6a2030';
+  ctx.fillRect(0, 218, W, 190);
+  // The entry stones are a pale full-width band. Cover them, then lay a short
+  // crimson lip whose row stays under the fence rail, worn or intact.
+  ctx.globalAlpha = base * 0.86;
+  ctx.fillStyle = '#30141c';
+  ctx.fillRect(0, 40, W, 24);
+  ctx.globalAlpha = base * (0.46 + pulse * 0.08);
+  ctx.fillStyle = '#a04048';
+  ctx.fillRect(0, ENTRY_Y, W, 2);
+  const shift = reduced ? 12 : Math.floor(time * 6) % 48;
   ctx.globalAlpha = base * 0.28;
-  ctx.fillStyle = '#601820';
-  ctx.fillRect(0, 234, W, 174);
-  const edge = reduced ? 0.96 : 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(time * 2.4));
-  ctx.globalAlpha = base * edge;
-  ctx.fillStyle = '#e23830';
-  ctx.fillRect(0, ENTRY_Y, W, 3);
-  ctx.fillStyle = '#ffb060';
-  ctx.fillRect(0, ENTRY_Y, W, 1);
-  const shift = reduced ? 16 : Math.floor(time * 8) % 48;
-  ctx.globalAlpha = base * 0.55;
-  ctx.fillStyle = '#e25822';
+  ctx.fillStyle = '#a04840';
   for (let i = 0; i < 4; i++) {
     const x = ((i * 96 + shift) % 420) - 24;
-    const y = 6 + (i % 2) * 10;
-    ctx.fillRect(x, y, 18, 1);
+    const y = 10 + (i % 2) * 6;
+    ctx.fillRect(x, y, 12, 1);
   }
   ctx.globalAlpha = base;
   drawMoon(ctx);
@@ -15471,6 +15594,7 @@ const CSS = `
 .ff-build h3{font-size:1rem;line-height:1.3;word-break:break-word}
 .ff-build .card{min-width:0}
 .ff-build .muted{color:#a5b8be}
+.ff-build .ff-next-wave{font-size:13px;line-height:1.3}
 .ff-build .badge{display:inline-block;padding:2px 6px;border:1px solid #6d8388;vertical-align:middle}
 .ff-build .hero-lock{border-color:#e0c17a;color:#e0c17a}
 .ff-build button{touch-action:manipulation}
@@ -15557,6 +15681,7 @@ const EXTRA = {
     pause: 'Pause',
     resume: 'Resume',
     planning: 'Planning',
+    nextWave: 'Next wave',
     pausedHidden: 'Paused while the page is hidden',
     helpPlacement: 'Select a defender, then move it or merge two towers. Empty slots can take a new tower. Planning pauses the fight.',
     helpMerge: 'Matching type and rank raise rank, up to 4. Different base towers of equal rank follow a recipe. Cancel keeps both units.',
@@ -15662,6 +15787,7 @@ const EXTRA = {
     pause: '暂停',
     resume: '继续',
     planning: '规划中',
+    nextWave: '下一波',
     pausedHidden: '页面隐藏，战斗已暂停',
     helpPlacement: '先点选防守单位，再移动或合成。空位可以放置新塔。规划时战斗会暂停。',
     helpMerge: '同类型且同阶会升阶，最高 4 阶。不同基础塔在同阶时按配方合成。取消会保留双方。',
@@ -16783,6 +16909,46 @@ function renderMergeGrid(state, lang, tr) {
   return wrap;
 }
 
+function bilingualHint(hint, lang) {
+  if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
+  const en = hint.en.trim();
+  const zh = hint.zh.trim();
+  if (!en || !zh) return '';
+  const text = localizeSafe({ en, zh }, lang);
+  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+}
+
+function nextWaveLine(state, lang, tr) {
+  const hint = bilingualHint(state?.director?.nextHint, lang);
+  if (!hint) return '';
+  let text = '';
+  try {
+    text = tr('nextWave', { hint });
+  } catch {
+    text = '';
+  }
+  if (typeof text !== 'string') text = '';
+  text = text.replace(/\s+/g, ' ').trim();
+  const missing = !text || text === 'nextWave' || text.includes('{hint}');
+  if (missing) {
+    const label = lang === 'zh' ? '下一波' : 'Next wave';
+    return `${label} · ${hint}`;
+  }
+  if (text.includes(hint)) return text;
+  return `${text} · ${hint}`;
+}
+
+function appendNextWave(parent, state, lang, tr) {
+  const line = nextWaveLine(state, lang, tr);
+  if (!line) return;
+  parent.append(el('p', {
+    class: 'muted ff-next-wave',
+    'data-testid': 'next-wave',
+    text: line,
+  }));
+}
+
 function renderRearrange(state, ui, lang, tr, showHeroBadge) {
   const wrap = el('section', { class: 'ff-rearrange', 'data-testid': 'rearrange' });
   if (state.hiddenPaused && !state.paused && state.phase !== 'draft') {
@@ -16798,6 +16964,7 @@ function renderRearrange(state, ui, lang, tr, showHeroBadge) {
   if (!planningAvailable(state)) {
     if (state.phase === 'playing') {
       wrap.append(el('h3', { text: tr('planning') }));
+      appendNextWave(wrap, state, lang, tr);
       wrap.append(el('p', { class: 'muted', text: tr('planningLocked') }));
       wrap.append(el('p', { class: 'muted', text: tr('pauseToPlan') }));
       wrap.append(button({
@@ -16810,6 +16977,7 @@ function renderRearrange(state, ui, lang, tr, showHeroBadge) {
     return wrap;
   }
   wrap.append(el('h3', { text: tr('planning') }));
+  appendNextWave(wrap, state, lang, tr);
   if (state.paused && state.phase === 'playing') {
     wrap.append(button({
       'data-action': 'resume',
@@ -17998,7 +18166,10 @@ function renderArmory(ctx, root) {
     const equippedId = profile.equipped?.[slot.id] ?? null;
     const equipped = items.find(item => item.id === equippedId);
     block.append(h(doc, 'h3', {text: slotLabel(ctx, slot.id)}));
-    block.append(line(ctx, t(api, 'equipped'), equipped ? entryName(equipped, lang, equipped.id) : t(api, 'emptySlot')));
+    block.append(line(ctx, t(api, 'equipped'), equipped ? entryName(equipped, lang, equipped.id) : t(api, 'emptySlot'), `equipped-${cssId(slot.id)}`));
+    if (equipped) {
+      block.append(line(ctx, tx(api, lang, 'bonus', 'Bonus', '加成'), equippedBonusLine(ctx, equipped), `equipped-bonus-${cssId(slot.id)}`));
+    }
     const grid = h(doc, 'div', {className: 'grid meta-cards'});
     for (const item of slot.items) grid.append(equipmentCard(ctx, item));
     block.append(grid);
@@ -18313,8 +18484,12 @@ function equipmentCard(ctx, item) {
   card.append(line(ctx, t(api, 'cost'), cost == null ? '—' : num(cost, lang)));
   const effects = bonusEntries(item.bonuses || item.bonus);
   if (effects.length) {
-    card.append(h(doc, 'p', {className: 'muted', text: t(api, 'effect')}));
-    for (const [key, value] of effects) card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+    if (equipped) {
+      card.append(line(ctx, tx(api, lang, 'bonus', 'Bonus', '加成'), equippedBonusLine(ctx, item), `equip-bonus-${cssId(item.id)}`));
+    } else {
+      card.append(h(doc, 'p', {className: 'muted', text: t(api, 'effect')}));
+      for (const [key, value] of effects) card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+    }
   }
   if (!owned) {
     const buy = button(ctx, {
@@ -19257,6 +19432,25 @@ function perLevelBonus(upgrade) {
 function bonusEntries(bonuses) {
   if (!bonuses || typeof bonuses !== 'object' || Array.isArray(bonuses)) return [];
   return Object.entries(bonuses).filter(([, value]) => Number.isFinite(value) && value !== 0);
+}
+
+const EQUIP_BONUS_ORDER = ['damage', 'haste', 'range', 'critChance', 'crit', 'fence', 'vitality', 'reward'];
+
+function equippedBonusLine(ctx, item) {
+  const effects = bonusEntries(item?.bonuses || item?.bonus);
+  const rank = new Map(EQUIP_BONUS_ORDER.map((key, index) => [key, index]));
+  effects.sort((a, b) => (rank.get(a[0]) ?? EQUIP_BONUS_ORDER.length) - (rank.get(b[0]) ?? EQUIP_BONUS_ORDER.length) || String(a[0]).localeCompare(String(b[0])));
+  if (!effects.length) return '—';
+  return effects.map(([key, value]) => equippedBonusPhrase(ctx, key, value)).join(' · ');
+}
+
+function equippedBonusPhrase(ctx, key, value) {
+  const shown = formatBonusValue(key, value, ctx.lang);
+  if (key === 'fence' || key === 'vitality') {
+    const label = ctx.lang === 'zh' ? '栅栏' : 'Fence HP';
+    return `${label} ${shown}`;
+  }
+  return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
 function upgradeCap(upgrade) {

@@ -12,8 +12,9 @@
  * Missing fields are skipped. emit() copies payload after `type`, so a payload
  * `type` of bolt/fire/frost/lightning/poison/support/hero/burn/slow/stun/brittle
  * is recovered as shot, hit, or status when position or damage is present.
- * Reduced motion keeps markers, rings at their start size, crits, and numbers,
- * and drops traveling debris.
+ * Reduced motion skips decorative particle trails and keeps a short impact mark,
+ * rings at their start size, crits, and numbers. A critical mark is a longer gold
+ * plus; a normal mark is a shorter plus. Traveling debris is dropped.
  * A plain shot is a short arrow. A pierce shot is a thin needle along the aim.
  * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
  * stay starbursts with a damage number. A critical hit adds one gold diamond
@@ -92,6 +93,10 @@ const FEEDBACK = new Set([
   'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
   'victory', 'defeat', 'ui', 'status', 'boss',
 ]);
+
+// Full-motion shapes. Reduced motion does not draw these; a short impact stands in
+// when the particle was the hit or shot itself.
+const REDUCED_TRAILS = new Set(['spark', 'mote', 'orbit', 'arc', 'streak', 'needle', 'jump', 'burst']);
 
 const ALIAS = Object.freeze({
   fencehit: 'fence_hit',
@@ -609,6 +614,9 @@ export function createEffects() {
       edge: palette.dim,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
@@ -630,12 +638,15 @@ export function createEffects() {
       edge: palette.dim,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
 
   // Splash is a hollow ring. The radius stays small so one burst is a few pixels.
-  function pushBurst(x, y, radius, palette, life) {
+  function pushBurst(x, y, radius, palette, life, crit) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     pushParticle({
       kind: 'burst',
@@ -645,13 +656,17 @@ export function createEffects() {
       color: palette.hot,
       core: palette.core,
       edge: palette.mid,
+      shaft: palette.hot,
       life,
       maxLife: life,
+      crit: !!crit,
+      trail: true,
+      markWhenReduced: true,
       motionOnly: false,
     });
   }
 
-  function pushJump(points, palette, life) {
+  function pushJump(points, palette, life, mark) {
     if (!points || points.length < 2) return;
     const clean = [];
     for (let i = 0; i < points.length && clean.length < 4; i++) {
@@ -660,6 +675,7 @@ export function createEffects() {
       clean.push({ x: point.x, y: point.y });
     }
     if (clean.length < 2) return;
+    const placed = !!(mark && Number.isFinite(mark.x) && Number.isFinite(mark.y));
     pushParticle({
       kind: 'jump',
       x: clean[0].x,
@@ -667,6 +683,13 @@ export function createEffects() {
       points: clean,
       color: palette.core,
       edge: palette.hot,
+      shaft: palette.hot,
+      core: palette.core,
+      crit: !!(mark && mark.crit),
+      trail: true,
+      markWhenReduced: placed,
+      markX: placed ? mark.x : null,
+      markY: placed ? mark.y : null,
       life,
       maxLife: life,
       motionOnly: false,
@@ -791,7 +814,7 @@ export function createEffects() {
       points.push({ x: x0 + (x1 - x0) * t + jx, y: y0 + (y1 - y0) * t + jy });
     }
     points.push({ x: x1, y: y1 });
-    particles.push({ kind: 'arc', points, color, life, maxLife: life, motionOnly: false });
+    particles.push({ kind: 'arc', points, color, life, maxLife: life, trail: true, motionOnly: false });
   }
 
   function pushPlus(x, y, arm, color, core, life) {
@@ -895,11 +918,11 @@ export function createEffects() {
       return;
     }
     if (desc.delivery === 'splash') {
-      pushBurst(point.x, point.y, 6, palette, life);
+      pushBurst(point.x, point.y, 6, palette, life, desc.crit);
       return;
     }
     if (desc.delivery === 'chain') {
-      pushJump(aimedJump(point.x, point.y, aim.x, aim.y), palette, life);
+      pushJump(aimedJump(point.x, point.y, aim.x, aim.y), palette, life, { x: point.x, y: point.y, crit: desc.crit });
       return;
     }
     pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, life);
@@ -915,20 +938,21 @@ export function createEffects() {
     } else if (desc.delivery === 'splash') {
       const radius = desc.splash > 0 ? desc.splash : 12;
       pushRing(point.x, point.y, radius, desc.splash > 0 ? 10 : 16, palette.mid, 0.28, 2);
-      pushBurst(point.x, point.y, 7, palette, 0.24);
+      pushBurst(point.x, point.y, 7, palette, 0.24, desc.crit);
     } else if (desc.delivery === 'chain') {
+      const mark = { x: point.x, y: point.y, crit: desc.crit };
       if (desc.points.length) {
         const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : desc.points.length, 3);
         let prev = point;
         for (let i = 0; i < hops; i++) {
           const hop = desc.points[i];
-          pushJump(kinkedJump(prev.x, prev.y, hop.x, hop.y), palette, 0.18);
+          pushJump(kinkedJump(prev.x, prev.y, hop.x, hop.y), palette, 0.18, i === 0 ? mark : null);
           prev = hop;
         }
       } else if (desc.target) {
-        pushJump(kinkedJump(point.x, point.y, desc.target.x, desc.target.y), palette, 0.18);
+        pushJump(kinkedJump(point.x, point.y, desc.target.x, desc.target.y), palette, 0.18, mark);
       } else {
-        pushJump(kinkedJump(point.x, point.y, point.x, point.y), palette, 0.18);
+        pushJump(kinkedJump(point.x, point.y, point.x, point.y), palette, 0.18, mark);
       }
     } else {
       if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
@@ -1301,23 +1325,26 @@ export function createEffects() {
     ctx.fillRect(cx, cy + 10, 1, 2);
   }
 
-  function drawImpact(ctx, particle, alpha) {
+  function drawImpact(ctx, particle, alpha, short) {
     if (alpha < 0.02) return;
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
-    const arm = Math.max(3, particle.arm | 0);
+    let arm = Math.max(3, particle.arm | 0);
+    if (short) arm = particle.crit ? 4 : 3;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#140e0c';
     ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
     ctx.fillRect(cx - 1, cy - arm, 3, arm * 2 + 1);
-    ctx.fillStyle = particle.color;
+    ctx.fillStyle = short && particle.crit ? '#ffe56a' : particle.color;
     ctx.fillRect(cx - arm, cy, arm * 2 + 1, 1);
     ctx.fillRect(cx, cy - arm, 1, arm * 2 + 1);
-    for (let i = 2; i < arm; i++) {
-      ctx.fillRect(cx + i, cy + i, 1, 1);
-      ctx.fillRect(cx - i, cy + i, 1, 1);
-      ctx.fillRect(cx + i, cy - i, 1, 1);
-      ctx.fillRect(cx - i, cy - i, 1, 1);
+    if (!short) {
+      for (let i = 2; i < arm; i++) {
+        ctx.fillRect(cx + i, cy + i, 1, 1);
+        ctx.fillRect(cx - i, cy + i, 1, 1);
+        ctx.fillRect(cx + i, cy - i, 1, 1);
+        ctx.fillRect(cx - i, cy - i, 1, 1);
+      }
     }
     ctx.fillStyle = particle.core || particle.color;
     ctx.fillRect(cx - 1, cy - 1, 3, 3);
@@ -1327,6 +1354,12 @@ export function createEffects() {
       ctx.fillRect(cx + arm, cy, 1, 1);
       ctx.fillRect(cx, cy - arm, 1, 1);
       ctx.fillRect(cx, cy + arm, 1, 1);
+      if (short) {
+        ctx.fillRect(cx - 2, cy - 2, 1, 1);
+        ctx.fillRect(cx + 2, cy - 2, 1, 1);
+        ctx.fillRect(cx - 2, cy + 2, 1, 1);
+        ctx.fillRect(cx + 2, cy + 2, 1, 1);
+      }
     }
   }
 
@@ -1486,8 +1519,24 @@ export function createEffects() {
     drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
   }
 
+  function drawReducedMark(ctx, particle, alpha) {
+    const x = Number.isFinite(particle.markX) ? particle.markX : particle.x;
+    const y = Number.isFinite(particle.markY) ? particle.markY : particle.y;
+    drawImpact(ctx, {
+      x,
+      y,
+      arm: particle.crit ? 4 : 3,
+      color: particle.crit ? '#ffe56a' : (particle.shaft || particle.color || particle.head || '#d5ddd8'),
+      core: particle.crit ? '#fff6d2' : (particle.core || particle.head || '#f2f5f4'),
+      crit: !!particle.crit,
+    }, alpha, true);
+  }
+
   function drawParticle(ctx, particle, reduced) {
-    if (reduced && particle.motionOnly) return;
+    if (reduced && (particle.motionOnly || REDUCED_TRAILS.has(particle.kind))) {
+      if (particle.markWhenReduced) drawReducedMark(ctx, particle, fade(particle));
+      return;
+    }
     const alpha = fade(particle);
     switch (particle.kind) {
       case 'spark':
@@ -1526,7 +1575,7 @@ export function createEffects() {
         drawJump(ctx, particle, alpha);
         break;
       case 'impact':
-        drawImpact(ctx, particle, alpha);
+        drawImpact(ctx, particle, alpha, reduced);
         break;
       case 'flash':
         drawFlash(ctx, particle, alpha);

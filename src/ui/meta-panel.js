@@ -267,7 +267,10 @@ function renderArmory(ctx, root) {
     const equippedId = profile.equipped?.[slot.id] ?? null;
     const equipped = items.find(item => item.id === equippedId);
     block.append(h(doc, 'h3', {text: slotLabel(ctx, slot.id)}));
-    block.append(line(ctx, t(api, 'equipped'), equipped ? entryName(equipped, lang, equipped.id) : t(api, 'emptySlot')));
+    block.append(line(ctx, t(api, 'equipped'), equipped ? entryName(equipped, lang, equipped.id) : t(api, 'emptySlot'), `equipped-${cssId(slot.id)}`));
+    if (equipped) {
+      block.append(line(ctx, tx(api, lang, 'bonus', 'Bonus', '加成'), equippedBonusLine(ctx, equipped), `equipped-bonus-${cssId(slot.id)}`));
+    }
     const grid = h(doc, 'div', {className: 'grid meta-cards'});
     for (const item of slot.items) grid.append(equipmentCard(ctx, item));
     block.append(grid);
@@ -582,8 +585,12 @@ function equipmentCard(ctx, item) {
   card.append(line(ctx, t(api, 'cost'), cost == null ? '—' : num(cost, lang)));
   const effects = bonusEntries(item.bonuses || item.bonus);
   if (effects.length) {
-    card.append(h(doc, 'p', {className: 'muted', text: t(api, 'effect')}));
-    for (const [key, value] of effects) card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+    if (equipped) {
+      card.append(line(ctx, tx(api, lang, 'bonus', 'Bonus', '加成'), equippedBonusLine(ctx, item), `equip-bonus-${cssId(item.id)}`));
+    } else {
+      card.append(h(doc, 'p', {className: 'muted', text: t(api, 'effect')}));
+      for (const [key, value] of effects) card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+    }
   }
   if (!owned) {
     const buy = button(ctx, {
@@ -1526,6 +1533,25 @@ function perLevelBonus(upgrade) {
 function bonusEntries(bonuses) {
   if (!bonuses || typeof bonuses !== 'object' || Array.isArray(bonuses)) return [];
   return Object.entries(bonuses).filter(([, value]) => Number.isFinite(value) && value !== 0);
+}
+
+const EQUIP_BONUS_ORDER = ['damage', 'haste', 'range', 'critChance', 'crit', 'fence', 'vitality', 'reward'];
+
+function equippedBonusLine(ctx, item) {
+  const effects = bonusEntries(item?.bonuses || item?.bonus);
+  const rank = new Map(EQUIP_BONUS_ORDER.map((key, index) => [key, index]));
+  effects.sort((a, b) => (rank.get(a[0]) ?? EQUIP_BONUS_ORDER.length) - (rank.get(b[0]) ?? EQUIP_BONUS_ORDER.length) || String(a[0]).localeCompare(String(b[0])));
+  if (!effects.length) return '—';
+  return effects.map(([key, value]) => equippedBonusPhrase(ctx, key, value)).join(' · ');
+}
+
+function equippedBonusPhrase(ctx, key, value) {
+  const shown = formatBonusValue(key, value, ctx.lang);
+  if (key === 'fence' || key === 'vitality') {
+    const label = ctx.lang === 'zh' ? '栅栏' : 'Fence HP';
+    return `${label} ${shown}`;
+  }
+  return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
 function upgradeCap(upgrade) {

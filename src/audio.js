@@ -6,6 +6,9 @@
  * Sound is off until setEnabled(true). unlock() must run inside a user gesture
  * (pointer or key) before playEvents can be heard. Both calls are safe to repeat.
  * playEvents does not mutate the event array and never throws.
+ * When the profile or an event says reducedMotion, each tone is shorter and
+ * quieter. A critical hit stays its own high chime, apart from a normal hit.
+ * setEnabled(false) still silences every cue, including a softened one.
  *
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
@@ -25,6 +28,11 @@ const MAX_VOICES = 16;
 const SHOT_BED = 0.2;
 const SHOT_REPEAT_WINDOW = 1.35;
 const SHOT_REPEAT_STEPS = Object.freeze([1, 0.58, 0.42]);
+// Reduced motion keeps the same contours and the same relative mix.
+// Length and peak both drop, so a crit chime stays higher than a hit and still under a fence hit.
+const REDUCED_GAIN = 0.5;
+const REDUCED_TIME = 0.55;
+const REDUCED_FLOOR = 0.016;
 
 const AUDIO_LIMITS = Object.freeze({
   shot: 3,
@@ -114,6 +122,33 @@ function clampFreq(value) {
   return Math.max(50, Math.min(2800, value));
 }
 
+function reducedFlag(value, depth = 0) {
+  if (value === true || value === false) return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return null;
+  if (typeof value.reducedMotion === 'boolean') return value.reducedMotion;
+  const settings = value.settings;
+  if (settings && typeof settings === 'object' && typeof settings.reducedMotion === 'boolean') return settings.reducedMotion;
+  if (depth < 2 && value.profile && typeof value.profile === 'object') {
+    const nested = reducedFlag(value.profile, depth + 1);
+    if (nested != null) return nested;
+  }
+  if (depth < 2 && value.profileSnapshot && typeof value.profileSnapshot === 'object') {
+    const nested = reducedFlag(value.profileSnapshot, depth + 1);
+    if (nested != null) return nested;
+  }
+  return null;
+}
+
+function listSaysReduced(list) {
+  if (Array.isArray(list)) {
+    for (let i = 0; i < list.length; i++) {
+      if (reducedFlag(list[i]) === true) return true;
+    }
+    return false;
+  }
+  return reducedFlag(list) === true;
+}
+
 function makeNoiseBuffer(context) {
   const rate = context.sampleRate || 44100;
   const length = Math.max(1, Math.floor(rate * 0.2));
@@ -127,7 +162,7 @@ function makeNoiseBuffer(context) {
   return buffer;
 }
 
-export function createAudio() {
+export function createAudio(options) {
   let enabled = false;
   let alive = true;
   let context = null;
@@ -137,6 +172,10 @@ export function createAudio() {
   const lastAt = new Map();
   let shotStamp = -1;
   let shotRun = 0;
+  let profileReduced = false;
+  let soften = false;
+  const initialReduced = reducedFlag(options);
+  if (initialReduced != null) profileReduced = initialReduced;
 
   function desiredGain() {
     return enabled && context && context.state === 'running' ? MASTER : 0;
@@ -262,9 +301,18 @@ export function createAudio() {
     };
   }
 
+  function cueLength(dur, cap) {
+    if (!soften) return Math.max(0.03, Math.min(cap, dur));
+    return Math.max(REDUCED_FLOOR, Math.min(cap * REDUCED_TIME, dur * REDUCED_TIME));
+  }
+
+  function cueGain(gain) {
+    return Math.max(0.0001, soften ? gain * REDUCED_GAIN : gain);
+  }
+
   function tone({ freq, dur, type = 'square', gain = 0.05, slide = 0, delay = 0 }) {
     if (!enabled || !context || !master) return false;
-    const length = Math.max(0.03, Math.min(0.6, dur));
+    const length = cueLength(dur, 0.6);
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
     const frequency = clampFreq(freq);
@@ -277,7 +325,7 @@ export function createAudio() {
     if (Math.abs(destination - frequency) > 1) {
       osc.frequency.exponentialRampToValueAtTime(destination, start + length);
     }
-    const peak = Math.max(0.0001, gain);
+    const peak = cueGain(gain);
     amp.gain.setValueAtTime(0.0001, start);
     amp.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.012, length * 0.35));
     amp.gain.exponentialRampToValueAtTime(0.0001, start + length);
@@ -291,7 +339,7 @@ export function createAudio() {
 
   function noise({ dur, gain, delay = 0, band = 800, q = 0.8 }) {
     if (!enabled || !context || !master || !noiseBuffer) return false;
-    const length = Math.max(0.03, Math.min(0.45, dur));
+    const length = cueLength(dur, 0.45);
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
     if (!Number.isFinite(start) || !takeVoice(start, length)) return false;
@@ -303,7 +351,7 @@ export function createAudio() {
     filter.frequency.value = Math.max(80, Math.min(4000, band));
     filter.Q.value = Math.max(0.2, q);
     const amp = context.createGain();
-    const peak = Math.max(0.0001, gain);
+    const peak = cueGain(gain);
     amp.gain.setValueAtTime(0.0001, start);
     amp.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.01, length * 0.3));
     amp.gain.exponentialRampToValueAtTime(0.0001, start + length);
@@ -394,6 +442,7 @@ export function createAudio() {
     const body = wobble(tint, desc.time + 0.17);
     if (desc.crit) {
       // Rising chime, not the low hit thud. Both layers stay under the fence sine at 0.072.
+      // Reduced motion shortens and quiets this chime in tone(); it does not become the thud.
       return safe(() => layers(
         tone({ freq: 1174, dur: 0.04, type: 'triangle', gain: 0.044, slide: 196, delay }),
         tone({ freq: 1760, dur: 0.032, type: 'square', gain: 0.018, delay: delay + 0.016 }),
@@ -508,7 +557,25 @@ export function createAudio() {
     }
   }
 
-  function playEvents(events) {
+  function playbackList(events) {
+    if (!events || typeof events !== 'object' || Array.isArray(events)) return events;
+    if (typeof events.type === 'string' || typeof events.event === 'string' || typeof events.eventType === 'string') return events;
+    if (!Array.isArray(events.events)) return events;
+    const direct = typeof events.reducedMotion === 'boolean'
+      || (events.settings && typeof events.settings === 'object' && typeof events.settings.reducedMotion === 'boolean')
+      || (events.profile && typeof events.profile === 'object');
+    if (!direct) return events;
+    const wrapped = reducedFlag(events);
+    if (wrapped != null) profileReduced = wrapped;
+    return events.events;
+  }
+
+  function playEvents(events, hint) {
+    const fromHint = reducedFlag(hint);
+    if (fromHint != null) profileReduced = fromHint;
+    const list = playbackList(events);
+    // An event flag softens this batch only. A profile flag stays until another profile says otherwise.
+    soften = profileReduced || listSaysReduced(list);
     if (!alive || enabled !== true) return;
     if (!context || context.state !== 'running' || !master) return;
     let now;
@@ -516,7 +583,7 @@ export function createAudio() {
     catch { return; }
     if (!Number.isFinite(now)) return;
     reap(now);
-    const batch = collectFeedback(events, AUDIO_LIMITS);
+    const batch = collectFeedback(list, AUDIO_LIMITS);
     batch.sort((a, b) => (PRIORITY[a.type] ?? 50) - (PRIORITY[b.type] ?? 50) || Number(b.crit) - Number(a.crit));
     const counts = new Map();
     const armed = new Set();

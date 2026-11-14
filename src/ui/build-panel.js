@@ -32,6 +32,7 @@ const CSS = `
 .ff-build h3{font-size:1rem;line-height:1.3;word-break:break-word}
 .ff-build .card{min-width:0}
 .ff-build .muted{color:#a5b8be}
+.ff-build .ff-next-wave{font-size:13px;line-height:1.3}
 .ff-build .badge{display:inline-block;padding:2px 6px;border:1px solid #6d8388;vertical-align:middle}
 .ff-build .hero-lock{border-color:#e0c17a;color:#e0c17a}
 .ff-build button{touch-action:manipulation}
@@ -118,6 +119,7 @@ const EXTRA = {
     pause: 'Pause',
     resume: 'Resume',
     planning: 'Planning',
+    nextWave: 'Next wave',
     pausedHidden: 'Paused while the page is hidden',
     helpPlacement: 'Select a defender, then move it or merge two towers. Empty slots can take a new tower. Planning pauses the fight.',
     helpMerge: 'Matching type and rank raise rank, up to 4. Different base towers of equal rank follow a recipe. Cancel keeps both units.',
@@ -223,6 +225,7 @@ const EXTRA = {
     pause: '暂停',
     resume: '继续',
     planning: '规划中',
+    nextWave: '下一波',
     pausedHidden: '页面隐藏，战斗已暂停',
     helpPlacement: '先点选防守单位，再移动或合成。空位可以放置新塔。规划时战斗会暂停。',
     helpMerge: '同类型且同阶会升阶，最高 4 阶。不同基础塔在同阶时按配方合成。取消会保留双方。',
@@ -1344,6 +1347,46 @@ function renderMergeGrid(state, lang, tr) {
   return wrap;
 }
 
+function bilingualHint(hint, lang) {
+  if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
+  const en = hint.en.trim();
+  const zh = hint.zh.trim();
+  if (!en || !zh) return '';
+  const text = localizeSafe({ en, zh }, lang);
+  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+}
+
+function nextWaveLine(state, lang, tr) {
+  const hint = bilingualHint(state?.director?.nextHint, lang);
+  if (!hint) return '';
+  let text = '';
+  try {
+    text = tr('nextWave', { hint });
+  } catch {
+    text = '';
+  }
+  if (typeof text !== 'string') text = '';
+  text = text.replace(/\s+/g, ' ').trim();
+  const missing = !text || text === 'nextWave' || text.includes('{hint}');
+  if (missing) {
+    const label = lang === 'zh' ? '下一波' : 'Next wave';
+    return `${label} · ${hint}`;
+  }
+  if (text.includes(hint)) return text;
+  return `${text} · ${hint}`;
+}
+
+function appendNextWave(parent, state, lang, tr) {
+  const line = nextWaveLine(state, lang, tr);
+  if (!line) return;
+  parent.append(el('p', {
+    class: 'muted ff-next-wave',
+    'data-testid': 'next-wave',
+    text: line,
+  }));
+}
+
 function renderRearrange(state, ui, lang, tr, showHeroBadge) {
   const wrap = el('section', { class: 'ff-rearrange', 'data-testid': 'rearrange' });
   if (state.hiddenPaused && !state.paused && state.phase !== 'draft') {
@@ -1359,6 +1402,7 @@ function renderRearrange(state, ui, lang, tr, showHeroBadge) {
   if (!planningAvailable(state)) {
     if (state.phase === 'playing') {
       wrap.append(el('h3', { text: tr('planning') }));
+      appendNextWave(wrap, state, lang, tr);
       wrap.append(el('p', { class: 'muted', text: tr('planningLocked') }));
       wrap.append(el('p', { class: 'muted', text: tr('pauseToPlan') }));
       wrap.append(button({
@@ -1371,6 +1415,7 @@ function renderRearrange(state, ui, lang, tr, showHeroBadge) {
     return wrap;
   }
   wrap.append(el('h3', { text: tr('planning') }));
+  appendNextWave(wrap, state, lang, tr);
   if (state.paused && state.phase === 'playing') {
     wrap.append(button({
       'data-action': 'resume',

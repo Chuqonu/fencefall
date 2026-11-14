@@ -7,7 +7,9 @@
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
  * Animation uses the `time` argument.
  * When state.director.hasBoss is true, the sky, the top edge, and the open field
- * take a boss-wave tint. The cached night backdrop stays unchanged for other waves.
+ * take a boss-wave tint. The wash stays translucent so the night sky still reads,
+ * and every boss band stays dimmer than the fence rail, which remains the brightest
+ * full-width band. The cached night backdrop stays unchanged for other waves.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 import { ARENA, slotGeometry } from '../shared.js';
@@ -491,37 +493,39 @@ function directorHasBoss(state) {
 
 // Wash laid over the cached night, only while a boss wave is current.
 // Full-width bands, never columns. Fence posts begin at y=418, so the veil stops above them.
+// The sky and the open field stay translucent so the moon, stars, and tree line still read.
+// The pale entry stones are the one bright band above the fence; a dark crimson cover
+// keeps that lip under the fence rail, including after the rail has worn down.
 function drawBossWave(ctx, time, reduced) {
   const base = readAlpha(ctx);
-  const breathe = reduced ? 0.9 : 0.82 + 0.1 * (0.5 + 0.5 * Math.sin(time * 1.15));
-  ctx.globalAlpha = base * breathe;
-  ctx.fillStyle = '#40101c';
-  ctx.fillRect(0, 0, W, 12);
-  ctx.fillStyle = '#781828';
-  ctx.fillRect(0, 12, W, 14);
-  ctx.fillStyle = '#a82838';
-  ctx.fillRect(0, 26, W, 16);
-  ctx.fillStyle = '#c43840';
-  ctx.fillRect(0, 42, W, 10);
-  ctx.globalAlpha = base * 0.4;
-  ctx.fillStyle = '#902838';
-  ctx.fillRect(0, 64, W, 170);
+  const pulse = reduced ? 0 : (0.5 + 0.5 * Math.sin(time * 1.15));
+  const sky = 0.44 + pulse * 0.08;
+  ctx.globalAlpha = base * sky;
+  ctx.fillStyle = '#9a3040';
+  ctx.fillRect(0, 0, W, 24);
+  ctx.fillStyle = '#b03848';
+  ctx.fillRect(0, 24, W, 16);
+  ctx.globalAlpha = base * (0.28 + pulse * 0.06);
+  ctx.fillStyle = '#8a2838';
+  ctx.fillRect(0, 64, W, 154);
+  ctx.globalAlpha = base * 0.2;
+  ctx.fillStyle = '#6a2030';
+  ctx.fillRect(0, 218, W, 190);
+  // The entry stones are a pale full-width band. Cover them, then lay a short
+  // crimson lip whose row stays under the fence rail, worn or intact.
+  ctx.globalAlpha = base * 0.86;
+  ctx.fillStyle = '#30141c';
+  ctx.fillRect(0, 40, W, 24);
+  ctx.globalAlpha = base * (0.46 + pulse * 0.08);
+  ctx.fillStyle = '#a04048';
+  ctx.fillRect(0, ENTRY_Y, W, 2);
+  const shift = reduced ? 12 : Math.floor(time * 6) % 48;
   ctx.globalAlpha = base * 0.28;
-  ctx.fillStyle = '#601820';
-  ctx.fillRect(0, 234, W, 174);
-  const edge = reduced ? 0.96 : 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(time * 2.4));
-  ctx.globalAlpha = base * edge;
-  ctx.fillStyle = '#e23830';
-  ctx.fillRect(0, ENTRY_Y, W, 3);
-  ctx.fillStyle = '#ffb060';
-  ctx.fillRect(0, ENTRY_Y, W, 1);
-  const shift = reduced ? 16 : Math.floor(time * 8) % 48;
-  ctx.globalAlpha = base * 0.55;
-  ctx.fillStyle = '#e25822';
+  ctx.fillStyle = '#a04840';
   for (let i = 0; i < 4; i++) {
     const x = ((i * 96 + shift) % 420) - 24;
-    const y = 6 + (i % 2) * 10;
-    ctx.fillRect(x, y, 18, 1);
+    const y = 10 + (i % 2) * 6;
+    ctx.fillRect(x, y, 12, 1);
   }
   ctx.globalAlpha = base;
   drawMoon(ctx);
