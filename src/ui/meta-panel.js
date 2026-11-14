@@ -7,7 +7,7 @@
  * the current level, or a function (level, profile). Bonus fractions are
  * damage, haste, critChance, and reward; range and fence are flat amounts.
  */
-import {localize, formatNumber} from '../i18n.js';
+import {localize, formatNumber, resultLabel, resultStory} from '../i18n.js';
 import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses} from '../systems/progression.js';
 import {TOWERS} from '../data/towers.js';
 import {RECIPES} from '../data/recipes.js';
@@ -426,6 +426,12 @@ function renderResults(ctx, root) {
   const card = h(doc, 'section', {className: 'card'});
   card.append(h(doc, 'h3', {text: t(api, 'runComplete')}));
   card.append(line(ctx, t(api, 'results'), outcomeText(ctx, outcome), 'result-outcome'));
+  const paid = settlement && Number.isFinite(settlement.currency) ? settlement.currency : null;
+  card.append(h(doc, 'p', {
+    className: 'result-story',
+    'data-testid': 'result-story',
+    text: resultStory(lang, outcome, paid)
+  }));
 
   if (settlement && Number.isFinite(settlement.currency)) {
     card.append(line(ctx, t(api, 'earned'), num(settlement.currency, lang), 'result-currency'));
@@ -1314,10 +1320,7 @@ function phaseLabel(ctx) {
 }
 
 function outcomeText(ctx, outcome) {
-  if (outcome === 'victory') return t(ctx.api, 'victory');
-  if (outcome === 'defeat') return t(ctx.api, 'defeat');
-  if (!outcome) return tx(ctx.api, ctx.lang, 'noOutcome', 'This run has no settled outcome yet.', '这局还没有结算结果。');
-  return textOf(outcome, ctx.lang) || String(outcome);
+  return resultLabel(ctx.lang, outcome);
 }
 
 function readUI(api) {

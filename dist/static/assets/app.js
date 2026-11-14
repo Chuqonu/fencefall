@@ -1429,11 +1429,13 @@ function renderResults(hud, panel, api) {
   const state = api.getState();
   const profile = api.getProfile();
   const language = profile.settings.language === 'zh' ? 'zh' : 'en';
+  const outcome = state?.settlement?.result || (state?.phase === 'victory' || state?.phase === 'defeat' ? state.phase : null);
   const heading = el('h2');
-  heading.textContent = api.t(state?.phase === 'victory' ? 'victory' : 'defeat');
+  heading.textContent = i18n.resultLabel(language, outcome);
   const detail = el('p');
-  if (state?.settlement && Number.isFinite(state.settlement.currency)) detail.textContent = `${api.t('currency')} ${formatNumber(state.settlement.currency, language)}`;
-  else detail.textContent = api.t('settlementPending');
+  detail.dataset.testid = 'result-story';
+  const paid = state?.settlement && Number.isFinite(state.settlement.currency) ? state.settlement.currency : null;
+  detail.textContent = i18n.resultStory(language, outcome, paid);
   panel.append(heading, detail);
   hud.append(button('restart', api.t('newRun'), {testid:'restart'}), button('screen', api.t('menu'), {name:'menu', testid:'menu'}));
 }
@@ -2956,6 +2958,8 @@ __ff_exports["formatNumber"] = formatNumber;
 __ff_exports["t"] = t;
 __ff_exports["localize"] = localize;
 __ff_exports["formatDuration"] = formatDuration;
+__ff_exports["resultLabel"] = resultLabel;
+__ff_exports["resultStory"] = resultStory;
 /**
  * Fencefall / 最后一道防线 — player-facing strings.
  *
@@ -3333,6 +3337,7 @@ const ROWS = [
   ['resultSummary', '{result} · {difficulty}', '{result} · {difficulty}'],
   ['victoryBody', 'The fence held. The reward is saved once.', '栅栏守住了。报酬只保存一次。'],
   ['defeatBody', 'The fence fell. Progress can still pay once.', '栅栏倒下了。已有的进度仍会结算一次。'],
+  ['abandonBody', 'You left this fight. That reward is saved once.', '你离开了这一局。这笔报酬只保存一次。'],
   ['earned', 'Earned', '获得'],
   ['earnedAmount', 'Earned {amount}', '获得 {amount}'],
   ['damageDealt', 'Damage dealt', '造成伤害'],
@@ -3657,6 +3662,42 @@ function formatDuration(seconds, language) {
     return hours > 0 ? `${hours}小时${pad(minutes)}分${pad(secs)}秒` : `${minutes}分${pad(secs)}秒`;
   }
   return hours > 0 ? `${hours}h ${pad(minutes)}m ${pad(secs)}s` : `${minutes}m ${pad(secs)}s`;
+}
+
+const RESULT_BODIES = Object.freeze({
+  victory: 'victoryBody',
+  defeat: 'defeatBody',
+  abandon: 'abandonBody'
+});
+
+/** Victory, defeat, or abandoned. Any other outcome stays a sentence, never a raw code. */
+function resultLabel(language, outcome) {
+  const lang = normalizeLanguage(language);
+  if (outcome === 'victory') return t(lang, 'victory');
+  if (outcome === 'defeat') return t(lang, 'defeat');
+  if (outcome === 'abandon') return t(lang, 'abandoned');
+  return t(lang, 'noOutcome');
+}
+
+/**
+ * What happened, then what was paid. currency null means the purse is not settled yet.
+ * A zero abandon names the short-run rule. Unknown outcomes never echo the code.
+ */
+function resultStory(language, outcome, currency) {
+  const lang = normalizeLanguage(language);
+  const body = t(lang, RESULT_BODIES[outcome] || 'noOutcome');
+  const join = (parts) => {
+    const bits = parts.filter(Boolean);
+    if (lang !== 'zh') return bits.join(' ');
+    return bits.reduce((text, part, index) => {
+      if (index === 0) return part;
+      return `${text}${/[。！？]$/.test(text) ? '' : '。'}${part}`;
+    }, '');
+  };
+  if (!Number.isFinite(currency)) return join([body, t(lang, 'settlementPending')]);
+  const paid = t(lang, 'earnedAmount', {amount: currency});
+  if (outcome === 'abandon' && currency <= 0) return join([body, t(lang, 'freshAbandon'), paid]);
+  return join([body, paid]);
 }
 
 };
@@ -17983,6 +18024,8 @@ const __ff_m5 = __ff_load("src/data/enemies.js");
 const __ff_m6 = __ff_load("src/shared.js");
 const localize = __ff_m0["localize"];
 const formatNumber = __ff_m0["formatNumber"];
+const resultLabel = __ff_m0["resultLabel"];
+const resultStory = __ff_m0["resultStory"];
 const EQUIPMENT = __ff_m1["EQUIPMENT"];
 const PERMANENT_UPGRADES = __ff_m1["PERMANENT_UPGRADES"];
 const getProfileBonuses = __ff_m1["getProfileBonuses"];
@@ -18422,6 +18465,12 @@ function renderResults(ctx, root) {
   const card = h(doc, 'section', {className: 'card'});
   card.append(h(doc, 'h3', {text: t(api, 'runComplete')}));
   card.append(line(ctx, t(api, 'results'), outcomeText(ctx, outcome), 'result-outcome'));
+  const paid = settlement && Number.isFinite(settlement.currency) ? settlement.currency : null;
+  card.append(h(doc, 'p', {
+    className: 'result-story',
+    'data-testid': 'result-story',
+    text: resultStory(lang, outcome, paid)
+  }));
 
   if (settlement && Number.isFinite(settlement.currency)) {
     card.append(line(ctx, t(api, 'earned'), num(settlement.currency, lang), 'result-currency'));
@@ -19310,10 +19359,7 @@ function phaseLabel(ctx) {
 }
 
 function outcomeText(ctx, outcome) {
-  if (outcome === 'victory') return t(ctx.api, 'victory');
-  if (outcome === 'defeat') return t(ctx.api, 'defeat');
-  if (!outcome) return tx(ctx.api, ctx.lang, 'noOutcome', 'This run has no settled outcome yet.', '这局还没有结算结果。');
-  return textOf(outcome, ctx.lang) || String(outcome);
+  return resultLabel(ctx.lang, outcome);
 }
 
 function readUI(api) {

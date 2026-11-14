@@ -728,11 +728,13 @@ function renderResults(hud, panel, api) {
   const state = api.getState();
   const profile = api.getProfile();
   const language = profile.settings.language === 'zh' ? 'zh' : 'en';
+  const outcome = state?.settlement?.result || (state?.phase === 'victory' || state?.phase === 'defeat' ? state.phase : null);
   const heading = el('h2');
-  heading.textContent = api.t(state?.phase === 'victory' ? 'victory' : 'defeat');
+  heading.textContent = i18n.resultLabel(language, outcome);
   const detail = el('p');
-  if (state?.settlement && Number.isFinite(state.settlement.currency)) detail.textContent = `${api.t('currency')} ${formatNumber(state.settlement.currency, language)}`;
-  else detail.textContent = api.t('settlementPending');
+  detail.dataset.testid = 'result-story';
+  const paid = state?.settlement && Number.isFinite(state.settlement.currency) ? state.settlement.currency : null;
+  detail.textContent = i18n.resultStory(language, outcome, paid);
   panel.append(heading, detail);
   hud.append(button('restart', api.t('newRun'), {testid:'restart'}), button('screen', api.t('menu'), {name:'menu', testid:'menu'}));
 }

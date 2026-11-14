@@ -375,6 +375,7 @@ const ROWS = [
   ['resultSummary', '{result} · {difficulty}', '{result} · {difficulty}'],
   ['victoryBody', 'The fence held. The reward is saved once.', '栅栏守住了。报酬只保存一次。'],
   ['defeatBody', 'The fence fell. Progress can still pay once.', '栅栏倒下了。已有的进度仍会结算一次。'],
+  ['abandonBody', 'You left this fight. That reward is saved once.', '你离开了这一局。这笔报酬只保存一次。'],
   ['earned', 'Earned', '获得'],
   ['earnedAmount', 'Earned {amount}', '获得 {amount}'],
   ['damageDealt', 'Damage dealt', '造成伤害'],
@@ -697,4 +698,40 @@ export function formatDuration(seconds, language) {
     return hours > 0 ? `${hours}小时${pad(minutes)}分${pad(secs)}秒` : `${minutes}分${pad(secs)}秒`;
   }
   return hours > 0 ? `${hours}h ${pad(minutes)}m ${pad(secs)}s` : `${minutes}m ${pad(secs)}s`;
+}
+
+const RESULT_BODIES = Object.freeze({
+  victory: 'victoryBody',
+  defeat: 'defeatBody',
+  abandon: 'abandonBody'
+});
+
+/** Victory, defeat, or abandoned. Any other outcome stays a sentence, never a raw code. */
+export function resultLabel(language, outcome) {
+  const lang = normalizeLanguage(language);
+  if (outcome === 'victory') return t(lang, 'victory');
+  if (outcome === 'defeat') return t(lang, 'defeat');
+  if (outcome === 'abandon') return t(lang, 'abandoned');
+  return t(lang, 'noOutcome');
+}
+
+/**
+ * What happened, then what was paid. currency null means the purse is not settled yet.
+ * A zero abandon names the short-run rule. Unknown outcomes never echo the code.
+ */
+export function resultStory(language, outcome, currency) {
+  const lang = normalizeLanguage(language);
+  const body = t(lang, RESULT_BODIES[outcome] || 'noOutcome');
+  const join = (parts) => {
+    const bits = parts.filter(Boolean);
+    if (lang !== 'zh') return bits.join(' ');
+    return bits.reduce((text, part, index) => {
+      if (index === 0) return part;
+      return `${text}${/[。！？]$/.test(text) ? '' : '。'}${part}`;
+    }, '');
+  };
+  if (!Number.isFinite(currency)) return join([body, t(lang, 'settlementPending')]);
+  const paid = t(lang, 'earnedAmount', {amount: currency});
+  if (outcome === 'abandon' && currency <= 0) return join([body, t(lang, 'freshAbandon'), paid]);
+  return join([body, paid]);
 }
