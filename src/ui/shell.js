@@ -1,5 +1,6 @@
 import { ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry } from '../shared.js';
 import { previewMerge } from '../systems/merges.js';
+import { bossApproaching } from '../systems/waves.js';
 import { formatNumber, localize } from '../i18n.js';
 
 const SPEEDS = [1, 1.5, 3];
@@ -467,6 +468,7 @@ export function mountShell(root, api) {
     const phaseText = phaseBadge(state, planning);
     setText(phase, phaseText);
     phase.hidden = !phaseText;
+    phase.classList.toggle('is-boss', !!phaseText && phaseText === text('bossWarning'));
 
     if (screen !== 'battle') shell.classList.remove('is-details-open');
     const detailsOpen = shell.classList.contains('is-details-open');
@@ -743,6 +745,7 @@ export function mountShell(root, api) {
     if (state.phase === 'draft') return text('chooseOneOfThree');
     if (state.phase === 'placing') return text('chooseSlot');
     if (state.paused && state.phase === 'playing') return text('paused');
+    if (bossApproaching(state)) return text('bossWarning');
     if (planning) return text('planning');
     return '';
   }

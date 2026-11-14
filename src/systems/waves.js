@@ -768,6 +768,30 @@ function readHasBoss(state, director) {
   return waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
 }
 
+const BOSS_APPROACH_SECONDS = 12;
+
+function bossAlive(state) {
+  const enemies = state?.enemies;
+  if (!Array.isArray(enemies)) return false;
+  return enemies.some(enemy => enemy && enemy.kind === 'boss' && enemy.dead !== true && Number(enemy.hp) > 0);
+}
+
+/** True while a boss is due within 12s, or already queued, and has not entered. */
+export function bossApproaching(state) {
+  if (!state || state.phase !== 'playing' || state.paused || state.hiddenPaused) return false;
+  if (bossAlive(state)) return false;
+  const queue = state.director?.queue;
+  if (Array.isArray(queue) && queue.some(item => item && item.kind === 'boss')) return true;
+  if (state.endless) return false;
+  const index = Number.isFinite(state.director?.nextWave) ? state.director.nextWave : 0;
+  if (index < 0 || index >= WAVES.length) return false;
+  const wave = WAVES[index];
+  if (!waveContainsBoss(wave)) return false;
+  const time = Number.isFinite(state.time) ? state.time : 0;
+  const wait = Number(wave.start) - time;
+  return wait >= 0 && wait <= BOSS_APPROACH_SECONDS;
+}
+
 function snapshotWave(wave) {
   return {
     id: wave.id,
