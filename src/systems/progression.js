@@ -26,9 +26,12 @@
 // Settlement is immutable. A second call returns the same object and does not pay.
 //
 // Save order: settleRun(profile, state), then saveProfile, then saveRun.
-// Profile-first keeps the currency if the run write fails. state.settlement and
-// profile.settledRuns / profile.settlementLedger stop a reload from paying again.
-// settledRuns keeps the newest 64 ids. Buying equipment does not equip it.
+// Profile-first keeps the currency if the run write fails. state.settlement,
+// profile.settledRuns, and profile.settlementLedger each stop a second payout.
+// settledRuns keeps paid ids (up to 2000, the profile save ceiling). The ledger
+// keeps full results for the newest 64 ids only. Dropping an id would let that
+// run pay again. A run with no id is locked on the run object. Buying equipment
+// does not equip it.
 // One owned item can be equipped in its own slot and replaces the previous one.
 // Permanent bonuses are per rank; price is costs[currentLevel] until cap.
 // Buy / equip / upgrade failures use reason:
@@ -55,6 +58,8 @@ export const PROGRESSION_RULES = Object.freeze({
 });
 
 const EQUIP_SLOTS = ['weapon', 'charm', 'armor'];
+// Profile saves reject settledRuns longer than 2000. Stay under that ceiling.
+const PAID_RUN_LIMIT = 2000;
 const PERMANENT_KEYS = ['damage', 'haste', 'vitality'];
 const FRACTION_KEYS = ['damage', 'haste', 'critChance', 'reward'];
 const ABSOLUTE_KEYS = ['range', 'fence'];
@@ -259,12 +264,15 @@ export function getProfileBonuses(profile) {
   const milli = {damage: 0, haste: 0, critChance: 0, reward: 0};
   const absolute = {range: 0, fence: 0};
   const equipped = profile.equipped && typeof profile.equipped === 'object' ? profile.equipped : null;
+  const seenItems = new Set();
   if (equipped) {
     for (const slot of EQUIP_SLOTS) {
       const id = equipped[slot];
-      if (typeof id !== 'string' || !owns(profile, id)) continue;
+      // One owned item, one slot. A repeated id must not stack its bonuses.
+      if (typeof id !== 'string' || seenItems.has(id) || !owns(profile, id)) continue;
       const item = EQUIPMENT[id];
       if (!item || item.slot !== slot) continue;
+      seenItems.add(id);
       addSource(milli, absolute, item.bonuses, 1);
     }
   }
@@ -272,6 +280,7 @@ export function getProfileBonuses(profile) {
   if (permanent) {
     for (const id of PERMANENT_KEYS) {
       const spec = PERMANENT_UPGRADES[id];
+      // Level is how many times this rank bonus has been bought. Count it once per rank.
       const level = boundedLevel(permanent[id], spec.cap);
       if (level > 0) addSource(milli, absolute, spec.bonuses, level);
     }
@@ -438,17 +447,54 @@ function hasSettled(profile, runId) {
   return typeof runId === 'string' && runId !== '' && Array.isArray(profile.settledRuns) && profile.settledRuns.includes(runId);
 }
 
+function ledgerSettlement(profile, runId) {
+  if (typeof runId !== 'string' || runId === '') return null;
+  const ledger = profile.settlementLedger;
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) return null;
+  const saved = ledger[runId];
+  return isSettlement(saved) ? saved : null;
+}
+
 function remember(profile, settlement) {
   const id = settlement.runId;
   if (typeof id !== 'string' || id === '') return;
   ensureLedger(profile);
-  if (!profile.settledRuns.includes(id)) profile.settledRuns.push(id);
-  if (!profile.settlementLedger[id]) profile.settlementLedger[id] = settlement;
-  const limit = PROGRESSION_RULES.settledRunLimit;
-  while (profile.settledRuns.length > limit) {
-    const old = profile.settledRuns.shift();
-    if (old) delete profile.settlementLedger[old];
+  if (!profile.settledRuns.includes(id)) {
+    profile.settledRuns.push(id);
+    while (profile.settledRuns.length > PAID_RUN_LIMIT) {
+      const old = profile.settledRuns.shift();
+      if (old) delete profile.settlementLedger[old];
+    }
   }
+  if (!profile.settlementLedger[id]) profile.settlementLedger[id] = settlement;
+  const recent = new Set(profile.settledRuns.slice(-PROGRESSION_RULES.settledRunLimit));
+  for (const key of Object.keys(profile.settlementLedger)) {
+    if (!recent.has(key)) delete profile.settlementLedger[key];
+  }
+}
+
+function progressionBag(state) {
+  const systems = state.systems;
+  if (!systems || typeof systems !== 'object' || Array.isArray(systems)) return null;
+  const bag = systems.progression;
+  if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return null;
+  return bag;
+}
+
+// A missing run id cannot be stored on the profile. Keep the first payout on the run.
+function rememberUnkeyed(state, settlement) {
+  if (!settlement || settlement.runId !== '') return;
+  if (!state.systems || typeof state.systems !== 'object' || Array.isArray(state.systems)) state.systems = {};
+  const bag = progressionBag(state);
+  const next = bag ? {...bag} : {};
+  if (!isSettlement(next.settlement)) next.settlement = settlement;
+  state.systems.progression = next;
+}
+
+function unkeyedSettlement(state) {
+  const bag = progressionBag(state);
+  if (!bag) return null;
+  return isSettlement(bag.settlement) ? bag.settlement : null;
 }
 
 function updateBest(profile, settlement) {
@@ -502,19 +548,30 @@ export function settleRun(profile, state) {
   }
   if (isSettlement(state.settlement)) {
     if (isProfile(profile) && !hasSettled(profile, state.settlement.runId)) remember(profile, state.settlement);
+    rememberUnkeyed(state, state.settlement);
     return state.settlement;
   }
   if (!isProfile(profile)) return Object.freeze(buildSettlement(state, earnedCurrency(state, resolveResult(state)), resolveResult(state)));
   const runId = typeof state.runId === 'string' ? state.runId : '';
-  if (hasSettled(profile, runId)) {
-    const saved = profile.settlementLedger && profile.settlementLedger[runId];
-    if (isSettlement(saved)) {
+  if (runId === '') {
+    const locked = unkeyedSettlement(state);
+    if (locked) {
+      state.settlement = locked;
+      return locked;
+    }
+  }
+  const saved = ledgerSettlement(profile, runId);
+  if (hasSettled(profile, runId) || saved) {
+    if (saved) {
       state.settlement = saved;
+      if (!hasSettled(profile, runId)) remember(profile, saved);
       return saved;
     }
+    // The id was paid, but the full result aged out of the ledger. Do not pay again.
     const restored = Object.freeze(buildSettlement(state, 0, resolveResult(state)));
     state.settlement = restored;
     remember(profile, restored);
+    rememberUnkeyed(state, restored);
     return restored;
   }
   const result = resolveResult(state);
@@ -523,6 +580,7 @@ export function settleRun(profile, state) {
   state.settlement = settlement;
   addCurrency(profile, amount);
   remember(profile, settlement);
+  rememberUnkeyed(state, settlement);
   updateBest(profile, settlement);
   return settlement;
 }

@@ -14,6 +14,8 @@
  * is recovered as shot, hit, or status when position or damage is present.
  * Reduced motion keeps markers, rings at their start size, crits, and numbers,
  * and drops traveling debris.
+ * A shot is a short arrow leaving the defender. An impact is a starburst with
+ * a damage number. A fence hit is a red bite in the fence rail with its own number.
  */
 import { ARENA, slotGeometry } from '../shared.js';
 
@@ -228,8 +230,11 @@ function readRank(event) {
 function readSplash(event) {
   if (event.splash === true) return 18;
   const n = finite(event.splash);
-  if (n == null || n <= 0) return 0;
-  return Math.max(8, Math.min(84, n));
+  if (n != null && n > 0) return Math.max(8, Math.min(84, n));
+  if (n != null) return 0;
+  const attack = normName(event.attack || event.impact || '');
+  if (attack === 'splash' || attack === 'aoe') return 16;
+  return 0;
 }
 
 function readCount(value, max) {
@@ -481,6 +486,29 @@ function visualPoint(desc) {
   return fallbackPoint(desc.type);
 }
 
+// Defenders sit below the fence and fire toward the field, so a shot with no
+// target aims up. Eight directions keep the arrow on whole pixels.
+function shotOctant(desc, point) {
+  let dx = 0;
+  let dy = point.y >= ARENA.fenceY - 4 ? -1 : 1;
+  if (desc.target) {
+    const tdx = desc.target.x - point.x;
+    const tdy = desc.target.y - point.y;
+    if (Math.abs(tdx) + Math.abs(tdy) >= 4) {
+      dx = tdx;
+      dy = tdy;
+    }
+  }
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  let ux = 0;
+  let uy = 0;
+  if (adx >= ady * 0.45) ux = dx < 0 ? -1 : 1;
+  if (ady >= adx * 0.45) uy = dy < 0 ? -1 : 1;
+  if (ux === 0 && uy === 0) uy = dy < 0 ? -1 : 1;
+  return { x: ux, y: uy };
+}
+
 export function createEffects() {
   const particles = [];
   const floaters = [];
@@ -501,16 +529,66 @@ export function createEffects() {
     particles.push(particle);
   }
 
-  function pushRing(x, y, radius, grow, color, life) {
+  function pushRing(x, y, radius, grow, color, life, weight) {
     if (!Number.isFinite(x) || !Number.isFinite(y) || !(radius > 0)) return;
     rings.push({
-      x, y,
+      x: Math.round(x),
+      y: Math.round(y),
       r: radius,
       r0: radius,
       vr: grow,
       color,
       life,
       maxLife: life,
+      weight: weight > 1 ? 2 : 1,
+    });
+  }
+
+  function pushStreak(x, y, ux, uy, length, palette, crit, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if ((ux | 0) === 0 && (uy | 0) === 0) return;
+    pushParticle({
+      kind: 'streak',
+      x: Math.round(x),
+      y: Math.round(y),
+      ux: ux | 0,
+      uy: uy | 0,
+      length: Math.max(6, Math.min(16, length | 0)),
+      shaft: palette.hot,
+      head: crit ? '#ffe56a' : palette.core,
+      edge: palette.dim,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushImpact(x, y, arm, palette, crit, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'impact',
+      x: Math.round(x),
+      y: Math.round(y),
+      arm: Math.max(3, Math.min(7, arm | 0)),
+      color: palette.hot,
+      core: palette.core,
+      crit: !!crit,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushNotch(x, y, heavy, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'notch',
+      x: Math.round(x),
+      y: Math.round(y),
+      heavy: !!heavy,
+      life,
+      maxLife: life,
+      motionOnly: false,
     });
   }
 
@@ -580,7 +658,7 @@ export function createEffects() {
   function pushFloater(x, y, text, color, scale, crit, channel, life, seed) {
     if (!text) return;
     const anchorX = x;
-    const anchorY = y - (channel === 'fence' ? 14 : 12);
+    const anchorY = y - (channel === 'fence' ? 20 : 12);
     const amount = Number(String(text).replace('+', '')) || 0;
     const recent = findFloater(anchorX, anchorY, channel, crit);
     if (recent) {
@@ -592,12 +670,13 @@ export function createEffects() {
       return;
     }
     const jitter = (rand01(seed) - 0.5) * 6;
-    const originX = anchorX + jitter;
+    const originX = Math.round(anchorX + jitter);
+    const originY = Math.round(anchorY);
     floaters.push({
       x: originX,
-      y: anchorY,
+      y: originY,
       originX,
-      originY: anchorY,
+      originY,
       anchorX,
       anchorY,
       text,
@@ -627,8 +706,9 @@ export function createEffects() {
   function showNumber(desc, x, y, seed, palette) {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
+      const lift = desc.crit ? 10 : 4;
       pushFloater(
-        x, y, text,
+        x, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
         desc.crit ? 3 : 2,
         desc.crit,
@@ -644,53 +724,30 @@ export function createEffects() {
     }
   }
 
-  function spawnShot(desc, seed) {
+  function spawnShot(desc) {
     const point = visualPoint(desc);
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
-    const style = STYLE[desc.behavior] || STYLE.hybrid;
-    pushPlus(point.x, point.y, 2, palette.hot, palette.core, 0.16);
-    pushBlock(point.x, point.y, 2, 2, palette.core, 0.08);
-    if (style.ring) pushRing(point.x, point.y, 8, 22, palette.mid, 0.28);
-    if (style.arc && desc.target) {
-      pushArc(point.x, point.y, desc.target.x, desc.target.y, palette.core, desc.behavior === 'lightning' ? 0.1 : 0.14, style.jitter, seed);
-    }
-    if (style.sparks > 0) {
-      burst(point.x, point.y, style.sparks, style.speed, style.gravity, style.up, palette.hot, 0.2, seed, 2);
-    }
+    const aim = shotOctant(desc, point);
+    pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, desc.crit ? 0.2 : 0.16);
   }
 
   function spawnHit(desc, seed) {
     const point = visualPoint(desc);
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
-    const style = STYLE[desc.behavior] || STYLE.hybrid;
-    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28);
-    if (desc.crit) pushRing(point.x, point.y, 7, 34, '#ffe56a', 0.26);
-    pushBlock(point.x, point.y, desc.crit ? 5 : 3, desc.crit ? 5 : 3, palette.core, 0.09);
-    pushPlus(point.x, point.y, desc.crit ? 4 : 2, desc.crit ? '#ffe56a' : palette.hot, palette.core, desc.crit ? 0.28 : 0.18);
-    const sparks = style.sparks + (desc.crit ? 4 : 0);
-    if (sparks > 0) {
-      burst(point.x, point.y, sparks, style.speed * (desc.crit ? 1.25 : 0.85), style.gravity, style.up, palette.hot, 0.22, seed, desc.crit ? 2 : 2);
-    }
-    if (desc.behavior === 'lightning') {
-      if (desc.points.length) {
-        const hops = Math.min(desc.points.length, Math.max(desc.chain, 1));
-        for (let i = 0; i < hops; i++) {
-          const hop = desc.points[i];
-          pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, 14, seed + i * 9);
-        }
-      } else {
-        pushArc(point.x, point.y, point.x + 10, point.y - 16, palette.core, 0.1, 8, seed);
-      }
-    } else if (desc.points.length && desc.chain > 0) {
-      const hops = Math.min(desc.points.length, desc.chain);
+    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
+    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
+    pushImpact(point.x, point.y, desc.crit ? 6 : 4, palette, desc.crit, desc.crit ? 0.28 : 0.2);
+    if (desc.points.length && (desc.behavior === 'lightning' || desc.chain > 0)) {
+      const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : 1, 3);
       for (let i = 0; i < hops; i++) {
-        pushArc(point.x, point.y, desc.points[i].x, desc.points[i].y, palette.hot, 0.12, 6, seed + i);
+        const hop = desc.points[i];
+        pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, desc.behavior === 'lightning' ? 10 : 4, seed + i * 9);
       }
     }
     showNumber(desc, point.x, point.y, seed, palette);
-    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 7, Math.min(4, desc.stacks), palette.mid, 0.36);
+    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
   }
 
   function spawnKill(desc, seed) {
@@ -706,14 +763,10 @@ export function createEffects() {
   function spawnFence(desc, seed) {
     const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
     const y = ARENA.fenceY;
-    const damage = desc.damage != null && desc.damage > 0 ? desc.damage : 8;
-    const length = Math.max(10, Math.min(36, Math.round(8 + damage / 4)));
-    pushParticle({ kind: 'crack', x, y, length, color: PALETTES.fence.core, life: 0.34, maxLife: 0.34, motionOnly: false });
-    burst(x, y, 6, 42, 140, true, PALETTES.fence.hot, 0.32, seed, 2);
+    const damage = desc.damage != null && desc.damage > 0 ? desc.damage : 0;
+    pushNotch(x, y, damage >= 12, 0.46);
     const text = formatDamage(damage);
-    if (desc.damage != null && desc.damage > 0) {
-      pushFloater(x, y, text, '#ffb4a8', 2, false, 'fence', 0.48, seed);
-    }
+    if (text) pushFloater(x, y, text, '#ffb4a8', 2, false, 'fence', 0.52, seed);
   }
 
   function spawnMerge(desc, seed) {
@@ -915,15 +968,103 @@ export function createEffects() {
     }
   }
 
-  function drawPixelRing(ctx, x, y, radius, color, alpha) {
+  function drawPixelRing(ctx, x, y, radius, color, alpha, weight) {
     if (!(radius > 0) || alpha < 0.02) return;
-    const steps = Math.max(6, Math.min(28, Math.round(radius * 1.25)));
+    const size = weight > 1 ? 2 : 1;
+    const steps = Math.max(8, Math.min(48, Math.round(radius * 1.15)));
+    const cx = Math.round(x);
+    const cy = Math.round(y);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
     for (let i = 0; i < steps; i++) {
       const angle = (i / steps) * Math.PI * 2;
-      ctx.fillRect(Math.round(x + Math.cos(angle) * radius), Math.round(y + Math.sin(angle) * radius), 1, 1);
+      ctx.fillRect(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius), size, size);
     }
+  }
+
+  function drawStreak(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
+    const ux = particle.ux | 0;
+    const uy = particle.uy | 0;
+    if (ux === 0 && uy === 0) return;
+    const px = -uy;
+    const py = ux;
+    const len = particle.length | 0;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.edge;
+    for (let i = 0; i <= len - 3; i++) {
+      const x = ox + ux * i;
+      const y = oy + uy * i;
+      ctx.fillRect(x + px, y + py, 1, 1);
+      ctx.fillRect(x - px, y - py, 1, 1);
+    }
+    ctx.fillStyle = particle.shaft;
+    for (let i = 0; i <= len - 3; i++) ctx.fillRect(ox + ux * i, oy + uy * i, 1, 1);
+    ctx.fillStyle = particle.head;
+    for (let i = Math.max(0, len - 2); i <= len; i++) ctx.fillRect(ox + ux * i, oy + uy * i, 1, 1);
+    const bx = ox + ux * (len - 2);
+    const by = oy + uy * (len - 2);
+    ctx.fillRect(bx + px * 2, by + py * 2, 1, 1);
+    ctx.fillRect(bx - px * 2, by - py * 2, 1, 1);
+  }
+
+  function drawImpact(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
+    const arm = Math.max(3, particle.arm | 0);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#140e0c';
+    ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
+    ctx.fillRect(cx - 1, cy - arm, 3, arm * 2 + 1);
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(cx - arm, cy, arm * 2 + 1, 1);
+    ctx.fillRect(cx, cy - arm, 1, arm * 2 + 1);
+    for (let i = 2; i < arm; i++) {
+      ctx.fillRect(cx + i, cy + i, 1, 1);
+      ctx.fillRect(cx - i, cy + i, 1, 1);
+      ctx.fillRect(cx + i, cy - i, 1, 1);
+      ctx.fillRect(cx - i, cy - i, 1, 1);
+    }
+    ctx.fillStyle = particle.core || particle.color;
+    ctx.fillRect(cx - 1, cy - 1, 3, 3);
+    if (particle.crit) {
+      ctx.fillStyle = '#ffe56a';
+      ctx.fillRect(cx - arm, cy, 1, 1);
+      ctx.fillRect(cx + arm, cy, 1, 1);
+      ctx.fillRect(cx, cy - arm, 1, 1);
+      ctx.fillRect(cx, cy + arm, 1, 1);
+    }
+  }
+
+  function drawNotch(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const y = Math.round(particle.y);
+    const heavy = particle.heavy ? 1 : 0;
+    const wing = 4 + heavy;
+    const gap = 2 + heavy;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#1a100c';
+    ctx.fillRect(cx - gap, y - 2, gap * 2, 5);
+    ctx.fillStyle = '#fff2dd';
+    ctx.fillRect(cx - wing - gap, y - 2, wing, 2);
+    ctx.fillRect(cx + gap, y - 2, wing, 2);
+    ctx.fillStyle = '#e7c89a';
+    ctx.fillRect(cx - wing - gap, y, wing, 1);
+    ctx.fillRect(cx + gap, y, wing, 1);
+    ctx.fillStyle = '#ff5a3c';
+    ctx.fillRect(cx - 1, y - 8, 2, 6);
+    ctx.fillStyle = '#fff2dd';
+    ctx.fillRect(cx - 1, y - 8, 2, 1);
+    ctx.fillStyle = '#c4543c';
+    ctx.fillRect(cx - 2 - heavy, y + 3, 1, 2);
+    ctx.fillRect(cx + 1 + heavy, y + 3, 1, 2);
+    ctx.fillStyle = '#e7c89a';
+    ctx.fillRect(cx - 3 - heavy, y + 5, 1, 1);
+    ctx.fillRect(cx + 2 + heavy, y + 5, 1, 1);
   }
 
   function drawPlus(ctx, x, y, arm, color, core, alpha) {
@@ -1021,22 +1162,30 @@ export function createEffects() {
     if (!text || alpha < 0.02) return;
     const size = Math.max(1, scale | 0);
     const advance = 3 * size + size;
-    let cursor = Math.round(x - (text.length * advance - size) / 2);
+    const origin = Math.round(x - (text.length * advance - size) / 2);
     const top = Math.round(y);
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    for (let c = 0; c < text.length; c++) {
-      const glyph = GLYPHS[text[c]];
-      if (glyph) {
-        for (let row = 0; row < glyph.length; row++) {
-          const line = glyph[row];
-          for (let col = 0; col < line.length; col++) {
-            if (line[col] === '1') ctx.fillRect(cursor + col * size, top + row * size, size, size);
+    const blit = (offsetX, offsetY) => {
+      let cursor = origin + offsetX;
+      const rowTop = top + offsetY;
+      for (let c = 0; c < text.length; c++) {
+        const glyph = GLYPHS[text[c]];
+        if (glyph) {
+          for (let row = 0; row < glyph.length; row++) {
+            const line = glyph[row];
+            for (let col = 0; col < line.length; col++) {
+              if (line[col] === '1') ctx.fillRect(cursor + col * size, rowTop + row * size, size, size);
+            }
           }
         }
+        cursor += advance;
       }
-      cursor += advance;
-    }
+    };
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.fillStyle = '#140e0c';
+    blit(1, 1);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    blit(0, 0);
   }
 
   function drawFloater(ctx, floater, reduced) {
@@ -1073,6 +1222,15 @@ export function createEffects() {
       case 'crack':
         drawCrack(ctx, particle, alpha);
         break;
+      case 'streak':
+        drawStreak(ctx, particle, alpha);
+        break;
+      case 'impact':
+        drawImpact(ctx, particle, alpha);
+        break;
+      case 'notch':
+        drawNotch(ctx, particle, alpha);
+        break;
       case 'glowline':
         drawGlowline(ctx, particle, alpha);
         break;
@@ -1089,7 +1247,7 @@ export function createEffects() {
       try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
       for (let i = 0; i < rings.length; i++) {
         const ring = rings[i];
-        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95);
+        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95, ring.weight);
       }
       for (let i = 0; i < particles.length; i++) drawParticle(ctx, particles[i], reduced);
       for (let i = 0; i < floaters.length; i++) drawFloater(ctx, floaters[i], reduced);

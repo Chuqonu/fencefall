@@ -3,9 +3,10 @@
  *
  * renderBuildPanel(container, state, api) rebuilds only the given container.
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
- * data-ui="panel" shows inspection. Move and merge controls stay on the panel
- * while playing, and move onto the overlay during a draft so a covering modal
- * still has a way to rearrange a full board.
+ * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
+ * while playing. A draft overlay keeps three short choice cards and does not
+ * include the 10-slot rearrange grid. Merge preview stays available there as a
+ * short pair list, then the confirm step.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
  * Clicks on its own controls stop at this panel so a parent bubble listener
@@ -48,6 +49,8 @@ const CSS = `
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
 .ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
+.ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
+.ff-build.is-draft .ff-draft-merge .btn{width:100%}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -1448,46 +1451,209 @@ function draftIntro(lang) {
     : 'Pick one. Towers are placed next. Hero upgrades apply now.';
 }
 
-function shotLine(lang) {
+function choiceLimit(lang) {
+  return lang === 'zh' ? 20 : 36;
+}
+
+function fitChoice(segments, max) {
+  const chosen = segments.filter((segment) => segment && segment.text);
+  const length = () => chosen.map((segment) => segment.text).join(' · ').length;
+  while (length() > max) {
+    let index = -1;
+    let rank = -1;
+    for (let i = 0; i < chosen.length; i += 1) {
+      if (!chosen[i].optional) continue;
+      const drop = chosen[i].drop ?? 1;
+      if (drop >= rank) {
+        rank = drop;
+        index = i;
+      }
+    }
+    if (index < 0) break;
+    chosen.splice(index, 1);
+  }
+  return chosen.map((segment) => segment.text).join(' · ');
+}
+
+function towerRole(type, lang) {
+  return localizeSafe(towerRecord(type)?.role, lang);
+}
+
+function roleSegment(role, signature) {
+  if (!role) return '';
+  if (signature && signature.toLowerCase().includes(role.toLowerCase())) return '';
+  return role;
+}
+
+function signatureLine(stats, lang, tr) {
+  if (!stats) return lang === 'zh' ? '单体射击' : 'Single-target shot';
+  if (stats.burn && typeof stats.burn === 'object') {
+    const dps = fmtNum(Number(stats.burn.dps ?? stats.burn.damage), lang);
+    const splash = Number(stats.splash) > 0;
+    if (lang === 'zh') return splash ? `溅射燃烧 ${dps}/秒` : `燃烧 ${dps}/秒`;
+    return splash ? `Splash and burn ${dps}/s` : `Burn ${dps}/s`;
+  }
+  if (stats.slow && typeof stats.slow === 'object') {
+    const factor = Number(stats.slow.factor ?? stats.slow.power);
+    if (Number.isFinite(factor) && factor > 0 && factor <= 1) {
+      const kept = fmtNum(Math.round(factor * 100), lang);
+      return lang === 'zh' ? `减速至 ${kept}%` : `Slows to ${kept}% speed`;
+    }
+    return lang === 'zh' ? '减速单个敌人' : 'Slows one enemy';
+  }
+  if (stats.poison && typeof stats.poison === 'object') {
+    const stacks = fmtNum(Number(stats.poison.maxStacks ?? stats.poison.stacks ?? 1), lang);
+    const dps = fmtNum(Number(stats.poison.dps ?? stats.poison.damage), lang);
+    return lang === 'zh' ? `${tr('poison')} ${dps}/秒，${stacks} 层` : `${tr('poison')} ${dps}/s, ${stacks} stacks`;
+  }
+  if (stats.aura && typeof stats.aura === 'object') {
+    const damage = percentNumber(stats.aura.damage);
+    const haste = percentNumber(stats.aura.haste);
+    const parts = [];
+    if (damage) parts.push(`+${fmtNum(damage, lang)}% ${tr('damage')}`);
+    if (haste) parts.push(`+${fmtNum(haste, lang)}% ${tr('haste')}`);
+    const body = parts.join(lang === 'zh' ? '，' : ', ');
+    return body ? `${tr('aura')} ${body}` : tr('aura');
+  }
+  if (Number(stats.chain) > 0) return `${tr('chain')} ${fmtNum(stats.chain, lang)}`;
+  if (Number(stats.pierce) > 0) return `${tr('pierce')} ${fmtNum(stats.pierce, lang)}`;
+  if (Number(stats.splash) > 0) return lang === 'zh' ? '范围溅射' : 'Splash on impact';
   return lang === 'zh' ? '单体射击' : 'Single-target shot';
 }
 
+function heroEffectLine(record, lang, tr) {
+  const effect = record?.effect;
+  if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
+  if (finite(effect.damageAdd) && Number(effect.damageAdd) !== 0) {
+    return `${tr('damage')} +${fmtNum(effect.damageAdd, lang)}`;
+  }
+  if (finite(effect.haste) && Number(effect.haste) !== 0) {
+    return `${tr('attackSpeed')} +${fmtNum(Math.round(Number(effect.haste) * 100), lang)}%`;
+  }
+  if (finite(effect.range) && Number(effect.range) !== 0) {
+    return `${tr('range')} +${fmtNum(effect.range, lang)}`;
+  }
+  if (finite(effect.critChance) && Number(effect.critChance) !== 0) {
+    return `${tr('crit')} +${fmtNum(Math.round(Number(effect.critChance) * 100), lang)}%`;
+  }
+  if (finite(effect.critMultiplier) && Number(effect.critMultiplier) !== 0) {
+    return `${tr('critDamage')} +${fmtNum(effect.critMultiplier, lang)}×`;
+  }
+  if (finite(effect.pierce) && Number(effect.pierce) !== 0) {
+    return `${tr('pierce')} +${fmtNum(effect.pierce, lang)}`;
+  }
+  if (effect.poison && typeof effect.poison === 'object') {
+    const dps = fmtNum(effect.poison.dps, lang);
+    const duration = fmtNum(effect.poison.duration, lang);
+    return lang === 'zh'
+      ? `${tr('poison')} ${dps}/秒，${duration} 秒`
+      : `${tr('poison')} ${dps}/s for ${duration}s`;
+  }
+  const sentence = localizeSafe(record?.description, lang).replace(/\s+/g, ' ').trim();
+  if (!sentence) return '';
+  const first = sentence.split(/(?<=[。！？.!?])\s*/)[0] || sentence;
+  return first.replace(/[。.!]$/, '');
+}
+
 function compactOffer(state, option, lang, tr) {
+  const max = choiceLimit(lang);
   if (option?.kind === 'hero_upgrade') {
     const id = resolveUpgradeId(option);
     const record = upgradeRecord(id);
     const hero = findHero(state);
-    const before = hero ? safeStats(hero, state) : null;
-    const after = hero && id ? safeStats(withUpgrade(hero, id), state) : null;
-    const deltas = deltaLines(before, after, lang, tr);
-    const fallback = effectObjectLines(record, lang, tr);
-    const facts = deltas.length ? deltas : fallback;
-    const level = upgradeLevel(hero, id);
-    const cap = Number(record?.cap);
-    const levelText = Number.isFinite(cap) ? `${tr('level')} ${fmtNum(level, lang)}/${fmtNum(cap, lang)}` : '';
-    const blurb = facts[0] || tr('chooseUpgrade');
-    const stats = facts.slice(1, 3);
-    if (levelText) stats.push(levelText);
-    return { blurb, stats: stats.slice(0, 3) };
+    const effect = heroEffectLine(record, lang, tr) || tr('chooseUpgrade');
+    const cap = Number(record?.cap ?? option?.cap);
+    const current = upgradeLevel(hero, id);
+    const next = Number.isFinite(Number(option?.nextLevel)) ? Number(option.nextLevel) : current + 1;
+    const levelText = Number.isFinite(cap) ? `${tr('level')} ${fmtNum(next, lang)}/${fmtNum(cap, lang)}` : '';
+    const blurb = fitChoice([
+      { text: tr('hero'), optional: true, drop: 2 },
+      { text: effect, optional: false },
+      { text: levelText, optional: true, drop: 1 },
+    ], max);
+    return { blurb, stats: [] };
   }
   const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
   const preview = option?.unit && typeof option.unit === 'object'
     ? option.unit
-    : { id: `preview-${option?.type || 'tower'}`, kind: 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
-  const described = describeStats(safeStats(preview, state), lang, tr);
-  const special = described.specials[0] || shotLine(lang);
-  const blurb = option?.replace ? `${tr('replace')} · ${special}` : special;
-  const stats = [];
-  const damage = described.rows.find((item) => item.id === 'stat-damage');
-  const range = described.rows.find((item) => item.id === 'stat-range');
-  if (damage) stats.push(`${damage.label} ${damage.value}`);
-  const interval = Number(safeStats(preview, state)?.interval);
-  if (interval > 0) stats.push(`${tr('attackSpeed')} ${fmtNum(1 / interval, lang)}${perSecond(lang)}`);
-  if (range) stats.push(`${range.label} ${range.value}`);
-  return { blurb, stats };
+    : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
+  const stats = safeStats(preview, state);
+  const signature = signatureLine(stats, lang, tr);
+  const role = roleSegment(towerRole(option?.type || preview.type, lang), signature);
+  const aura = stats?.aura && typeof stats.aura === 'object';
+  const damage = !aura && finite(stats?.damage) ? `${tr('damage')} ${fmtNum(stats.damage, lang)}` : '';
+  const interval = Number(stats?.interval);
+  const speed = !aura && interval > 0 ? `${tr('attackSpeed')} ${fmtNum(1 / interval, lang)}${perSecond(lang)}` : '';
+  const blurb = fitChoice([
+    { text: option?.replace ? tr('replace') : '', optional: false },
+    { text: role, optional: true, drop: 2 },
+    { text: signature, optional: false },
+    { text: damage, optional: true, drop: 1 },
+    { text: speed, optional: true, drop: 3 },
+  ], max);
+  return { blurb, stats: [] };
 }
 
-function renderDraft(state, lang, tr, idSuffix) {
+function legalMergePairs(state) {
+  const towers = nonHeroSlots(state);
+  const pairs = [];
+  for (let left = 0; left < towers.length; left += 1) {
+    for (let right = left + 1; right < towers.length; right += 1) {
+      const preview = safePreview(state, towers[left], towers[right]);
+      if (preview.ok) pairs.push({ from: towers[left], to: towers[right] });
+    }
+  }
+  return pairs;
+}
+
+function pairLabel(state, from, to, lang, tr) {
+  const side = (index) => {
+    const unit = slotUnit(state, index);
+    const rank = Number(unit?.rank) || 1;
+    const rankBit = rank > 1 ? ` ${tr('rank')}${fmtNum(rank, lang)}` : '';
+    return `${index + 1} ${unitLabel(unit, lang, tr)}${rankBit}`;
+  };
+  return `${side(from)} + ${side(to)}`;
+}
+
+function renderDraftMerge(state, lang, tr, ui) {
+  if (mergeConfirmActive(ui)) return null;
+  if (nonHeroSlots(state).length < 2) return null;
+  const wrap = el('div', { class: 'ff-draft-merge', 'data-testid': 'draft-merge' });
+  if (ephemeral.mode !== 'merge') {
+    wrap.append(button({
+      'data-intent': 'pick-merge',
+      'data-testid': 'draft-merge-open',
+      text: tr('mergePreview'),
+    }));
+    return wrap;
+  }
+  const pairs = legalMergePairs(state);
+  if (!pairs.length) {
+    wrap.append(el('p', { 'data-testid': 'no-valid-target', text: tr('noValidTarget') }));
+  } else {
+    const list = el('div', { class: 'ff-draft-list', 'data-testid': 'draft-merge-pairs' });
+    for (const pair of pairs) {
+      list.append(button({
+        'data-action': 'mergePreview',
+        'data-from': String(pair.from),
+        'data-to': String(pair.to),
+        'data-testid': `draft-merge-${pair.from}-${pair.to}`,
+        text: pairLabel(state, pair.from, pair.to, lang, tr),
+      }));
+    }
+    wrap.append(list);
+  }
+  wrap.append(el('p', { class: 'muted', text: tr('heroProtected') }));
+  wrap.append(button({
+    'data-intent': 'cancel-mode',
+    'data-testid': 'cancel-merge',
+    text: tr('mergeCancel'),
+  }));
+  return wrap;
+}
+
+function renderDraft(state, lang, tr, idSuffix, ui) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
@@ -1504,13 +1670,15 @@ function renderDraft(state, lang, tr, idSuffix) {
     const name = draftOptionName(option, lang, tr);
     const offer = compactOffer(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
+    const statText = offer.stats.join(' · ');
     const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
     card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
-    if (offer.stats.length) {
-      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: offer.stats.join(' · ') }));
+    if (statText) {
+      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
     }
     const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
+    const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
     card.append(button({
       primary: true,
       'data-action': 'chooseDraft',
@@ -1522,12 +1690,14 @@ function renderDraft(state, lang, tr, idSuffix) {
       'data-option-id': option?.id || '',
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
-      'aria-label': `${name}. ${offer.blurb}. ${actionLabel}`,
+      'aria-label': `${name}. ${described}. ${actionLabel}`,
       text: actionLabel,
     }));
     list.append(el('li', {}, card));
   });
   section.append(list);
+  const merge = renderDraftMerge(state, lang, tr, ui);
+  if (merge) section.append(merge);
   return section;
 }
 
@@ -1946,7 +2116,7 @@ export function renderBuildPanel(container, state, api) {
     root.append(el('p', { class: 'muted', 'data-testid': 'xp-progress', text: progressText(state, tr, lang) }));
   }
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
-  if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main'));
+  if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main', ui));
   if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr));
   if (includeDetails) {
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;

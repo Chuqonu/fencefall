@@ -28,6 +28,10 @@ const MAX_CLOUDS = 32;
 const CUE_MS = 240;
 const FLASH_MS = 150;
 const RANGE_LIMIT = 900;
+const HP_FILL = 3;
+const SPRITE_GAP = 3;
+const STATUS_CELL = 7;
+const STATUS_GAP = 2;
 
 const PALETTE = {
   bolt: {main: '#f2d56a', core: '#fff6cf', edge: '#6e5424'},
@@ -279,14 +283,38 @@ function drawHpBar(ctx, x, y, width, hp, maxHp, emphasize) {
   if (!Number.isFinite(hp)) return;
   const max = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : Math.max(hp, 1);
   const ratio = clamp(hp / max, 0, 1);
-  const fillW = Math.round(width * ratio);
-  ctx.fillStyle = 'rgba(8, 10, 12, 0.82)';
-  ctx.fillRect(x - 1, y - 1, width + 2, 5);
-  ctx.fillStyle = ratio > 0.55 ? '#7ea45a' : ratio > 0.28 ? '#e0b15a' : '#d25a45';
-  if (emphasize && ratio <= 0.28) ctx.fillStyle = '#ffb2a6';
-  if (fillW > 0) ctx.fillRect(x, y, fillW, 3);
-  ctx.fillStyle = 'rgba(255, 244, 220, 0.35)';
-  ctx.fillRect(x, y, width, 1);
+  const fillW = Math.max(0, Math.min(width, Math.round(width * ratio)));
+  const plateY = y - 1;
+  const plateH = HP_FILL + 2;
+  ctx.fillStyle = '#101418';
+  ctx.fillRect(x - 1, plateY, width + 2, plateH);
+  ctx.fillStyle = '#efe6d2';
+  ctx.fillRect(x - 1, plateY, width + 2, 1);
+  ctx.fillRect(x - 1, plateY + plateH - 1, width + 2, 1);
+  ctx.fillRect(x - 1, plateY, 1, plateH);
+  ctx.fillRect(x + width, plateY, 1, plateH);
+  let fill = ratio > 0.55 ? '#8fbf62' : ratio > 0.28 ? '#f0c15a' : '#e15a42';
+  if (emphasize) fill = ratio > 0.55 ? '#d7f5a4' : ratio > 0.28 ? '#ffe3a0' : '#ffc2b4';
+  if (fillW > 0) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, fillW, HP_FILL);
+    ctx.fillStyle = 'rgba(255, 248, 230, 0.5)';
+    ctx.fillRect(x, y, fillW, 1);
+  }
+}
+
+function drawTargetMark(ctx, x, y, width) {
+  const top = y - 1;
+  const bottom = y + HP_FILL;
+  ctx.fillStyle = '#fff6c8';
+  ctx.fillRect(x - 4, top, 2, 1);
+  ctx.fillRect(x - 4, top, 1, 2);
+  ctx.fillRect(x + width + 2, top, 2, 1);
+  ctx.fillRect(x + width + 3, top, 1, 2);
+  ctx.fillRect(x - 4, bottom, 2, 1);
+  ctx.fillRect(x - 4, bottom - 1, 1, 2);
+  ctx.fillRect(x + width + 2, bottom, 2, 1);
+  ctx.fillRect(x + width + 3, bottom - 1, 1, 2);
 }
 
 function drawStatusIcon(ctx, status, x, y) {
@@ -355,12 +383,19 @@ function drawStatuses(ctx, enemy, anchorX, y) {
   if (!shown.length) return;
   shown.sort((a, b) => (STATUS_RANK[a.type] ?? 9) - (STATUS_RANK[b.type] ?? 9));
   if (shown.length > 5) shown.length = 5;
-  const rowWidth = shown.length * 6 - 1;
+  const stride = STATUS_CELL + 1;
+  const rowWidth = shown.length * stride - 1;
   let x = Math.round(anchorX - rowWidth / 2);
   const top = Math.round(y);
   for (let i = 0; i < shown.length; i++) {
-    drawStatusIcon(ctx, shown[i], x, top);
-    x += 6;
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(x, top, STATUS_CELL, STATUS_CELL);
+    ctx.fillStyle = '#d5e0d4';
+    ctx.fillRect(x, top, STATUS_CELL, 1);
+    ctx.fillRect(x, top, 1, STATUS_CELL);
+    ctx.fillRect(x + STATUS_CELL - 1, top, 1, STATUS_CELL);
+    drawStatusIcon(ctx, shown[i], x + 1, top + 1);
+    x += stride;
   }
 }
 
@@ -591,6 +626,20 @@ function enemyAnchor(enemy) {
     size,
     x: Math.round(enemy.x),
     y: Math.round(enemy.y + size.height / 2),
+  };
+}
+
+// Cues sit in the clear rows above the sprite. The plate never reaches spriteTop.
+function enemyCueLayout(anchor) {
+  const spriteTop = anchor.y - anchor.size.height;
+  const barW = clamp(Math.round(anchor.size.width * 0.85), 12, 48);
+  const plateBottom = spriteTop - 1 - SPRITE_GAP;
+  const barY = plateBottom - HP_FILL;
+  return {
+    barX: Math.round(anchor.x - barW / 2),
+    barY,
+    barW,
+    statusY: (barY - 1) - STATUS_GAP - STATUS_CELL,
   };
 }
 
@@ -885,8 +934,10 @@ export function createRenderer(canvas) {
       if (projectile.x < -48 || projectile.y < -48 || projectile.x > ARENA.width + 48 || projectile.y > ARENA.height + 48) continue;
       visibleShots.push(projectile);
     }
+    const targeted = Object.create(null);
     for (let i = 0; i < visibleShots.length; i++) {
       const projectile = visibleShots[i];
+      if (projectile.targetId != null) targeted[projectile.targetId] = true;
       drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
     }
 
@@ -896,12 +947,16 @@ export function createRenderer(canvas) {
       const enemy = enemies[i];
       if (enemy.dead) continue;
       const anchor = anchors[i];
-      const barW = clamp(Math.round(anchor.size.width * 0.85), 12, 48);
-      const barX = Math.round(anchor.x - barW / 2);
-      const barY = anchor.y - anchor.size.height - 5;
+      const cue = enemyCueLayout(anchor);
       const fresh = enemyFlash(enemy, hits, now, flashSpan) > 0.4;
-      drawHpBar(ctx, barX, barY, barW, enemy.hp, enemy.maxHp, fresh);
-      drawStatuses(ctx, enemy, anchor.x, barY - 7);
+      const maxHp = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : null;
+      const low = maxHp != null && Number.isFinite(enemy.hp) && enemy.hp / maxHp <= 0.28;
+      const emphasize = fresh || (!reduced && low && Math.floor(visualTime * 6) % 2 === 0);
+      drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize);
+      if (Number.isFinite(enemy.hp) && (fresh || targeted[enemy.id] === true)) {
+        drawTargetMark(ctx, cue.barX, cue.barY, cue.barW);
+      }
+      drawStatuses(ctx, enemy, anchor.x, cue.statusY);
     }
 
     drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);

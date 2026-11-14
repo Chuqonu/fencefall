@@ -5,8 +5,10 @@
  * contact-shadow row — on (x, y). The cached image is 40×40, inside the
  * 24–40px art range, and slots are 64×72.
  *
- * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Parents
- * come from RECIPES (id + parents), then unit.parents / ingredients /
+ * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Each
+ * hybrid joins that pair's two parent shapes — bow, flame bowl, crystal,
+ * spark coil, flask, banner — so it reads as a combination, not a recolor.
+ * Parents come from RECIPES (id + parents), then unit.parents / ingredients /
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
  * Nothing here reads or writes gameplay RNG or run state.
@@ -720,51 +722,199 @@ function paintBolt(p, rank) {
   }
 }
 
-function paintFire(p, rank) {
-  drawFlame(p, 20, 2, rank >= 4 ? 15 : 13, 'fire');
-  speckle(p, 10, 18, 20, 8, 'X', 'K', 'w');
-  p.hline(9, 18, 22, 'n');
-  p.hline(11, 17, 18, 'N');
-  p.fill(13, 20, 14, 4, 'F');
-  p.px(15, 21, 'A');
-  p.px(20, 22, p.frame % 2 ? 'a' : 'f');
-  p.px(24, 21, 'f');
-  p.px(17, 23, 'A');
-  p.vline(12, 26, 5, 'N');
-  p.vline(27, 26, 5, 'N');
-  p.hline(12, 30, 16, 'n');
-  if (rank >= 2) {
-    p.px(9, 18, 'b');
-    p.px(30, 18, 'b');
+function drawCoupling(p, rank) {
+  p.fill(3, 27, 34, 3, 'X');
+  p.hline(3, 27, 34, 'n');
+  p.hline(5, 29, 30, 'k');
+  p.fill(16, 17, 6, 7, 'N');
+  p.hline(16, 17, 6, 'n');
+  p.px(18, 19, p.frame % 2 ? 'b' : 'M');
+  p.px(19, 21, 'k');
+  if (rank >= 3) p.px(17, 18, 'H');
+  if (rank >= 4) p.px(20, 18, 'h');
+}
+
+function drawCompactBow(p, ox, oy, rank) {
+  const lift = p.frame === 1 ? -1 : 0;
+  const cx = ox + 8;
+  const y0 = oy + lift;
+  p.fill(ox + 4, oy + 16, 9, 13, 'r');
+  p.vline(ox + 4, oy + 16, 13, 'R');
+  p.vline(ox + 12, oy + 16, 13, 'R');
+  p.hline(ox + 4, oy + 16, 9, 'Y');
+  p.hline(ox + 4, oy + 22, 9, 'N');
+  p.hline(ox + 5, oy + 27, 7, 'n');
+  p.fill(ox + 6, oy + 14, 5, 4, 'R');
+  p.px(ox + 7, oy + 15, 'Y');
+  p.fill(ox + 6, oy + 19, 5, 4, 'N');
+  p.fill(ox + 7, oy + 20, 3, 2, 'n');
+  p.px(ox + 8, oy + 20, p.frame % 2 ? 'b' : 'M');
+  const limb = [[0, 18], [1, 17], [2, 16], [3, 15], [4, 14], [5, 13], [6, 12], [7, 12]];
+  for (const [dx, dy] of limb) {
+    p.px(ox + dx, oy + dy, 'Y');
+    p.px(ox + dx, oy + dy + 1, 'r');
+    p.px(ox + dx, oy + dy + 2, 'R');
+    const right = ox + 16 - dx;
+    p.px(right, oy + dy, 'Y');
+    p.px(right, oy + dy + 1, 'r');
+    p.px(right, oy + dy + 2, 'R');
   }
-  if (rank >= 4) p.px(20, 1, 'W');
+  p.fill(ox, oy + 19, 3, 2, 'N');
+  p.fill(ox + 14, oy + 19, 3, 2, 'N');
+  p.px(ox, oy + 19, 'n');
+  p.px(ox + 16, oy + 19, 'n');
+  p.hline(ox + 3, oy + 13, 11, 'N');
+  p.px(cx, oy + 13, 'n');
+  p.px(cx, y0, 'W');
+  p.px(cx - 1, y0 + 1, 'n');
+  p.px(cx, y0 + 1, 'M');
+  p.px(cx + 1, y0 + 1, 'n');
+  p.vline(cx, y0 + 2, 8, 'N');
+  p.vline(cx + 1, y0 + 2, 8, 'k');
+  p.px(cx - 2, y0 + 9, 'Y');
+  p.px(cx - 1, y0 + 8, 'r');
+  p.px(cx + 2, y0 + 8, 'r');
+  p.px(cx + 3, y0 + 9, 'Y');
+  if (rank >= 3) p.px(cx, Math.max(0, y0 - 1), 'h');
+  if (rank >= 4) p.px(cx + 1, Math.max(0, y0 - 1), 'W');
+}
+
+function drawEmberBowl(p, cx, top, flameH, wide) {
+  drawFlame(p, cx, top, flameH, 'fire');
+  const rim = top + flameH;
+  const depth = Math.max(6, 27 - rim);
+  for (let i = 0; i < depth; i++) {
+    const t = depth <= 1 ? 0 : i / (depth - 1);
+    const half = Math.max(3, Math.round(wide * (1 - t * 0.2)));
+    const y = rim + i;
+    if (y > 29) break;
+    let color = 'F';
+    if (i === 0) color = 'n';
+    else if (i === 2 || i === Math.floor(depth * 0.55)) color = 'X';
+    else if (i === depth - 1) color = 'k';
+    p.hline(cx - half, y, half * 2 + 1, color);
+    if (color === 'F') p.px(cx - half + 1, y, 'u');
+    if (i === 1) {
+      p.px(cx - 1, y, p.frame % 2 ? 'a' : 'A');
+      p.px(cx + 1, y, 'f');
+    }
+  }
+  const baseY = Math.min(30, rim + depth);
+  if (baseY <= 30) {
+    const bw = Math.max(4, wide * 2 - 3);
+    const bx = cx - Math.floor(bw / 2);
+    p.fill(bx, baseY, bw, Math.max(1, 31 - baseY), 'N');
+    p.hline(bx, baseY, bw, 'n');
+  }
+}
+
+function drawCrystalMount(p, cx, top, height, wide) {
+  const tall = Math.max(14, Math.min(height, 27 - top));
+  drawCrystal(p, cx, top, tall, wide);
+  const seat = top + tall;
+  if (seat <= 30) {
+    p.hline(cx - 4, seat, 9, 'N');
+    p.px(cx - 4, seat, 'M');
+    p.px(cx + 4, seat, 'M');
+    if (seat + 1 <= 30) p.fill(cx - 2, seat + 1, 5, 30 - seat, 'I');
+  }
+}
+
+function drawSparkColumn(p, cx, top, rank) {
+  const sag = p.frame % 2;
+  const rise = rank >= 4 ? 0 : 1;
+  drawZig(p, [
+    [cx, top + rise],
+    [cx + 4, top + 3],
+    [cx - 3, top + 6],
+    [cx + 3, top + 9 + sag],
+    [cx, top + 12]
+  ], 'Z', 'W');
+  drawSparks(p, [[cx - 4, top + 4], [cx + 4, top + 7], [cx, top + rise]]);
+  drawCoils(p, cx, top + 13, 3, 4);
+  p.fill(cx - 4, 26, 9, 4, 'X');
+  p.hline(cx - 4, 26, 9, 'U');
+  p.px(cx, 27, p.frame % 2 ? 'Z' : 'u');
+  if (rank >= 4) p.px(cx + (p.frame % 2 ? 4 : -4), top + 2, 'h');
+}
+
+function drawVial(p, cx, top, liquid, rank) {
+  p.fill(cx - 1, top, 3, 2, 'Y');
+  p.px(cx, top, rank >= 4 ? 'h' : 'y');
+  p.fill(cx - 1, top + 2, 3, 3, 'r');
+  p.px(cx - 1, top + 2, 'R');
+  p.px(cx + 1, top + 3, 'Y');
+  p.fill(cx - 1, top + 5, 3, 2, 'O');
+  p.vline(cx - 1, top + 5, 2, 'o');
+  p.vline(cx + 1, top + 5, 2, 'o');
+  oval(p, cx, top + 12, 6, 6, 'O');
+  oval(p, cx, top + 13, 4.3, 4, liquid, (_x, y) => y >= top + 11);
+  p.hline(cx - 3, top + 11, 7, liquid === 'g' ? 'Q' : 'L');
+  p.px(cx - 4, top + 10, 'W');
+  p.px(cx - 3, top + 12, 'q');
+  const bubble = top + 14 + ((p.frame + 4) % 3);
+  p.px(cx + 2, bubble, 'W');
+  if (rank >= 3) p.px(cx - 1, bubble + 1, 'q');
+  const foot = top + 18;
+  if (foot <= 30) {
+    p.fill(cx - 3, foot, 7, Math.max(1, 30 - foot), 'x');
+    p.hline(cx - 3, foot, 7, 'o');
+  }
+  p.px(cx, Math.min(29, top + 17), p.frame % 2 ? 'Q' : 'g');
+}
+
+function drawBanner(p, ox, top, clothW, clothH) {
+  const poleTop = top + 3;
+  p.vline(ox, poleTop, Math.max(4, 31 - poleTop), 'n');
+  p.vline(ox + 1, poleTop + 1, Math.max(3, 30 - poleTop), 'N');
+  p.fill(ox - 1, top, 4, 3, 'H');
+  p.px(ox, top, p.frame % 2 ? 'W' : 'h');
+  p.px(ox + 1, top + 1, 'b');
+  drawFlag(p, ox + 2, top + 4, clothW, clothH);
+}
+
+function paintFire(p, rank) {
+  const flameH = rank >= 4 ? 14 : 12;
+  const wide = rank >= 3 ? 8 : 7;
+  drawEmberBowl(p, 20, 1, flameH, wide);
+  if (rank >= 2) {
+    p.px(20 - 4, 1 + flameH, 'b');
+    p.px(20 + 4, 1 + flameH, 'b');
+  }
+  if (rank >= 4) p.px(20, 0, 'W');
 }
 
 function paintFrost(p, rank) {
-  drawCrystal(p, 20, 3, rank >= 4 ? 20 : 18, rank >= 3 ? 7 : 6);
-  p.fill(12, 22, 4, 8, 'N');
-  p.fill(24, 22, 4, 8, 'N');
-  p.px(13, 23, 'M');
-  p.px(25, 23, 'M');
-  p.hline(14, 24, 12, 'i');
-  speckle(p, 14, 26, 12, 5, 'I', 'K', 'i');
-  p.px(16, 27, 'l');
-  p.px(23, 28, 'L');
+  const wide = rank >= 3 ? 7 : 6;
+  const tall = rank >= 4 ? 24 : 22;
+  p.fill(12, 24, 16, 6, 'I');
+  p.hline(11, 24, 18, 'i');
+  p.hline(13, 29, 14, 'N');
+  p.px(14, 25, 'l');
+  p.px(25, 26, 'L');
+  p.px(20, 27, p.frame % 2 ? 'W' : 'l');
   if (rank >= 2) {
-    p.px(12, 22, 'b');
-    p.px(27, 22, 'b');
+    p.px(11, 24, 'b');
+    p.px(28, 24, 'b');
   }
+  drawCrystal(p, 20, 1, tall, wide);
 }
 
 function paintLightning(p, rank) {
-  drawCoils(p, 19, 8, rank >= 4 ? 5 : 4, 4);
-  drawSparks(p, [[19, 4], [16, 6], [23, 5], [14, 9], [25, 12]]);
-  p.px(20, 3, p.frame % 2 ? 'W' : 'Z');
-  speckle(p, 13, 26, 14, 5, 'X', 'V', 'w');
-  p.hline(14, 26, 12, 'U');
-  p.px(16, 28, 'Z');
-  p.px(23, 29, 'v');
-  if (rank >= 3) p.px(19, 2, 'h');
+  const sag = p.frame === 2 ? 1 : 0;
+  drawZig(p, [[20, 1], [31, 5], [11, 9], [29, 13], [15, 17 + sag]], 'Z', 'W');
+  drawSparks(p, [[9, 4], [33, 7], [10, 13], [32, 15], [20, 2]]);
+  drawCoils(p, 20, 18, 3, 4);
+  p.hline(12, 29, 16, 'U');
+  p.vline(13, 26, 5, 'V');
+  p.vline(26, 26, 5, 'V');
+  p.px(15, 27, 'Z');
+  p.px(24, 28, 'v');
+  if (rank >= 3) p.px(20, 0, 'h');
+  if (rank >= 4) {
+    p.px(8, 6, 'W');
+    p.px(34, 10, 'z');
+  }
 }
 
 function paintPoison(p, rank) {
@@ -797,229 +947,106 @@ function paintSupport(p, rank) {
 }
 
 function paintCinderQuarrel(p, rank) {
-  drawBow(p, 'A', 'f', 'F', 'b', 'R');
-  drawFlame(p, 20, 2, 12, 'fire');
-  p.fill(18, 22, 4, 3, 'F');
-  p.px(19, 23, p.frame % 2 ? 'a' : 'A');
-  p.px(15, 25, 'k');
-  p.px(24, 28, 'F');
-  drawWinch(p, rank);
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
 }
 
 function paintHailSpike(p, rank) {
-  drawBow(p, 'l', 'L', 'I', 'E', 'i');
-  drawCrystal(p, 20, 2, 14, 3);
-  p.px(15, 21, 'W');
-  p.px(25, 24, 'l');
-  p.px(17, 28, 'L');
-  p.px(22, 26, 'I');
-  if (rank >= 2) p.hline(14, 22, 12, 'l');
-  drawWinch(p, rank);
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawCrystalMount(p, 29, 2, rank >= 4 ? 25 : 23, 6);
 }
 
 function paintStormLance(p, rank) {
-  drawBow(p, 'u', 'U', 'B', 'Z', 'N');
-  const shift = p.frame % 2;
-  drawZig(p, [[20, 3], [23, 6], [16, 9], [22, 12 + shift], [18, 16]], 'Z', 'W');
-  p.fill(15, 24, 10, 4, 'V');
-  p.px(17, 25, 'v');
-  p.px(22, 26, p.frame === 2 ? 'z' : 'Z');
-  drawSparks(p, [[14, 18], [26, 18], [20, 2]]);
-  if (rank >= 4) p.px(20, 1, 'W');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawSparkColumn(p, 28, 1, rank);
 }
 
 function paintVenomSpine(p, rank) {
-  drawBow(p, 'Q', 'g', 'G', 'o', 'R');
-  drawFlask(p, 18, 1, 'g', 'q');
-  p.px(16, 12, 'G');
-  p.px(23, 13, 'Q');
-  p.px(15, 14, 'g');
-  p.px(24, 15, 'q');
-  p.px(20, 30, p.frame % 2 ? 'Q' : 'g');
-  p.px(21, 29, 'G');
-  if (rank >= 3) p.px(14, 20, 'q');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawVial(p, 29, 4, 'g', rank);
 }
 
 function paintSignalShot(p, rank) {
-  drawBow(p, 'Y', 'r', 'R', 'b', 'r');
-  drawQuarrel(p, 'H', 'n', 0);
-  drawFlag(p, 26, 8, 8, 12);
-  p.vline(25, 6, 18, 'H');
-  p.px(25, 5, 'h');
-  p.fill(15, 24, 3, 3, 't');
-  p.px(16, 25, 'E');
-  if (rank >= 4) p.hline(12, 17, 16, 'H');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintSteamVent(p, rank) {
-  drawCrystal(p, 20, 4, 8, 3);
-  oval(p, 20, 22, 12, 6, 'B');
-  oval(p, 20, 23, 9, 4, 'U');
-  p.fill(16, 20, 8, 4, 'F');
-  p.px(18, 21, 'A');
-  p.px(22, 22, p.frame % 2 ? 'a' : 'f');
-  drawFlame(p, 20, 1, 6, 'steam');
-  p.hline(8, 18, 24, 'b');
-  p.fill(11, 27, 3, 3, 'N');
-  p.fill(26, 27, 3, 3, 'N');
-  p.px(14, 24, 'l');
-  p.px(26, 23, 'L');
-  if (rank >= 3) p.px(20, 16, 'W');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
+  p.px(18, 7 + (p.frame % 3), 'l');
+  p.px(20, 10, 'E');
+  p.px(19, 12, p.frame % 2 ? 'L' : 'a');
+  p.px(21, 14, 'A');
 }
 
 function paintPlasmaBrazier(p, rank) {
-  speckle(p, 10, 12, 20, 18, 'X', 'V', 'w');
-  p.fill(14, 16, 12, 10, 'F');
-  p.hline(13, 15, 14, 'U');
-  p.hline(13, 26, 14, 'u');
-  drawCoils(p, 19, 17, 2, 4);
-  drawFlame(p, 20, 4, rank >= 4 ? 12 : 10, 'plasma');
-  p.vline(12, 16, 10, 'b');
-  p.vline(27, 16, 10, 'b');
-  drawSparks(p, [[14, 14], [26, 13], [20, 3]]);
-  p.px(16, 20, 'z');
-  p.px(23, 22, 'Z');
+  drawCoupling(p, rank);
+  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
+  drawSparkColumn(p, 29, 1, rank);
 }
 
 function paintBlightKiln(p, rank) {
-  oval(p, 18, 22, 9, 7, 'X');
-  oval(p, 18, 23, 6, 4, 'G');
-  p.fill(14, 21, 8, 3, 'g');
-  drawFlame(p, 16, 6, 12, 'green');
-  p.fill(10, 12, 4, 8, 'x');
-  p.vline(11, 8, 6, 'o');
-  p.hline(24, 20, 6, 'U');
-  p.px(29, 19, 'u');
-  p.px(30, 18, p.frame % 2 ? 'Q' : 'g');
-  p.px(29, 21, 'q');
-  p.px(12, 16, 'm');
-  p.px(13, 15, 'Y');
-  if (rank >= 3) p.px(18, 24, 'q');
-  if (rank >= 4) p.px(15, 4, 'W');
+  drawCoupling(p, rank);
+  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
+  drawVial(p, 29, 4, 'g', rank);
+  p.px(16, 12, 'Q');
+  p.px(18, 15, 'g');
+  p.px(22, 18, p.frame % 2 ? 'Q' : 'q');
 }
 
 function paintWarBeacon(p, rank) {
-  p.vline(11, 3, 28, 'R');
-  p.vline(12, 4, 26, 'r');
-  p.fill(10, 2, 4, 3, 'A');
-  p.px(11, 1, p.frame % 2 ? 'W' : 'a');
-  drawFlag(p, 14, 7, 16, 16);
-  drawFlame(p, 22, 2, 8, 'fire');
-  p.hline(14, 7, 16, 'f');
-  p.px(16, 8, 'A');
-  p.px(26, 8, 'a');
-  p.fill(14, 24, 5, 3, 'B');
-  p.px(16, 25, 'H');
-  if (rank >= 4) p.px(12, 1, 'h');
+  drawCoupling(p, rank);
+  drawBanner(p, 1, 2, 12, rank >= 4 ? 15 : 13);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
 }
 
 function paintPrismCoil(p, rank) {
-  drawCrystal(p, 20, 4, 22, rank >= 3 ? 8 : 7);
-  p.hline(12, 12, 16, 'U');
-  p.hline(13, 13, 14, 'u');
-  p.hline(12, 20, 16, 'U');
-  p.hline(13, 21, 14, 'b');
-  drawSparks(p, [[12, 8], [28, 10], [14, 18], [27, 22], [20, 2]]);
-  p.vline(20, 2, 3, 'n');
-  p.px(19, 16, 'Z');
-  p.px(21, 17, p.frame === 1 ? 'W' : 'z');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawSparkColumn(p, 29, 1, rank);
+  p.px(16, 10, 'Z');
+  p.px(18, 13, p.frame % 2 ? 'W' : 'z');
 }
 
 function paintRimeUrn(p, rank) {
-  drawFlask(p, 18, 6, 'g', 'l');
-  drawCrystal(p, 12, 4, 10, 3);
-  drawCrystal(p, 27, 5, 9, 3);
-  p.hline(14, 12, 10, 'l');
-  p.px(16, 13, 'W');
-  p.px(22, 14, 'L');
-  p.px(19, 9, 'I');
-  if (rank >= 2) {
-    p.px(14, 16, 'q');
-    p.px(23, 18, 'L');
-  }
-  if (rank >= 4) p.px(20, 8, 'W');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 22 : 20, 5);
+  drawVial(p, 29, 4, 'g', rank);
+  p.px(24, 16, 'L');
+  p.px(33, 18, 'l');
 }
 
 function paintWardBell(p, rank) {
-  p.vline(20, 2, 4, 'n');
-  p.fill(18, 2, 4, 2, 'H');
-  const bellRows = 16;
-  for (let i = 0; i < bellRows; i++) {
-    const t = i / (bellRows - 1);
-    let half = 2;
-    if (t >= 0.2 && t < 0.72) half = 2 + Math.round(((t - 0.2) / 0.52) * 6);
-    else if (t >= 0.72) half = 8 + Math.round(((t - 0.72) / 0.28) * 2);
-    const y = 6 + i;
-    const color = t < 0.16 ? 'l' : t < 0.55 ? 'L' : t < 0.82 ? 'i' : 'I';
-    p.hline(20 - half, y, half * 2 + 1, color);
-    p.px(20 - Math.max(0, half - 2), y, t > 0.3 && (i + p.frame) % 4 === 0 ? 'W' : 'l');
-    if (t > 0.82) {
-      p.px(20 - half - 1, y, 'n');
-      p.px(20 + half + 1, y, 'n');
-    }
-  }
-  p.hline(10, 21, 21, 'n');
-  p.vline(20, 16, 4, 'B');
-  p.px(20, 20, 'H');
-  drawFlag(p, 26, 8, 8, 10);
-  p.hline(8, 20, 6, 'D');
-  p.px(8, 19, 't');
-  if (rank >= 3) p.px(14, 16, 'h');
-  if (rank >= 4) p.hline(12, 19, 16, 'b');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawBanner(p, 21, 2, 13, 14);
 }
 
 function paintAcidArc(p, rank) {
-  drawFlask(p, 18, 8, 'g', 'q');
-  drawCoils(p, 8, 14, 2, 4);
-  drawCoils(p, 30, 14, 2, 4);
+  drawCoupling(p, rank);
+  drawSparkColumn(p, 10, 1, rank);
+  drawVial(p, 29, 4, 'g', rank);
   const sag = p.frame % 2;
-  drawZig(p, [[10, 12], [16, 8], [20, 6 - sag], [24, 8], [30, 12]], 'Q', 'z');
-  p.px(20, 5, p.frame === 0 ? 'W' : 'Z');
-  p.fill(16, 26, 6, 2, 'U');
-  if (rank >= 3) p.px(14, 20, 'Z');
-  if (rank >= 4) p.px(24, 18, 'h');
+  drawZig(p, [[15, 7], [20, 4 - sag], [25, 7]], 'Z', 'Q');
 }
 
 function paintRelayStandard(p, rank) {
-  p.vline(14, 4, 27, 'n');
-  p.vline(15, 5, 25, 'N');
-  for (let i = 0; i < 8; i++) {
-    const y = 6 + i * 3;
-    const dir = (i + p.frame) % 2 === 0 ? 1 : -1;
-    p.px(14 + dir * 2, y, 'u');
-    p.px(15 + dir * 2, y, 'U');
-    p.px(14, y + 1, 'Z');
-  }
-  p.fill(12, 2, 5, 3, 'H');
-  p.px(14, 1, p.frame % 2 ? 'W' : 'Z');
-  drawFlag(p, 18, 8, 12, 12);
-  p.fill(12, 24, 6, 5, 'V');
-  p.px(14, 26, 'v');
-  p.px(16, 25, 'Z');
-  drawSparks(p, [[18, 6], [28, 10], [14, 2]]);
-  if (rank >= 4) p.px(15, 0, 'h');
+  drawCoupling(p, rank);
+  drawSparkColumn(p, 10, 1, rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintPlagueAltar(p, rank) {
-  p.vline(20, 2, 3, 'n');
-  for (let i = 0; i < 4; i++) {
-    const y = 5 + i * 3;
-    p.px(19, y, 'N');
-    p.px(20, y, 'M');
-    p.px(21, y, 'N');
-    p.px(20, y + 1, 'n');
-  }
-  oval(p, 20, 22, 7, 5, 'G');
-  oval(p, 20, 23, 5, 3, 'g');
-  p.hline(15, 19, 10, 'o');
-  p.px(17, 21, 'q');
-  p.px(22, 22, p.frame % 2 ? 'Q' : 'g');
-  drawFlame(p, 20, 8, 7, 'green');
-  drawFlag(p, 26, 12, 8, 12);
-  p.fill(12, 24, 4, 3, 'B');
-  p.px(13, 25, 'H');
-  if (rank >= 2) p.px(16, 26, 'm');
-  if (rank >= 4) p.px(20, 7, 'W');
+  drawCoupling(p, rank);
+  drawVial(p, 10, 4, 'g', rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintReliquary(p, rank, accent) {

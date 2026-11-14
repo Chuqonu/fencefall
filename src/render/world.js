@@ -1,8 +1,10 @@
 /**
  * Battlefield backdrop, logical 360×640.
- * drawWorld paints sky, open ground, the shared fence and exactly two rows of five slots.
- * It does not draw units, enemies, projectiles or gameplay clouds, and it does not
- * mutate run state or advance the gameplay RNG. Animation uses the `time` argument.
+ * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
+ * then the ground both defender rows stand on, with exactly two rows of five slots.
+ * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
+ * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
+ * Animation uses the `time` argument.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 import { ARENA, slotGeometry } from '../shared.js';
@@ -35,6 +37,9 @@ const STARS = Object.freeze([
   [188, 4, 0], [228, 10, 1], [262, 6, 0], [330, 9, 0], [348, 5, 0], [22, 13, 0]
 ]);
 const POSTS = Object.freeze([0, 86, 174, 262, 348]);
+const ENTRY_Y = 46;
+const SLEEPER_Y = 466;
+const GROUND_Y = 472;
 const SCUFFS = Object.freeze([
   [28, 128, 42], [196, 168, 34], [64, 214, 30], [236, 258, 40],
   [36, 304, 28], [176, 346, 32], [88, 392, 24], [214, 418, 22]
@@ -233,6 +238,78 @@ function drawTree(ctx, x, height) {
   ctx.fillRect(x - 1, base - 2, trunk + 2, 2);
 }
 
+function paintEntryEdge(ctx) {
+  const y = ENTRY_Y;
+  ctx.fillStyle = '#101816';
+  ctx.fillRect(0, y + 10, W, 6);
+  ctx.fillStyle = '#6a8074';
+  ctx.fillRect(0, y + 3, W, 8);
+  ctx.fillStyle = '#314038';
+  ctx.fillRect(0, y + 8, W, 4);
+  ctx.fillStyle = '#d5e2d6';
+  ctx.fillRect(0, y + 1, W, 2);
+  let x = 0;
+  let stone = 0;
+  while (x < W) {
+    const n = hash2(stone * 3 + 1, 41);
+    const span = 7 + (n % 11);
+    const rise = (n >>> 3) & 1;
+    ctx.fillStyle = (n & 32) ? '#d5e2d6' : '#b7c8ba';
+    ctx.fillRect(x, y + rise, span, 1);
+    ctx.fillStyle = (n & 32) ? '#5e7268' : '#4a5c52';
+    ctx.fillRect(x, y + 2 + rise, Math.max(1, span - 1), 2);
+    ctx.fillStyle = '#1a2420';
+    ctx.fillRect(x + span - 1, y + 1, 1, 10);
+    if ((n % 4) === 0) {
+      ctx.fillStyle = '#101816';
+      ctx.fillRect(x + 2, y + 5, 1, 4);
+    }
+    if ((n % 6) === 0) {
+      ctx.fillStyle = '#2a342e';
+      ctx.fillRect(x + 1, y - 4, 2, 5);
+      ctx.fillStyle = '#d5e2d6';
+      ctx.fillRect(x + 1, y - 4, 2, 1);
+    }
+    x += span;
+    stone += 1;
+  }
+  ctx.fillStyle = '#0e1612';
+  ctx.fillRect(0, y + 12, W, 2);
+  ctx.fillStyle = '#6a7e72';
+  ctx.fillRect(0, y + 14, W, 1);
+}
+
+function paintApproach(ctx) {
+  ctx.fillStyle = '#161e1c';
+  ctx.fillRect(0, 418, W, 48);
+  ctx.fillStyle = '#4a5c52';
+  ctx.fillRect(0, 418, W, 1);
+  ctx.fillStyle = '#101816';
+  ctx.fillRect(0, 454, W, 12);
+  for (let x = 0; x < W; x += 4) {
+    const n = hash2(x, 422);
+    if ((n & 3) !== 0) continue;
+    const y = 422 + ((n >>> 2) & 7) * 2;
+    ctx.fillStyle = (n & 16) ? '#2a3830' : '#101816';
+    ctx.fillRect(x, y, 3 + (n & 1), 1);
+  }
+}
+
+function fillStandingGround(ctx, x, y, width, height) {
+  ctx.fillStyle = '#3a2c22';
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = '#a08058';
+  ctx.fillRect(x, y, width, 1);
+  if (height > 6 && width > 8) {
+    ctx.fillStyle = '#5c4634';
+    ctx.fillRect(x + 4, y + 4, width - 8, 1);
+  }
+  if (height > 3) {
+    ctx.fillStyle = '#241c16';
+    ctx.fillRect(x, y + height - 3, width, 3);
+  }
+}
+
 function paintField(ctx) {
   for (let x = 0; x < W; x += 2) {
     const near = horizonY(x);
@@ -245,9 +322,22 @@ function paintField(ctx) {
   for (let x = 0; x < W; x += 2) {
     const y0 = horizonY(x);
     const edge = Math.min(x, W - 1 - x);
-    ctx.fillStyle = edge < 16 ? '#202826' : edge < 34 ? '#242c2a' : '#262e2c';
-    ctx.fillRect(x, y0, 2, 466 - y0);
-    ctx.fillStyle = '#6a7c70';
+    const margin = edge < 16 ? 0 : edge < 36 ? 1 : 2;
+    const far = margin === 0 ? '#1e2824' : margin === 1 ? '#28322c' : '#343e36';
+    const mid = margin === 0 ? '#1a2420' : margin === 1 ? '#222c28' : '#2c3630';
+    const near = margin === 0 ? '#161e1c' : margin === 1 ? '#1c2420' : '#242c28';
+    const farEnd = 168;
+    const midEnd = 320;
+    const lip = ENTRY_Y + 16;
+    ctx.fillStyle = margin === 0 ? '#121a18' : '#1a2420';
+    ctx.fillRect(x, y0, 2, Math.max(0, lip - y0));
+    ctx.fillStyle = far;
+    ctx.fillRect(x, lip, 2, farEnd - lip);
+    ctx.fillStyle = mid;
+    ctx.fillRect(x, farEnd, 2, midEnd - farEnd);
+    ctx.fillStyle = near;
+    ctx.fillRect(x, midEnd, 2, SLEEPER_Y - midEnd);
+    ctx.fillStyle = '#8ea094';
     ctx.fillRect(x, y0, 2, 1);
   }
   for (const [x, height] of TREES) drawTree(ctx, x, height);
@@ -297,6 +387,8 @@ function paintField(ctx) {
     ctx.fillStyle = '#141c18';
     ctx.fillRect(x, y + 2, 3, 1);
   }
+  paintApproach(ctx);
+  paintEntryEdge(ctx);
 }
 
 function drawEdgeRuins(ctx) {
@@ -312,28 +404,24 @@ function drawEdgeRuins(ctx) {
 }
 
 function paintYard(ctx) {
-  ctx.fillStyle = '#3a3428';
-  ctx.fillRect(0, 458, W, 8);
-  ctx.fillStyle = '#2a241c';
-  ctx.fillRect(0, 466, W, 6);
-  ctx.fillStyle = '#101416';
-  ctx.fillRect(0, 472, W, H - 472);
-  ctx.fillStyle = '#243038';
-  ctx.fillRect(0, 472, W, 3);
-  ctx.fillStyle = '#6a8490';
-  ctx.fillRect(0, 472, W, 1);
-  for (let y = 478; y < 626; y += 6) {
-    const offset = ((y / 6) & 1) ? 4 : 0;
-    for (let x = -4 + offset; x < W; x += 9) {
-      const n = hash2(x + 3, y);
-      ctx.fillStyle = (n % 5) === 0 ? '#1c262c' : '#172024';
-      ctx.fillRect(x, y, 8, 5);
-    }
+  fillStandingGround(ctx, 0, GROUND_Y, W, H - GROUND_Y);
+  for (let y = 476; y < 632; y += 4) {
+    ctx.fillStyle = ((y >> 2) & 1) ? '#34281f' : '#463628';
+    ctx.fillRect(0, y, W, 1);
   }
-  ctx.fillStyle = '#0c1014';
-  ctx.fillRect(0, 630, W, 10);
-  ctx.fillStyle = '#3a4c56';
-  ctx.fillRect(0, 630, W, 1);
+  // Footing under each row, then the open board between the rows and at the heel.
+  fillStandingGround(ctx, 0, 524, W, 20);
+  fillStandingGround(ctx, 0, 608, W, 20);
+  fillStandingGround(ctx, 0, 544, W, 12);
+  fillStandingGround(ctx, 0, 628, W, 12);
+  for (let x = 5; x < W; x += 13) {
+    const n = hash2(x, 548);
+    ctx.fillStyle = (n & 1) ? '#c4a06a' : '#6e5432';
+    ctx.fillRect(x + (n & 3), 548, 1, 1);
+    ctx.fillRect(x + ((n >>> 2) & 3), 632, 1, 1);
+  }
+  ctx.fillStyle = '#1c1612';
+  ctx.fillRect(0, 636, W, 4);
 }
 
 function paintBackdrop(ctx) {
@@ -519,11 +607,35 @@ function drawRubble(ctx, kit, ratio) {
   ctx.fillRect(300, 458, 22, 1);
 }
 
+function drawSleeper(ctx, ratio, kit) {
+  const y = SLEEPER_Y;
+  ctx.fillStyle = kit.edge;
+  ctx.fillRect(0, y, W, 6);
+  ctx.fillStyle = kit.dark;
+  ctx.fillRect(0, y + 1, W, 4);
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(0, y + 1, W, 2);
+  ctx.fillStyle = kit.light;
+  ctx.fillRect(0, y, W, 1);
+  if (ratio <= 0.34) {
+    for (let i = 0; i < PICKETS; i++) {
+      if (ratio > breakAt(i) * 0.45) continue;
+      ctx.fillStyle = '#1a1612';
+      ctx.fillRect(i * 12 + 4, y + 1, 6, 4);
+    }
+  }
+  for (let x = 8; x < W; x += 12) {
+    ctx.fillStyle = kit.iron;
+    ctx.fillRect(x, y + 2, 1, 2);
+  }
+}
+
 function drawFence(ctx, ratio) {
   const kit = woodKit(ratio);
   const intact = new Array(PICKETS);
   for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
   drawWire(ctx, intact, kit, ratio);
+  drawSleeper(ctx, ratio, kit);
   for (const x of POSTS) drawPost(ctx, x, ratio, kit);
   drawRubble(ctx, kit, ratio);
 }
@@ -607,22 +719,23 @@ function drawSlot(ctx, slot, time, reduced, phase) {
   ctx.fillRect(x, y + 71, 64, 1);
   ctx.fillRect(x + 63, y, 1, 72);
   ctx.fillStyle = occupied ? (front ? '#1a2c36' : '#14242c') : '#0e161c';
-  ctx.fillRect(x + 4, y + 4, 56, 64);
+  ctx.fillRect(x + 4, y + 4, 56, 48);
   ctx.fillStyle = '#5c6a72';
   ctx.fillRect(x + 3, y + 3, 2, 2);
   ctx.fillRect(x + 59, y + 3, 2, 2);
-  ctx.fillRect(x + 3, y + 67, 2, 2);
-  ctx.fillRect(x + 59, y + 67, 2, 2);
+  ctx.fillRect(x + 3, y + 48, 2, 2);
+  ctx.fillRect(x + 59, y + 48, 2, 2);
   const foot = y + 36;
   ctx.fillStyle = front ? '#314654' : '#283848';
-  ctx.fillRect(x + 8, foot - 2, 48, 16);
+  ctx.fillRect(x + 8, foot - 2, 48, 14);
   ctx.fillStyle = hero ? '#d3b984' : '#6a8490';
   ctx.fillRect(x + 8, foot - 2, 48, 1);
   ctx.fillStyle = '#10181c';
-  ctx.fillRect(x + 10, foot + 8, 44, 4);
+  ctx.fillRect(x + 10, foot + 8, 44, 3);
   ctx.fillStyle = '#243844';
   ctx.fillRect(x + 6, foot, 4, 8);
   ctx.fillRect(x + 54, foot, 4, 8);
+  fillStandingGround(ctx, x + 2, y + 52, 60, 18);
   if (!occupied) {
     const pulse = phase === 'placing' && !reduced && Math.sin(time * 3) > 0;
     const cx = x + 31;

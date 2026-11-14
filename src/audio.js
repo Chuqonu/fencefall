@@ -9,7 +9,9 @@
  *
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
- * Tower identity uses towerType (bolt, fire, frost, lightning, poison, support, hero).
+ * Shot, hit, merge, draft, fence damage, victory, and defeat each use a
+ * different contour. Tower identity uses towerType
+ * (bolt, fire, frost, lightning, poison, support, hero).
  */
 import { collectFeedback } from './render/effects.js';
 
@@ -251,7 +253,7 @@ export function createAudio() {
   }
 
   function tone({ freq, dur, type = 'square', gain = 0.05, slide = 0, delay = 0 }) {
-    if (!context || !master) return false;
+    if (!enabled || !context || !master) return false;
     const length = Math.max(0.03, Math.min(0.6, dur));
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
@@ -278,7 +280,7 @@ export function createAudio() {
   }
 
   function noise({ dur, gain, delay = 0, band = 800, q = 0.8 }) {
-    if (!context || !master || !noiseBuffer) return false;
+    if (!enabled || !context || !master || !noiseBuffer) return false;
     const length = Math.max(0.03, Math.min(0.45, dur));
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
@@ -345,8 +347,8 @@ export function createAudio() {
       }
       if (behavior === 'support') {
         return layers(
-          tone({ freq: 660, dur: 0.08, type: 'sine', gain: 0.04, delay }),
-          tone({ freq: 990, dur: 0.09, type: 'sine', gain: 0.02, delay: delay + 0.03 }),
+          tone({ freq: 660, dur: 0.055, type: 'sine', gain: 0.038, slide: 50, delay }),
+          tone({ freq: 990, dur: 0.06, type: 'triangle', gain: 0.02, delay: delay + 0.018 }),
         );
       }
       if (behavior === 'hero') {
@@ -363,17 +365,26 @@ export function createAudio() {
   }
 
   function playHit(desc, delay) {
-    const base = wobble(pitchFor(desc), desc.time + 0.17);
+    const tint = Math.min(260, Math.max(90, pitchFor(desc) * 0.28));
+    const body = wobble(tint, desc.time + 0.17);
     const crit = desc.crit;
     return safe(() => layers(
-      tone({
-        freq: crit ? base * 1.35 : base * 0.72,
-        dur: crit ? 0.09 : 0.04,
-        type: crit ? 'square' : 'triangle',
-        gain: crit ? 0.06 : 0.04,
+      noise({
+        dur: crit ? 0.055 : 0.032,
+        gain: crit ? 0.058 : 0.042,
+        band: crit ? 1700 : 980,
+        q: 0.9,
         delay,
       }),
-      crit ? tone({ freq: clampFreq(base * 2), dur: 0.1, type: 'sine', gain: 0.032, delay: delay + 0.018 }) : false,
+      tone({
+        freq: crit ? Math.min(340, body * 1.2) : body,
+        dur: crit ? 0.07 : 0.042,
+        type: 'sine',
+        gain: crit ? 0.055 : 0.04,
+        slide: crit ? -90 : -55,
+        delay,
+      }),
+      crit ? tone({ freq: 1480, dur: 0.05, type: 'square', gain: 0.026, delay: delay + 0.01 }) : false,
     ));
   }
 
@@ -386,27 +397,26 @@ export function createAudio() {
   }
 
   function playFence(desc, delay) {
-    const extra = desc.damage != null && desc.damage > 0 ? Math.min(0.02, desc.damage / 800) : 0;
+    const extra = desc.damage != null && desc.damage > 0 ? Math.min(0.018, desc.damage / 900) : 0;
     return safe(() => layers(
-      tone({ freq: 96, dur: 0.12, type: 'sine', gain: 0.07 + extra, slide: -28, delay }),
-      noise({ dur: 0.08, gain: 0.05, band: 180, q: 0.7, delay }),
+      tone({ freq: 78, dur: 0.1, type: 'sine', gain: 0.072 + extra, slide: -22, delay }),
+      noise({ dur: 0.045, gain: 0.055, band: 210, q: 0.45, delay }),
+      tone({ freq: 168, dur: 0.03, type: 'square', gain: 0.018, slide: -60, delay }),
     ));
   }
 
   function playMerge(desc, delay) {
-    const rank = desc.rank || 1;
+    const rank = Math.max(1, Math.min(8, Number(desc.rank) || 1));
     return safe(() => layers(
-      tone({ freq: 523, dur: 0.1, type: 'triangle', gain: 0.055, delay }),
-      tone({ freq: 659, dur: 0.1, type: 'sine', gain: 0.035, delay: delay + 0.06 }),
-      tone({ freq: 784 + rank * 18, dur: 0.14, type: 'triangle', gain: 0.05, delay: delay + 0.11 }),
+      tone({ freq: 340, dur: 0.13, type: 'triangle', gain: 0.042, slide: 540, delay }),
+      tone({ freq: clampFreq(1120 + rank * 36), dur: 0.08, type: 'sine', gain: 0.034, delay: delay + 0.08 }),
     ));
   }
 
   function playDraft(delay) {
     return safe(() => layers(
-      tone({ freq: 523, dur: 0.12, type: 'sine', gain: 0.038, delay }),
-      tone({ freq: 659, dur: 0.12, type: 'sine', gain: 0.028, delay: delay + 0.05 }),
-      tone({ freq: 784, dur: 0.16, type: 'sine', gain: 0.032, delay: delay + 0.1 }),
+      tone({ freq: 440, dur: 0.11, type: 'sine', gain: 0.03, delay }),
+      tone({ freq: 554, dur: 0.14, type: 'sine', gain: 0.024, delay: delay + 0.07 }),
     ));
   }
 
@@ -414,15 +424,22 @@ export function createAudio() {
     const notes = [523, 659, 784, 1046];
     let played = false;
     for (let i = 0; i < notes.length; i++) {
-      if (safe(() => tone({ freq: notes[i], dur: 0.16, type: 'triangle', gain: 0.05, delay: i * 0.09 }))) played = true;
+      const last = i === notes.length - 1;
+      if (safe(() => tone({
+        freq: notes[i],
+        dur: last ? 0.2 : 0.08,
+        type: last ? 'triangle' : 'square',
+        gain: last ? 0.048 : 0.03,
+        delay: i * 0.07,
+      }))) played = true;
     }
     return played;
   }
 
   function playDefeat() {
     return safe(() => layers(
-      tone({ freq: 196, dur: 0.34, type: 'triangle', gain: 0.04, slide: -80 }),
-      tone({ freq: 110, dur: 0.4, type: 'sine', gain: 0.055, slide: -24 }),
+      tone({ freq: 294, dur: 0.26, type: 'triangle', gain: 0.038, slide: -88 }),
+      tone({ freq: 220, dur: 0.34, type: 'sine', gain: 0.048, slide: -64, delay: 0.05 }),
     ));
   }
 

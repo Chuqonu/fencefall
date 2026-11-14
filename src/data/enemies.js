@@ -24,10 +24,10 @@ export const ENEMIES = {
   shambler: {
     name: {en: 'Ash Shambler', zh: '灰烬蹒者'},
     description: {
-      en: 'Slow walker with ordinary health and a steady bite on the shared fence.',
-      zh: '步速缓慢、生命普通，会持续啃咬共享栅栏。',
+      en: 'The common body: ordinary pace and health, no armor, and a steady bite on the shared fence.',
+      zh: '最常见的敌人：步速与生命都普通，没有护甲，以稳定的节奏啃咬共享栅栏。',
     },
-    role: {en: 'Walker', zh: '步兵'},
+    role: {en: 'Grunt', zh: '步兵'},
     threat: 1,
     hp: 80,
     speed: 28,
@@ -40,8 +40,8 @@ export const ENEMIES = {
   runner: {
     name: {en: 'Wire Runner', zh: '线驰者'},
     description: {
-      en: 'Thin and fast. It reaches the fence well ahead of the walkers and must be shot early.',
-      zh: '身板薄、速度高，会比步兵更早贴上栅栏，需要提前集火。',
+      en: 'The fastest body. Thin health, a light bite, and it reaches the shared fence well ahead of the ash shamblers, so shoot it early.',
+      zh: '最快的敌人。生命很薄、啃咬很轻，会远早于灰烬蹒者贴上共享栅栏，需要提前打掉。',
     },
     role: {en: 'Raider', zh: '突进'},
     threat: 2,
@@ -56,8 +56,8 @@ export const ENEMIES = {
   brute: {
     name: {en: 'Gate Brute', zh: '闸门蛮兽'},
     description: {
-      en: 'Huge and slow. Each hit tears the fence, and its health takes a long focused fight.',
-      zh: '体型巨大、接近缓慢。每一击都重创栅栏，需要长时间集火才能倒下。',
+      en: 'Huge and slow. Each bite tears a deep chunk from the shared fence, and its long health takes a focused fight.',
+      zh: '体型巨大、步速很慢。每一口都从共享栅栏撕下很深的一块，厚实的生命需要长时间集火。',
     },
     role: {en: 'Siege', zh: '攻城'},
     threat: 5,
@@ -72,8 +72,8 @@ export const ENEMIES = {
   armored: {
     name: {en: 'Plate Walker', zh: '板甲行者'},
     description: {
-      en: 'Thick plate sheds a bit more than half of every hit. Left alone, it sits on the fence.',
-      zh: '厚甲会挡下略多于一半的伤害。放着不管，它就会一直砸栅栏。',
+      en: 'Thick plate sheds a bit more than half of every hit. It walks up and keeps biting the shared fence until that plate is focused down.',
+      zh: '厚甲会挡下略多于一半的每一击。它走向共享栅栏并持续啃咬，直到这层甲被集火拆掉。',
     },
     role: {en: 'Bulwark', zh: '重甲'},
     threat: 4,
@@ -88,10 +88,10 @@ export const ENEMIES = {
   spitter: {
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
-      en: 'Fragile body, rapid fence bites. It dies quickly, but it chews hard once it arrives.',
-      zh: '身体脆弱，却会高频啃咬栅栏。死得快，一旦抵达伤害却很高。',
+      en: 'Fragile, with the shortest pause between bites. Each bite on the shared fence is light, and the danger is how fast those bites stack once it arrives.',
+      zh: '身体脆弱，啃咬间隔最短。对共享栅栏的每一口都很轻，威胁在于抵达之后轻咬叠得很快。',
     },
-    role: {en: 'Sapper', zh: '蚀篱'},
+    role: {en: 'Sapper', zh: '工兵'},
     threat: 3,
     hp: 52,
     speed: 30,
@@ -104,8 +104,8 @@ export const ENEMIES = {
   swarm: {
     name: {en: 'Dust Gnawer', zh: '尘啮'},
     description: {
-      en: 'Tiny and weak alone. They arrive in bunches and smother the fence by numbers.',
-      zh: '单只又小又弱。它们成群涌来，靠数量淹没栅栏。',
+      en: 'Tiny and weak alone, with a small bite. They arrive in bunches and smother the shared fence by numbers.',
+      zh: '单只又小又弱，啃咬也很轻。它们成群涌来，靠数量淹没共享栅栏。',
     },
     role: {en: 'Swarm', zh: '虫群'},
     threat: 1,
@@ -120,8 +120,8 @@ export const ENEMIES = {
   boss: {
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. Below half health it enrages, moving and hitting harder. It periodically calls dust gnawers. It attacks only the fence.',
-      zh: '首领。生命低于一半时会狂暴，移动和攻击都更猛，并周期性召唤尘啮。它只攻击栅栏。',
+      en: 'Boss. Below half health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
+      zh: '首领。生命低于一半时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,

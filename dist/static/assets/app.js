@@ -29,7 +29,9 @@ const collectFeedback = __ff_m0["collectFeedback"];
  *
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
- * Tower identity uses towerType (bolt, fire, frost, lightning, poison, support, hero).
+ * Shot, hit, merge, draft, fence damage, victory, and defeat each use a
+ * different contour. Tower identity uses towerType
+ * (bolt, fire, frost, lightning, poison, support, hero).
  */
 
 
@@ -271,7 +273,7 @@ function createAudio() {
   }
 
   function tone({ freq, dur, type = 'square', gain = 0.05, slide = 0, delay = 0 }) {
-    if (!context || !master) return false;
+    if (!enabled || !context || !master) return false;
     const length = Math.max(0.03, Math.min(0.6, dur));
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
@@ -298,7 +300,7 @@ function createAudio() {
   }
 
   function noise({ dur, gain, delay = 0, band = 800, q = 0.8 }) {
-    if (!context || !master || !noiseBuffer) return false;
+    if (!enabled || !context || !master || !noiseBuffer) return false;
     const length = Math.max(0.03, Math.min(0.45, dur));
     const wait = Math.max(0, Math.min(0.5, delay));
     const start = context.currentTime + wait;
@@ -365,8 +367,8 @@ function createAudio() {
       }
       if (behavior === 'support') {
         return layers(
-          tone({ freq: 660, dur: 0.08, type: 'sine', gain: 0.04, delay }),
-          tone({ freq: 990, dur: 0.09, type: 'sine', gain: 0.02, delay: delay + 0.03 }),
+          tone({ freq: 660, dur: 0.055, type: 'sine', gain: 0.038, slide: 50, delay }),
+          tone({ freq: 990, dur: 0.06, type: 'triangle', gain: 0.02, delay: delay + 0.018 }),
         );
       }
       if (behavior === 'hero') {
@@ -383,17 +385,26 @@ function createAudio() {
   }
 
   function playHit(desc, delay) {
-    const base = wobble(pitchFor(desc), desc.time + 0.17);
+    const tint = Math.min(260, Math.max(90, pitchFor(desc) * 0.28));
+    const body = wobble(tint, desc.time + 0.17);
     const crit = desc.crit;
     return safe(() => layers(
-      tone({
-        freq: crit ? base * 1.35 : base * 0.72,
-        dur: crit ? 0.09 : 0.04,
-        type: crit ? 'square' : 'triangle',
-        gain: crit ? 0.06 : 0.04,
+      noise({
+        dur: crit ? 0.055 : 0.032,
+        gain: crit ? 0.058 : 0.042,
+        band: crit ? 1700 : 980,
+        q: 0.9,
         delay,
       }),
-      crit ? tone({ freq: clampFreq(base * 2), dur: 0.1, type: 'sine', gain: 0.032, delay: delay + 0.018 }) : false,
+      tone({
+        freq: crit ? Math.min(340, body * 1.2) : body,
+        dur: crit ? 0.07 : 0.042,
+        type: 'sine',
+        gain: crit ? 0.055 : 0.04,
+        slide: crit ? -90 : -55,
+        delay,
+      }),
+      crit ? tone({ freq: 1480, dur: 0.05, type: 'square', gain: 0.026, delay: delay + 0.01 }) : false,
     ));
   }
 
@@ -406,27 +417,26 @@ function createAudio() {
   }
 
   function playFence(desc, delay) {
-    const extra = desc.damage != null && desc.damage > 0 ? Math.min(0.02, desc.damage / 800) : 0;
+    const extra = desc.damage != null && desc.damage > 0 ? Math.min(0.018, desc.damage / 900) : 0;
     return safe(() => layers(
-      tone({ freq: 96, dur: 0.12, type: 'sine', gain: 0.07 + extra, slide: -28, delay }),
-      noise({ dur: 0.08, gain: 0.05, band: 180, q: 0.7, delay }),
+      tone({ freq: 78, dur: 0.1, type: 'sine', gain: 0.072 + extra, slide: -22, delay }),
+      noise({ dur: 0.045, gain: 0.055, band: 210, q: 0.45, delay }),
+      tone({ freq: 168, dur: 0.03, type: 'square', gain: 0.018, slide: -60, delay }),
     ));
   }
 
   function playMerge(desc, delay) {
-    const rank = desc.rank || 1;
+    const rank = Math.max(1, Math.min(8, Number(desc.rank) || 1));
     return safe(() => layers(
-      tone({ freq: 523, dur: 0.1, type: 'triangle', gain: 0.055, delay }),
-      tone({ freq: 659, dur: 0.1, type: 'sine', gain: 0.035, delay: delay + 0.06 }),
-      tone({ freq: 784 + rank * 18, dur: 0.14, type: 'triangle', gain: 0.05, delay: delay + 0.11 }),
+      tone({ freq: 340, dur: 0.13, type: 'triangle', gain: 0.042, slide: 540, delay }),
+      tone({ freq: clampFreq(1120 + rank * 36), dur: 0.08, type: 'sine', gain: 0.034, delay: delay + 0.08 }),
     ));
   }
 
   function playDraft(delay) {
     return safe(() => layers(
-      tone({ freq: 523, dur: 0.12, type: 'sine', gain: 0.038, delay }),
-      tone({ freq: 659, dur: 0.12, type: 'sine', gain: 0.028, delay: delay + 0.05 }),
-      tone({ freq: 784, dur: 0.16, type: 'sine', gain: 0.032, delay: delay + 0.1 }),
+      tone({ freq: 440, dur: 0.11, type: 'sine', gain: 0.03, delay }),
+      tone({ freq: 554, dur: 0.14, type: 'sine', gain: 0.024, delay: delay + 0.07 }),
     ));
   }
 
@@ -434,15 +444,22 @@ function createAudio() {
     const notes = [523, 659, 784, 1046];
     let played = false;
     for (let i = 0; i < notes.length; i++) {
-      if (safe(() => tone({ freq: notes[i], dur: 0.16, type: 'triangle', gain: 0.05, delay: i * 0.09 }))) played = true;
+      const last = i === notes.length - 1;
+      if (safe(() => tone({
+        freq: notes[i],
+        dur: last ? 0.2 : 0.08,
+        type: last ? 'triangle' : 'square',
+        gain: last ? 0.048 : 0.03,
+        delay: i * 0.07,
+      }))) played = true;
     }
     return played;
   }
 
   function playDefeat() {
     return safe(() => layers(
-      tone({ freq: 196, dur: 0.34, type: 'triangle', gain: 0.04, slide: -80 }),
-      tone({ freq: 110, dur: 0.4, type: 'sine', gain: 0.055, slide: -24 }),
+      tone({ freq: 294, dur: 0.26, type: 'triangle', gain: 0.038, slide: -88 }),
+      tone({ freq: 220, dur: 0.34, type: 'sine', gain: 0.048, slide: -64, delay: 0.05 }),
     ));
   }
 
@@ -1555,10 +1572,10 @@ const ENEMIES = {
   shambler: {
     name: {en: 'Ash Shambler', zh: '灰烬蹒者'},
     description: {
-      en: 'Slow walker with ordinary health and a steady bite on the shared fence.',
-      zh: '步速缓慢、生命普通，会持续啃咬共享栅栏。',
+      en: 'The common body: ordinary pace and health, no armor, and a steady bite on the shared fence.',
+      zh: '最常见的敌人：步速与生命都普通，没有护甲，以稳定的节奏啃咬共享栅栏。',
     },
-    role: {en: 'Walker', zh: '步兵'},
+    role: {en: 'Grunt', zh: '步兵'},
     threat: 1,
     hp: 80,
     speed: 28,
@@ -1571,8 +1588,8 @@ const ENEMIES = {
   runner: {
     name: {en: 'Wire Runner', zh: '线驰者'},
     description: {
-      en: 'Thin and fast. It reaches the fence well ahead of the walkers and must be shot early.',
-      zh: '身板薄、速度高，会比步兵更早贴上栅栏，需要提前集火。',
+      en: 'The fastest body. Thin health, a light bite, and it reaches the shared fence well ahead of the ash shamblers, so shoot it early.',
+      zh: '最快的敌人。生命很薄、啃咬很轻，会远早于灰烬蹒者贴上共享栅栏，需要提前打掉。',
     },
     role: {en: 'Raider', zh: '突进'},
     threat: 2,
@@ -1587,8 +1604,8 @@ const ENEMIES = {
   brute: {
     name: {en: 'Gate Brute', zh: '闸门蛮兽'},
     description: {
-      en: 'Huge and slow. Each hit tears the fence, and its health takes a long focused fight.',
-      zh: '体型巨大、接近缓慢。每一击都重创栅栏，需要长时间集火才能倒下。',
+      en: 'Huge and slow. Each bite tears a deep chunk from the shared fence, and its long health takes a focused fight.',
+      zh: '体型巨大、步速很慢。每一口都从共享栅栏撕下很深的一块，厚实的生命需要长时间集火。',
     },
     role: {en: 'Siege', zh: '攻城'},
     threat: 5,
@@ -1603,8 +1620,8 @@ const ENEMIES = {
   armored: {
     name: {en: 'Plate Walker', zh: '板甲行者'},
     description: {
-      en: 'Thick plate sheds a bit more than half of every hit. Left alone, it sits on the fence.',
-      zh: '厚甲会挡下略多于一半的伤害。放着不管，它就会一直砸栅栏。',
+      en: 'Thick plate sheds a bit more than half of every hit. It walks up and keeps biting the shared fence until that plate is focused down.',
+      zh: '厚甲会挡下略多于一半的每一击。它走向共享栅栏并持续啃咬，直到这层甲被集火拆掉。',
     },
     role: {en: 'Bulwark', zh: '重甲'},
     threat: 4,
@@ -1619,10 +1636,10 @@ const ENEMIES = {
   spitter: {
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
-      en: 'Fragile body, rapid fence bites. It dies quickly, but it chews hard once it arrives.',
-      zh: '身体脆弱，却会高频啃咬栅栏。死得快，一旦抵达伤害却很高。',
+      en: 'Fragile, with the shortest pause between bites. Each bite on the shared fence is light, and the danger is how fast those bites stack once it arrives.',
+      zh: '身体脆弱，啃咬间隔最短。对共享栅栏的每一口都很轻，威胁在于抵达之后轻咬叠得很快。',
     },
-    role: {en: 'Sapper', zh: '蚀篱'},
+    role: {en: 'Sapper', zh: '工兵'},
     threat: 3,
     hp: 52,
     speed: 30,
@@ -1635,8 +1652,8 @@ const ENEMIES = {
   swarm: {
     name: {en: 'Dust Gnawer', zh: '尘啮'},
     description: {
-      en: 'Tiny and weak alone. They arrive in bunches and smother the fence by numbers.',
-      zh: '单只又小又弱。它们成群涌来，靠数量淹没栅栏。',
+      en: 'Tiny and weak alone, with a small bite. They arrive in bunches and smother the shared fence by numbers.',
+      zh: '单只又小又弱，啃咬也很轻。它们成群涌来，靠数量淹没共享栅栏。',
     },
     role: {en: 'Swarm', zh: '虫群'},
     threat: 1,
@@ -1651,8 +1668,8 @@ const ENEMIES = {
   boss: {
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. Below half health it enrages, moving and hitting harder. It periodically calls dust gnawers. It attacks only the fence.',
-      zh: '首领。生命低于一半时会狂暴，移动和攻击都更猛，并周期性召唤尘啮。它只攻击栅栏。',
+      en: 'Boss. Below half health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
+      zh: '首领。生命低于一半时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,
@@ -1776,63 +1793,63 @@ function recipe(id, parents, name, description, fields) {
 const RAW_RECIPES = [
   recipe('cinderbolt', ['bolt', 'fire'],
     { en: 'Cinderbolt', zh: '烬矢' },
-    { en: 'A fast bolt that pierces and burns each enemy it hits. Burn does not stack; a new hit refreshes it.', zh: '快速箭矢会穿透并灼烧每个命中的敌人。燃烧不叠加，再次命中只刷新它。' },
+    { en: 'Unlike Rivet, it drops the crit and pierces 2 extra enemies instead of 1, and every pierced enemy burns. Unlike Cinder, it has no splash: the burn travels in a line at 5 damage per second for 2.4s instead of bursting in a circle at 4 damage per second for 2.6s.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并且每个被贯穿的敌人都会燃烧。和烬火不同，它没有溅射：燃烧沿直线传递，每秒 5 点、持续 2.4 秒，而不是在圆形范围内以每秒 4 点燃烧 2.6 秒。' },
     { damage: 14, interval: 0.72, range: 260, projectileSpeed: 480, pierce: 2, burn: { dps: 5, duration: 2.4 }, mechanics: ['pierce', 'burn'] }),
   recipe('hailspike', ['bolt', 'frost'],
     { en: 'Hailspike', zh: '雹针' },
-    { en: 'A piercing shard that slows every enemy it hits. Targets keep moving at the listed speed factor.', zh: '穿透冰片会减速每个命中的敌人。目标仍会移动，速度变为所列的剩余速度。' },
+    { en: 'Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and slows each of them to 58% speed. Unlike Rime, the slow hits every enemy in the line instead of one target, and 58% speed is slower than Rime at 64% for the same 2.2s.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并让每个命中的敌人移速变为 58%。和霜结不同，减速打在直线上的每个敌人，而不是单个目标，而且同样持续 2.2 秒时，58% 移速比霜结的 64% 更慢。' },
     { damage: 12, interval: 0.8, range: 255, projectileSpeed: 440, pierce: 2, slow: { factor: 0.58, duration: 2.2 }, mechanics: ['pierce', 'slow'] }),
   recipe('arcbolt', ['bolt', 'lightning'],
     { en: 'Arcbolt', zh: '弧矢' },
-    { en: 'A high-crit bolt that chains to nearby enemies. Each jump rolls its own crit.', zh: '高暴击电矢会弹向附近敌人。每一次跳跃单独计算暴击。' },
+    { en: 'Unlike Rivet, it drops pierce and chains to 2 extra enemies, and its crit rises from 15% at 1.85× to 24% at 2×. Unlike Arc, each hit, including each jump, rolls that crit, and jumps reach 88 instead of 80; Arc does not crit.', zh: '和穿钉不同，它去掉贯穿，改为连锁额外 2 名敌人，暴击从 15%、1.85 倍提高到 24%、2 倍。和弧雷不同，每一次命中（包括每一次跳跃）都单独判定这次暴击，跳跃距离是 88 而不是 80；弧雷本身不会暴击。' },
     { damage: 13, interval: 0.86, range: 265, projectileSpeed: 520, chain: 2, chainRange: 88, critChance: 0.24, critMultiplier: 2, mechanics: ['chain', 'crit'] }),
   recipe('venomspine', ['bolt', 'poison'],
     { en: 'Venomspine', zh: '毒脊' },
-    { en: 'Piercing darts add one poison stack per hit, up to the maximum, and refresh the duration.', zh: '穿透毒刺每次命中叠加一层毒素，达到上限后不再加层，并刷新持续时间。' },
+    { en: 'Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and each hit adds one poison stack. Unlike the poison tower Blight, the poison is not single-target, but each stack deals 2 damage per second instead of 2.4, still for 4s and up to 3 stacks.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，每次命中叠加一层毒素。和瘴毒不同，毒素不再只打单体，但每层每秒伤害是 2 而不是 2.4，持续时间仍是 4 秒，最多 3 层。' },
     { damage: 9, interval: 0.68, range: 250, projectileSpeed: 460, pierce: 2, poison: { dps: 2, duration: 4, maxStacks: 3 }, mechanics: ['pierce', 'poison'] }),
   recipe('watchpost', ['bolt', 'support'],
     { en: 'Watchpost', zh: '哨卫' },
-    { en: 'A long-range crit shooter that also grants nearby defenders bonus damage and a little haste.', zh: '远距暴击射手，同时为附近防守单位提供伤害加成和少量攻速。' },
+    { en: 'Unlike Rivet, it drops pierce, extends range from 260 to 275, raises crit from 15% at 1.85× to 28% at 2×, and grants nearby defenders an aura. Unlike Banner, that aura reaches 130 instead of 116 but gives only +10% damage and +6% haste, not +12% damage and +8% haste, and the shot can crit.', zh: '和穿钉不同，它去掉贯穿，射程从 260 增至 275，暴击从 15%、1.85 倍提高到 28%、2 倍，并给附近防守单位加上光环。和旌旗不同，这道光环范围是 130 而不是 116，但只提供 10% 伤害和 6% 急速，而不是 12% 伤害和 8% 急速，而且射击可以暴击。' },
     { damage: 11, interval: 0.78, range: 275, projectileSpeed: 470, critChance: 0.28, critMultiplier: 2, aura: { range: 130, damage: 0.1, haste: 0.06 }, mechanics: ['aura', 'crit'] }),
   recipe('scald', ['fire', 'frost'],
     { en: 'Scald', zh: '蒸灼' },
-    { en: 'A splash that burns and strongly slows at once. Direct damage is modest; the pair of statuses is the payoff.', zh: '溅射同时燃烧并强力减速。直接伤害不高，价值在于两种状态一起生效。' },
+    { en: 'Unlike Cinder, the splash grows from 36 to 46 and every enemy in it is also slowed to 50% speed; the burn stays 4 damage per second for 2.6s. Unlike Rime, the slow is no longer one target at 64% speed: the whole splash shares a stronger 50% slow for the same 2.2s and also burns.', zh: '和烬火不同，溅射从 36 扩大到 46，范围内的每个敌人还会被减速到 50% 移速；燃烧仍是每秒 4 点、持续 2.6 秒。和霜结不同，减速不再是 64% 移速的单体：整片溅射共享更强的 50% 减速，持续时间同为 2.2 秒，并同时燃烧。' },
     { damage: 8, interval: 1.2, range: 240, projectileSpeed: 300, splash: 46, burn: { dps: 4, duration: 2.6 }, slow: { factor: 0.5, duration: 2.2 }, mechanics: ['splash', 'burn', 'slow'] }),
   recipe('wildfire', ['fire', 'lightning'],
     { en: 'Wildfire', zh: '野火' },
-    { en: 'A burning splash that also jumps once to a nearby enemy. The splash and the jump both burn.', zh: '燃烧溅射，并再跳向一名附近敌人。溅射和跳跃都会灼烧。' },
+    { en: 'Unlike Cinder, the splash grows from 36 to 40, the burn rises from 4 damage per second for 2.6s to 6 for 2.8s, and the hit also jumps once. Unlike Arc, it chains to only 1 extra enemy within 78 instead of 2 within 80, but both the splash and that jump burn.', zh: '和烬火不同，溅射从 36 扩大到 40，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 6 点、持续 2.8 秒，并且命中后再跳跃一次。和弧雷不同，它只连锁 1 名额外敌人、距离 78，而不是 2 名、距离 80，但溅射和这一跳都会燃烧。' },
     { damage: 10, interval: 1.15, range: 245, projectileSpeed: 340, splash: 40, chain: 1, chainRange: 78, burn: { dps: 6, duration: 2.8 }, mechanics: ['splash', 'chain', 'burn'] }),
   recipe('blight', ['fire', 'poison'],
     { en: 'Blight', zh: '疫焚' },
-    { en: 'A wide splash that burns and stacks poison. The hit is weak; the two lingering effects do the work.', zh: '大范围溅射同时燃烧并叠加毒素。命中偏低，输出靠两种持续伤害。' },
+    { en: 'Unlike Cinder, the splash grows from 36 to 50 and also stacks poison, while the burn falls from 4 damage per second for 2.6s to 3 for 3s and the hit drops from 8 to 6. Unlike the poison tower Blight, poison is no longer single-target: everyone in the splash takes 2 damage per second for 4.5s instead of 2.4 for 4s, still up to 3 stacks, and they burn as well.', zh: '和烬火不同，溅射从 36 扩大到 50，并会叠加毒素；燃烧从每秒 4 点、持续 2.6 秒降为每秒 3 点、持续 3 秒，直接伤害从 8 降到 6。和瘴毒不同，毒素不再是单体：溅射内的每个敌人受到每秒 2 点毒素、持续 4.5 秒，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层，并且同时燃烧。' },
     { damage: 6, interval: 1.28, range: 240, projectileSpeed: 280, splash: 50, burn: { dps: 3, duration: 3 }, poison: { dps: 2, duration: 4.5, maxStacks: 3 }, mechanics: ['splash', 'burn', 'poison'] }),
   recipe('pyre', ['fire', 'support'],
     { en: 'Pyre', zh: '烽坛' },
-    { en: 'Grants nearby defenders a damage aura and throws a burning splash. The aura does not hurt enemies.', zh: '为附近防守单位提供伤害光环，并投出燃烧溅射。光环不会伤害敌人。' },
+    { en: 'Unlike Cinder, the splash grows from 36 to 38 and the burn rises from 4 damage per second for 2.6s to 5 for 3s, and it adds an aura that buffs defenders and does not hurt enemies. Unlike Banner, that aura reaches 140 instead of 116 and gives +15% damage but only +4% haste, not +12% damage and +8% haste, and the attack is a burning splash instead of a single light bolt.', zh: '和烬火不同，溅射从 36 扩大到 38，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 5 点、持续 3 秒，并加上只强化防守单位、不伤害敌人的光环。和旌旗不同，光环范围是 140 而不是 116，提供 15% 伤害但只有 4% 急速，而不是 12% 伤害和 8% 急速，攻击也从单体轻射变成燃烧溅射。' },
     { damage: 8, interval: 1.25, range: 240, projectileSpeed: 290, splash: 38, burn: { dps: 5, duration: 3 }, aura: { range: 140, damage: 0.15, haste: 0.04 }, mechanics: ['aura', 'splash', 'burn'] }),
   recipe('shatter', ['frost', 'lightning'],
     { en: 'Shatter', zh: '霜裂' },
-    { en: 'A long chain that slows and crits harder. It controls a pack; it does not spread poison.', zh: '长连锁会减速，并且更容易打出更高暴击。它用来控制一群敌人，不传播毒素。' },
+    { en: 'Unlike Rime, the slow is no longer single-target: it chains to 3 extra enemies, slows each to 60% speed for 1.8s instead of 64% for 2.2s, and can crit at 20% for 2.1×. Unlike Arc, the chain grows from 2 jumps within 80 to 3 within 96, and each jump slows and can crit; Arc does neither.', zh: '和霜结不同，减速不再是单体：它连锁额外 3 名敌人，每人移速变为 60%、持续 1.8 秒，而不是 64%、持续 2.2 秒，并有 20% 几率造成 2.1 倍暴击。和弧雷不同，连锁从 80 距离内的 2 跳增至 96 距离内的 3 跳，每一跳都会减速并可能暴击；弧雷两者都没有。' },
     { damage: 11, interval: 1.05, range: 260, projectileSpeed: 500, chain: 3, chainRange: 96, critChance: 0.2, critMultiplier: 2.1, slow: { factor: 0.6, duration: 1.8 }, mechanics: ['chain', 'slow', 'crit'] }),
   recipe('miasma', ['frost', 'poison'],
     { en: 'Miasma', zh: '瘴雾' },
-    { en: 'A wide cloud that slows and stacks a short poison on everyone inside. It holds a crowd.', zh: '宽云雾会减速，并给云内每个敌人叠加上限不高的毒素，用来拖住人群。' },
+    { en: 'Unlike Rime, the slow is a splash of 62 rather than one enemy, holding targets at 58% speed for 2.8s instead of 64% for 2.2s, and it also stacks poison. Unlike the poison tower Blight, that poison spreads through the cloud at 2 damage per second instead of 2.4 on one target, for the same 4s and 3 stacks, and everyone inside is slowed.', zh: '和霜结不同，减速变成半径 62 的溅射，而不是只打一名敌人，移速变为 58%、持续 2.8 秒，而不是 64%、持续 2.2 秒，并且会叠加毒素。和瘴毒不同，毒素随这片云雾扩散，每秒 2 点而不是单体的每秒 2.4 点，持续时间仍是 4 秒、最多 3 层，云内每个敌人都会被减速。' },
     { damage: 5, interval: 1.32, range: 240, projectileSpeed: 250, splash: 62, slow: { factor: 0.58, duration: 2.8 }, poison: { dps: 2, duration: 4, maxStacks: 3 }, mechanics: ['splash', 'slow', 'poison'] }),
   recipe('glacierward', ['frost', 'support'],
     { en: 'Glacierward', zh: '霜垣' },
-    { en: 'The strongest dedicated slow shot, plus a haste aura for nearby defenders.', zh: '最强的专精减速射击，并为附近防守单位提供攻速光环。' },
+    { en: 'Unlike Rime, it stays a single-target shot but slows to 48% speed for 2.5s instead of 64% for 2.2s, and it adds an aura for nearby defenders. Unlike Banner, that aura reaches 150 instead of 116 and gives +12% haste but only +8% damage, not +8% haste and +12% damage, and the shot slows instead of firing a plain bolt.', zh: '和霜结不同，它仍是单体射击，但减速变为 48% 移速、持续 2.5 秒，而不是 64%、持续 2.2 秒，并为附近防守单位提供光环。和旌旗不同，光环范围是 150 而不是 116，提供 12% 急速但只有 8% 伤害，而不是 8% 急速和 12% 伤害，射击会减速，而不是普通轻射。' },
     { damage: 7, interval: 1.12, range: 245, projectileSpeed: 320, slow: { factor: 0.48, duration: 2.5 }, aura: { range: 150, damage: 0.08, haste: 0.12 }, mechanics: ['aura', 'slow'] }),
   recipe('catalyst', ['lightning', 'poison'],
     { en: 'Catalyst', zh: '触媒' },
-    { en: 'A chain that poisons every jumped target, spreading stacks through a pack.', zh: '连锁会使每个跳到的目标中毒，把毒素层数扩散到一整群敌人。' },
+    { en: 'Unlike Arc, each of the 2 chain jumps also poisons, and jumps reach 100 instead of 80, while the hit falls from 10 to 8. Unlike the poison tower Blight, poison is not single-target: every jumped enemy gains a stack at 2 damage per second for 3.6s instead of 2.4 for 4s, still up to 3 stacks.', zh: '和弧雷不同，2 次连锁跳跃都会使目标中毒，跳跃距离是 100 而不是 80，直接伤害从 10 降到 8。和瘴毒不同，毒素不再是单体：每个被跳到的敌人获得一层每秒 2 点、持续 3.6 秒的毒素，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层。' },
     { damage: 8, interval: 1.02, range: 250, projectileSpeed: 490, chain: 2, chainRange: 100, poison: { dps: 2, duration: 3.6, maxStacks: 3 }, mechanics: ['chain', 'poison'] }),
   recipe('relay', ['lightning', 'support'],
     { en: 'Relay', zh: '继电' },
-    { en: 'The strongest haste aura, plus a short chain bolt. It speeds the defense more than it hits.', zh: '最强攻速光环，并附带短程连锁电击。它更擅长加快防守，而不是自己输出。' },
+    { en: 'Unlike Arc, it keeps a chain of 2 but each jump reaches 84 instead of 80, and it adds an aura, while its own hit falls from 10 to 9. Unlike Banner, that aura reaches 145 instead of 116 and gives +16% haste but only +5% damage, not +8% haste and +12% damage, and the attack chains instead of a single light bolt.', zh: '和弧雷不同，它保留 2 次连锁，但每次跳跃距离是 84 而不是 80，并加上光环；自身直接伤害从 10 降到 9。和旌旗不同，光环范围是 145 而不是 116，提供 16% 急速但只有 5% 伤害，而不是 8% 急速和 12% 伤害，攻击会连锁，而不是单体轻射。' },
     { damage: 9, interval: 0.98, range: 245, projectileSpeed: 470, chain: 2, chainRange: 84, aura: { range: 145, damage: 0.05, haste: 0.16 }, mechanics: ['aura', 'chain'] }),
   recipe('cultivator', ['poison', 'support'],
     { en: 'Cultivator', zh: '培育' },
-    { en: 'The deepest single-target poison, plus a modest damage aura. It has no splash and no pierce.', zh: '最深的单体毒素，并带有适度伤害光环。没有溅射，也没有穿透。' },
+    { en: 'Unlike the poison tower Blight, each poison stack deals 3 damage per second for 5s and can reach 4 stacks, instead of 2.4 for 4s and 3 stacks, and nearby defenders gain an aura. Unlike Banner, that aura reaches 128 instead of 116, keeps +12% damage, and cuts haste from +8% to +5%, while the shot stacks that deeper poison instead of a plain bolt. It still has no splash and no pierce.', zh: '和瘴毒不同，每层毒素每秒造成 3 点伤害、持续 5 秒、最多 4 层，而不是每秒 2.4 点、持续 4 秒、最多 3 层，附近防守单位还会获得光环。和旌旗不同，光环范围是 128 而不是 116，伤害加成仍是 12%，急速则从 8% 降到 5%，射击会叠加这种更深的毒素，而不是普通轻射。它仍然没有溅射，也没有贯穿。' },
     { damage: 5, interval: 1.08, range: 240, projectileSpeed: 310, poison: { dps: 3, duration: 5, maxStacks: 4 }, aura: { range: 128, damage: 0.12, haste: 0.05 }, mechanics: ['aura', 'poison'] }),
 ];
 
@@ -2362,8 +2379,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Projectile', zh: '投射'}),
     name: Object.freeze({en: 'Rivet', zh: '穿钉'}),
     description: Object.freeze({
-      en: `Fires a fast rivet from its slot center at any enemy within range ${boltStats.range}. There are no lanes. At rank 1 it deals ${boltStats.damage} damage every ${boltStats.interval}s, pierces ${boltStats.pierce} extra enemy, and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
-      zh: `从槽位中心攻击射程 ${boltStats.range} 内的任意敌人，不按列锁定。1 阶伤害 ${boltStats.damage}，间隔 ${boltStats.interval} 秒，可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
+      en: `Fires a fast rivet from its slot center at any enemy within attack range ${boltStats.range}. There are no lanes. At rank 1 it deals ${boltStats.damage} damage every ${boltStats.interval}s, pierces ${boltStats.pierce} extra enemy, and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
+      zh: `从槽位中心攻击射程 ${boltStats.range} 内的任意敌人，不按列锁定。1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
     }),
     stats: Object.freeze(boltStats)
   }),
@@ -2372,8 +2389,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Fire', zh: '火焰'}),
     name: Object.freeze({en: 'Cinder', zh: '烬火'}),
     description: Object.freeze({
-      en: `Lobs a cinder that deals ${fireStats.damage} damage every ${fireStats.interval}s. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
-      zh: `投出烬火。1 阶伤害 ${fireStats.damage}，间隔 ${fireStats.interval} 秒，目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
+      en: `Lobs a cinder that deals ${fireStats.damage} damage every ${fireStats.interval}s. Attack range is ${fireStats.range}. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within splash radius ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
+      zh: `投出烬火。1 阶伤害 ${fireStats.damage}，攻击间隔 ${fireStats.interval} 秒，攻击射程 ${fireStats.range}。目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标溅射半径 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
     }),
     stats: Object.freeze(fireStats)
   }),
@@ -2382,8 +2399,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Frost', zh: '冰霜'}),
     name: Object.freeze({en: 'Rime', zh: '霜结'}),
     description: Object.freeze({
-      en: `A single-target shot that deals ${frostStats.damage} damage every ${frostStats.interval}s and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
-      zh: `单体射击。1 阶伤害 ${frostStats.damage}，间隔 ${frostStats.interval} 秒，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
+      en: `A single-target shot with attack range ${frostStats.range} that deals ${frostStats.damage} damage every ${frostStats.interval}s and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
+      zh: `单体射击。1 阶伤害 ${frostStats.damage}，攻击间隔 ${frostStats.interval} 秒，攻击射程 ${frostStats.range}，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
     }),
     stats: Object.freeze(frostStats)
   }),
@@ -2392,8 +2409,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Lightning', zh: '闪电'}),
     name: Object.freeze({en: 'Arc', zh: '弧雷'}),
     description: Object.freeze({
-      en: `The longest base range. It deals ${lightningStats.damage} damage every ${lightningStats.interval}s, then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy and ignores columns. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
-      zh: `基础塔里射程最长。1 阶伤害 ${lightningStats.damage}，间隔 ${lightningStats.interval} 秒，然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}，不按列限制。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
+      en: `The longest base attack range, ${lightningStats.range}. It deals ${lightningStats.damage} damage every ${lightningStats.interval}s, then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy and ignores columns. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
+      zh: `基础塔里攻击射程最长，为 ${lightningStats.range}。1 阶伤害 ${lightningStats.damage}，攻击间隔 ${lightningStats.interval} 秒，然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}，不按列限制。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
     }),
     stats: Object.freeze(lightningStats)
   }),
@@ -2402,8 +2419,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Poison', zh: '毒素'}),
     name: Object.freeze({en: 'Blight', zh: '瘴毒'}),
     description: Object.freeze({
-      en: `A weak hit for ${poisonStats.damage} damage every ${poisonStats.interval}s that adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}. It is meant for one tough enemy.`,
-      zh: `1 阶直接伤害只有 ${poisonStats.damage}，间隔 ${poisonStats.interval} 秒，命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。适合对付单个厚血敌人。`
+      en: `A weak hit for ${poisonStats.damage} damage every ${poisonStats.interval}s. Attack range is ${poisonStats.range}. Each hit adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}. It is meant for one tough enemy.`,
+      zh: `1 阶直接伤害只有 ${poisonStats.damage}，攻击间隔 ${poisonStats.interval} 秒，攻击射程 ${poisonStats.range}，命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。适合对付单个厚血敌人。`
     }),
     stats: Object.freeze(poisonStats)
   }),
@@ -2412,8 +2429,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Support', zh: '辅助'}),
     name: Object.freeze({en: 'Banner', zh: '旌旗'}),
     description: Object.freeze({
-      en: `Shoots a light bolt by the same rule as the other towers: any enemy within range ${supportStats.range} of this slot's center, across columns. Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
-      zh: `射击规则与其他塔相同：攻击距离槽位中心 ${supportStats.range} 以内的任意敌人，可以跨列。1 阶伤害 ${supportStats.damage}，间隔 ${supportStats.interval} 秒。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
+      en: `Shoots a light bolt by the same rule as the other towers: any enemy within attack range ${supportStats.range} of this slot's center, across columns. Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
+      zh: `射击规则与其他塔相同：攻击距离槽位中心 ${supportStats.range} 以内的任意敌人，可以跨列。1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
     }),
     stats: Object.freeze(supportStats)
   })
@@ -2466,6 +2483,12 @@ function assertCatalog() {
   for (const id of ids) {
     const tower = TOWERS[id];
     if (!tower.name?.en || !tower.name?.zh || !tower.description?.en || !tower.description?.zh) throw new Error(`missing bilingual text: ${id}`);
+    for (const field of ['damage', 'interval', 'range']) {
+      const token = String(tower.stats[field]);
+      if (!tower.description.en.includes(token) || !tower.description.zh.includes(token)) {
+        throw new Error(`${id} blurb does not state ${field} ${token}`);
+      }
+    }
     if (!(tower.stats.range > rearGap)) throw new Error(`${id} cannot reach across the fence from the back row`);
     const reach = Math.sqrt(tower.stats.range * tower.stats.range - rearGap * rearGap);
     if (!(reach >= 72)) throw new Error(`${id} back-row range misses the neighboring column at the fence`);
@@ -2727,6 +2750,9 @@ __ff_exports["formatDuration"] = formatDuration;
  * names) stay on those objects as {en, zh}. Pass them through localize().
  * This table is interface chrome, tutorials, stat labels, and action reasons.
  *
+ * Glossary: the fence is 栅栏. A draft is 整备. The three-choice prompt is 三选一.
+ * Rank is 阶; an upgrade level is 级. Board slots are 格子, and a payout is 报酬.
+ *
  *   t(language, key, vars)          module lookup. Language is the first argument.
  *   api.t(key, vars)                controller wrapper; do not swap these call styles.
  *   localize(value, language)       pick a bilingual content string.
@@ -2754,7 +2780,7 @@ const ROWS = [
   ['title', 'Fencefall', '最后一道防线'],
   ['titleLockup', 'Fencefall · 最后一道防线', 'Fencefall · 最后一道防线'],
   ['subtitle', 'One fence. Ten slots. No lanes.', '一道栅栏，十个格子，没有分路。'],
-  ['tagline', 'Plan, draft, and merge. The towers do the fighting.', '布阵、征召、合成。战斗交给防御塔。'],
+  ['tagline', 'Plan, draft, and merge. The towers do the fighting.', '布阵、整备、合成。战斗交给防御塔。'],
   ['play', 'Play', '开始'],
   ['playHint', 'Start a new fight', '开始一场新的战斗'],
   ['continue', 'Continue', '继续'],
@@ -2823,14 +2849,14 @@ const ROWS = [
   ['xp', 'XP', '经验'],
   ['experience', 'Experience', '经验'],
   ['xpProgress', 'XP {current}/{next}', '经验 {current}/{next}'],
-  ['nextDraft', 'Next draft', '下次征召'],
-  ['draftLevel', 'Draft {level}', '第 {level} 次征召'],
+  ['nextDraft', 'Next draft', '下次整备'],
+  ['draftLevel', 'Draft {level}', '第 {level} 次整备'],
   ['kills', 'Kills', '击杀'],
   ['killsValue', 'Kills {count}', '击杀 {count}'],
   ['kill', 'Kill', '击杀'],
   ['time', 'Time', '时间'],
   ['activeTime', 'Fight time', '战斗时间'],
-  ['timeHint', 'This clock counts the fight only. Drafts and menus do not add time.', '这个时间只计算战斗。征召和菜单不计入。'],
+  ['timeHint', 'This clock counts the fight only. Drafts and menus do not add time.', '这个时间只计算战斗。整备和菜单不计入。'],
   ['enemy', 'Enemy', '敌人'],
   ['enemies', 'Enemies', '敌人'],
   ['enemyCount', 'Enemies {count}', '敌人 {count}'],
@@ -2846,7 +2872,7 @@ const ROWS = [
   ['normal', 'Normal', '标准'],
   ['hard', 'Hard', '困难'],
   ['nightmare', 'Nightmare', '噩梦'],
-  ['rewardMultiplier', 'Reward multiplier', '奖励倍率'],
+  ['rewardMultiplier', 'Reward multiplier', '报酬倍率'],
   ['rewardMultiplierValue', '×{value}', '×{value}'],
   ['rewardLine', 'Reward ×{value}', '报酬 ×{value}'],
   ['timesValue', '×{value}', '×{value}'],
@@ -2878,8 +2904,8 @@ const ROWS = [
   ['reducedMotionHint', 'Cuts extra flashes, shakes, and motion.', '减少额外的闪光、震动和动态。'],
 
   // Draft, placement, movement
-  ['draft', 'Draft', '征召'],
-  ['draftTitle', 'Draft', '征召'],
+  ['draft', 'Draft', '整备'],
+  ['draftTitle', 'Draft', '整备'],
   ['chooseOneOfThree', 'Choose one of three', '三选一'],
   ['chooseUpgrade', 'Choose an upgrade', '选择升级'],
   ['chooseSlot', 'Choose a slot', '选择格子'],
@@ -2891,7 +2917,7 @@ const ROWS = [
   ['placementCanceled', 'Placement canceled. The three choices are unchanged.', '已取消放置，三个选项没有变化。'],
   ['placing', 'Placing', '放置中'],
   ['placingTitle', 'Place the tower', '放置防御塔'],
-  ['placingHint', 'Empty slots are open. Replacing a tower needs confirmation. The hero cannot be replaced.', '空格可以直接放置。替换防御塔需要确认。英雄不能被替换。'],
+  ['placingHint', 'Empty slots are open. Replacing a tower needs confirmation. The hero cannot be replaced.', '空位可以直接放置。替换防御塔需要确认。英雄不能被替换。'],
   ['tapToPlace', 'Tap a slot to place', '点一个格子来放置'],
   ['tapToMove', 'Tap a destination slot', '点一个目标格子'],
   ['fullBoard', 'The board is full', '格子已满'],
@@ -2962,8 +2988,8 @@ const ROWS = [
   ['rankCap', 'Ranks run from 1 to 4', '阶数从 1 到 4'],
   ['equalRank', 'Requires equal rank', '需要相同阶数'],
   ['maxRank', 'Already at max rank', '已经达到最高阶'],
-  ['notPlanning', 'Pause or open a draft before you move or merge', '请先暂停或进入征召，再移动或合成'],
-  ['planningRequired', 'Pause or open a draft before you move or merge', '请先暂停或进入征召，再移动或合成'],
+  ['notPlanning', 'Pause or open a draft before you move or merge', '请先暂停或进入整备，再移动或合成'],
+  ['planningRequired', 'Pause or open a draft before you move or merge', '请先暂停或进入整备，再移动或合成'],
   ['cannotMoveDuringFight', 'You can move units during planning', '战斗进行时不能移动，请先布阵'],
   ['sameSlot', 'Choose two different slots', '请选择两个不同的格子'],
   ['invalidSlot', 'That slot is not on the board', '没有这个格子'],
@@ -2980,7 +3006,7 @@ const ROWS = [
   ['heroSlot', 'The hero occupies this slot', '英雄在这个格子里'],
   ['replaceRequired', 'Confirm replacement to use an occupied slot', '要占用已有格子，需要确认替换'],
   ['invalidChoice', 'That choice is not available', '没有这个选项'],
-  ['noDraft', 'There is no draft right now', '当前没有征召'],
+  ['noDraft', 'There is no draft right now', '当前没有整备'],
   ['notPlacing', 'There is nothing to place', '当前没有要放置的单位'],
   ['noPending', 'There is nothing waiting to place', '没有等待放置的单位'],
 
@@ -3001,11 +3027,11 @@ const ROWS = [
   ['poison', 'Poison', '中毒'],
   ['slow', 'Slow', '减速'],
   ['stun', 'Stun', '眩晕'],
-  ['brittle', 'Brittle', '脆弱'],
+  ['brittle', 'Brittle', '易伤'],
   ['aura', 'Aura', '光环'],
   ['support', 'Support', '支援'],
   ['haste', 'Haste', '急速'],
-  ['vitality', 'Vitality', '体质'],
+  ['vitality', 'Fence HP', '栅栏生命'],
   ['status', 'Status', '状态'],
   ['statuses', 'Statuses', '状态'],
   ['duration', 'Duration', '持续'],
@@ -3049,8 +3075,8 @@ const ROWS = [
   ['weapon', 'Weapon', '武器'],
   ['charm', 'Charm', '护符'],
   ['armor', 'Armor', '护甲'],
-  ['equipment', 'Equipment', '装备栏'],
-  ['permanent', 'Permanent', '永久'],
+  ['equipment', 'Equipment', '装备'],
+  ['permanent', 'Permanent upgrades', '永久升级'],
   ['permanentUpgrades', 'Permanent upgrades', '永久升级'],
   ['headStart', 'Head start', '开局优势'],
   ['bonus', 'Bonus', '加成'],
@@ -3072,7 +3098,7 @@ const ROWS = [
   ['unknownItem', 'Unknown item', '未知物品'],
   ['unknownUpgrade', 'Unknown upgrade', '未知升级'],
   ['profile', 'Profile', '档案'],
-  ['best', 'Best', '最佳'],
+  ['best', 'Best runs', '最佳记录'],
   ['noBest', 'No settled runs yet', '还没有结算过的对局'],
   ['bestWave', 'Best wave', '最高波次'],
   ['bestKills', 'Best kills', '最高击杀'],
@@ -3153,14 +3179,14 @@ const ROWS = [
   // How to play. Bodies are the help* keys; titles can reuse the short labels.
   ['howto', 'How to play', '怎么玩'],
   ['howtoLead', 'You decide what is built. The fight plays itself.', '建造由你决定，战斗自动进行。'],
-  ['helpOverview', 'Enemies enter from the top and move toward one shared fence. You plan, draft, and merge. The hero and towers attack on their own.', '敌人从上方进入，朝同一道栅栏前进。你负责布阵、征召和合成。英雄与防御塔会自动攻击。'],
-  ['helpPlacement', 'Tap a defender, then tap the slot you want. You can move units only while paused or while a draft is open. Empty slots can take a unit. Moving the hero only changes its place.', '点一名防守者，再点目标格子。只有在暂停或征召期间才能移动。空格可以放入单位。移动英雄只改变位置。'],
+  ['helpOverview', 'Enemies enter from the top and move toward one shared fence. You plan, draft, and merge. The hero and towers attack on their own.', '敌人从上方进入，朝同一道栅栏前进。你负责布阵、整备和合成。英雄与防御塔会自动攻击。'],
+  ['helpPlacement', 'Tap a defender, then tap the slot you want. You can move units only while paused or while a draft is open. Empty slots can take a unit. Moving the hero only changes its place.', '点一名防守者，再点目标格子。只有在暂停或整备期间才能移动。空位可以放入单位。移动英雄只改变位置。'],
   ['helpMerge', 'While planning, choose two different occupied slots and preview the result. The same type and rank rise by one rank, up to rank 4. Different base types of equal rank become that recipe\'s hybrid. A hybrid merges only with the same hybrid. The hero never merges. Cancel, or an invalid pair, keeps both units.', '布阵时选择两个不同的已占用格子，并先预览结果。同种同阶会升 1 阶，最高 4 阶。不同的基础塔在同阶时会变成配方对应的混合单位。混合单位只能与相同的混合单位合成。英雄永不合成。取消或组合无效时，双方都会保留。'],
-  ['helpDraft', 'Kills grant XP. At the threshold the fight pauses and you get exactly three choices: a new tower or a hero upgrade. A tower is placed with a second tap. On a full board you can still upgrade the hero or replace a tower. Canceling placement keeps those same three choices. Nothing is granted twice.', '击杀会获得经验。达到阈值时战斗暂停，并恰好给出三个选项：新的防御塔，或英雄升级。选塔之后，再点一个格子即可放置。格子占满时，仍可升级英雄或替换一座塔。取消放置会保留原来的三个选项，不会因此多得一次奖励。'],
+  ['helpDraft', 'Kills grant XP. At the threshold the fight pauses and you get exactly three choices: a new tower or a hero upgrade. A tower is placed with a second tap. On a full board you can still upgrade the hero or replace a tower. Canceling placement keeps those same three choices. Nothing is granted twice.', '击杀会获得经验。达到阈值时战斗暂停并进入整备，给出三选一：新的防御塔，或英雄升级。选塔之后，再点一个格子即可放置。格子占满时，仍可升级英雄或替换一座防御塔。取消放置会保留原来的三选一，不会因此多得一次。'],
   ['helpFence', 'Enemies attack only the shared fence. Defenders have no health. If fence HP reaches zero, the run is lost.', '敌人只攻击共用栅栏。防守者没有生命值。栅栏生命归零，本局失败。'],
   ['helpRange', 'A defender fires at any enemy inside its circle, including enemies outside its column. Select a unit to see that circle. Rear-row ranges reach the field in front of the fence.', '防守者会攻击圆圈内的任意敌人，包括其他列的敌人。选中单位即可看到这个圆。后排的射程能够打到栅栏前方。'],
   ['helpSpeed', 'Speeds are 1×, 1.5×, and 3×. They share one simulation clock, so attacks, status timers, and rewards are not sped past that clock or skipped. Pause stops the fight. Hiding the page stops it too. If you paused yourself, that pause remains when you return.', '速度有 1×、1.5× 和 3×。它们共用一个模拟时钟，攻击、状态时间和报酬不会超出这个时钟，也不会被跳过。暂停会停止战斗。隐藏页面也会停止。如果你亲手暂停，回到页面后暂停仍然保留。'],
-  ['helpHero', 'The run starts with one hero in the rear center, and no other towers. The hero fights automatically, never merges, and cannot be sold or replaced.', '每局开始时，后排中央只有一名英雄，没有其他塔。英雄自动战斗，不能合成、出售或替换。'],
+  ['helpHero', 'The run starts with one hero in the rear center, and no other towers. The hero fights automatically, never merges, and cannot be sold or replaced.', '每局开始时，后排中央只有一名英雄，没有其他防御塔。英雄自动战斗，不能合成、出售或替换。'],
   ['helpRewards', 'Victory and defeat pay currency once. Abandoning a fresh run before 30 seconds and 3 kills pays nothing. Higher difficulties multiply the reward. Reloading does not pay again.', '胜利和失败都会发放一次货币。不足 30 秒且击杀少于 3 就放弃，没有报酬。难度越高，报酬倍率越高。重新加载不会再次发放。'],
   ['helpEquipment', 'Currency buys equipment and permanent hero upgrades. Bonuses are bounded and give a head start. Normal is playable without them. Purchases apply to later runs. This fight keeps the bonuses it started with.', '货币可以购买装备和英雄的永久升级。加成有上限，只提供开局优势。不买它们也能游玩标准难度。购买从之后的对局生效。这一局仍使用开局时的加成。'],
   ['helpLanguage', 'Use 中 / EN at any time. Switching language keeps the current run, board, and rewards.', '可以随时使用中 / EN。切换语言会保留当前对局、棋盘和报酬。'],
@@ -3170,8 +3196,8 @@ const ROWS = [
   ['helpSave', 'This browser stores the profile and one paused run. Export a backup or import one. A damaged file does not replace a valid save. Opening a saved run starts paused.', '此浏览器会保存档案和一局暂停中的战斗。可以导出或导入备份。损坏的文件不会覆盖有效存档。打开已保存的对局时，会先处于暂停。'],
   ['helpSameType', 'Two units of the same type and the same rank become one unit of the next rank, up to rank 4. Stats grow. The role stays the same.', '两座种类相同、阶数相同的单位会合成下一阶，最高 4 阶。能力提高，职能不变。'],
   ['helpHybrid', 'Two different base towers of equal rank become the hybrid named in the recipe. Read the result before you confirm. Hybrids do not mix with a different type.', '两座不同的基础塔在同阶时，会变成配方里的混合单位。确认前请先看结果。混合单位不能再与另一种类混合。'],
-  ['helpStatuses', 'Burn, poison, slow, stun, and brittle appear on the enemy. Slow changes how fast that enemy moves right now, not its base speed. Damage over time stops if the enemy dies.', '燃烧、中毒、减速、眩晕和脆弱会显示在敌人身上。减速改变的是它此刻的移动速度，而不是基础速度。敌人死亡后，持续伤害会停止。'],
-  ['helpDifficulty', 'Easy, Normal, Hard, and Nightmare change enemy health, speed, damage, numbers, fence HP, and the reward multiplier.', '轻松、标准、困难和噩梦会改变敌人的生命、速度、伤害和数量，以及栅栏生命和奖励倍率。'],
+  ['helpStatuses', 'Burn, poison, slow, stun, and brittle appear on the enemy. Slow changes how fast that enemy moves right now, not its base speed. Damage over time stops if the enemy dies.', '燃烧、中毒、减速、眩晕和易伤会显示在敌人身上。减速改变的是它此刻的移动速度，而不是基础速度。敌人死亡后，持续伤害会停止。'],
+  ['helpDifficulty', 'Easy, Normal, Hard, and Nightmare change enemy health, speed, damage, numbers, fence HP, and the reward multiplier.', '轻松、标准、困难和噩梦会改变敌人的生命、速度、伤害和数量，以及栅栏生命和报酬倍率。'],
   ['helpReplace', 'Replacing a tower asks for confirmation and removes that tower. The hero\'s slot always refuses a replacement.', '替换防御塔前会要求确认，并移除那座塔。英雄所在的格子始终不能替换。'],
   ['helpSupport', 'Support towers still fire on their own. Their aura boosts allies inside its range. The bonus is capped.', '支援塔自己也会攻击。它们的光环会强化范围内的友军，加成有上限。'],
   ['helpCrit', 'A critical hit deals multiplied damage and shows a clear impact. Chance and multiplier are listed on the unit.', '暴击造成倍率伤害，并有清楚的命中反馈。暴击率和倍率写在单位面板上。'],
@@ -3189,7 +3215,88 @@ const ROWS = [
   ['ariaSpeed15', 'Set speed to 1.5×', '速度设为 1.5×'],
   ['ariaSpeed3', 'Set speed to 3×', '速度设为 3×'],
   ['ariaLanguage', 'Language', '语言'],
-  ['ariaDialog', 'Dialog', '对话框']
+  ['ariaDialog', 'Dialog', '对话框'],
+
+  // Keys the panels already look up. These replace local fallbacks.
+  ['armoryIntro', 'Settled runs pay currency for equipment and permanent hero upgrades. Bonuses stay bounded, and Normal remains playable without them.', '已结算的对局提供货币，用于购买装备和永久英雄升级。加成有上限，标准难度不依赖它们也能游玩。'],
+  ['bonuses', 'Current bonuses', '当前加成'],
+  ['rewardBonusNote', 'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.', '报酬加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。'],
+  ['equipReplaces', 'Choosing another item for the same slot replaces the equipped one.', '为同一位置选择另一件装备时，会替换当前装备。'],
+  ['codexRankNote', 'Listed tower and recipe numbers are the catalog stats. Rank raises a unit from 1 to 4 without changing its identity.', '列出的防御塔与配方数值来自图鉴。阶数会把单位从 1 阶提升到最高 4 阶，种类保持不变。'],
+  ['settingsKeepRun', 'Language, sound, motion, and difficulty choices keep the current run.', '语言、声音、动效和难度的更改都会保留当前对局。'],
+  ['difficultyNextRun', 'The highlighted difficulty is used the next time you start a run.', '高亮的难度会在下一局开始时使用。'],
+  ['difficultyRewards', 'Higher difficulties increase enemy pressure and the reward multiplier.', '更高的难度会提高敌人压力和报酬倍率。'],
+  ['helpRole', 'You plan, build, and decide. Towers and the hero attack on their own. There are no active combat abilities and no direct hero control.', '你负责布阵、建造和抉择。防御塔与英雄会自动攻击。没有主动战斗技能，也不能直接操纵英雄作战。'],
+  ['helpAura', 'A support aura boosts nearby defenders. Its damage and haste bonuses are fractional and combat caps them.', '支援光环强化附近的防守者。其中的伤害和攻速是比例加成，战斗中会限制上限。'],
+  ['helpBoard', 'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the rear center.', '敌人向下接近栅栏。栅栏后是两行，每行五个格子。英雄从后排正中开始。'],
+  ['helpRows', 'Front row, then rear row. The marked slot is the hero’s starting slot.', '上方是前排，下方是后排。标出的格子是英雄的起始位置。'],
+  ['enemyApproach', 'Enemies approach from above.', '敌人从上方接近。'],
+  ['enemyFenceOnly', 'This enemy attacks the fence only.', '这种敌人只攻击栅栏。'],
+  ['fenceDamage', 'Fence damage', '栅栏承受伤害'],
+  ['health', 'Health', '生命'],
+  ['saveHelp', 'Export creates a JSON save of the profile and run. Import replaces them only when the file is valid. An invalid file keeps the current save.', '导出会生成包含档案和对局的 JSON 存档。只有文件有效时，导入才会替换它们。无效文件会保留当前存档。'],
+  ['copySave', 'Copy save', '复制存档'],
+  ['copyUnavailable', 'Select the save text to copy it.', '请选中存档文本进行复制。'],
+  ['noOutcome', 'This run has no settled outcome yet.', '这局还没有结算结果。'],
+  ['settlementPending', 'The reward appears here after the run is settled.', '本局结算后才会显示报酬。'],
+  ['on', 'On', '开启'],
+  ['off', 'Off', '关闭'],
+  ['unavailable', 'Not available', '暂不可用'],
+  ['missing', 'Still waiting', '还在等待'],
+  ['invalidProfile', 'That profile is not valid', '这份档案无效'],
+  ['error', 'Something went wrong', '出了点问题'],
+  ['bad-phase', 'Not available right now', '现在不能这么做'],
+  ['bad-speed', 'Speed stays at 1×, 1.5×, or 3×', '速度只能是 1×、1.5× 或 3×'],
+  ['bad-language', 'Language is English or Chinese', '语言只能是中文或英文'],
+  ['bad-screen', 'Unknown screen', '未知界面'],
+  ['unknown-action', 'Unknown action', '未知操作'],
+  ['backRow', 'Rear row', '后排'],
+  ['critDamage', 'Crit damage', '暴击伤害'],
+  ['projectile', 'Projectile speed', '弹速'],
+  ['pauseToPlan', 'Pause to move defenders or merge towers.', '暂停后才能移动防守者或合成防御塔。'],
+  ['planningLocked', 'The fight is running. Pause to move or merge.', '战斗进行中。暂停后才能移动或合成。'],
+  ['noMergePartner', 'A merge needs two towers. The hero stays independent.', '合成需要两座防御塔。英雄保持独立。'],
+  ['heroNoMerge', 'The hero stays independent. Move the hero during planning. Merges and replacement leave the hero in place.', '英雄保持独立。布阵时可以移动英雄。合成和替换都不会动英雄。'],
+  ['placeHint', 'Choose an empty slot. Occupied towers stay unless this card is a replacement.', '选择一个空位。已有的防御塔会留下，除非这张卡是替换。'],
+  ['replaceHeroSafe', 'Choose the tower to replace. The hero stays in place.', '选择要替换的防御塔。英雄会留在原位。'],
+  ['confirmReplaceBody', 'The tower in this slot will be removed.', '这个格子上的防御塔会被移除。'],
+  ['statsUnavailable', 'Stats will appear when the catalog is ready.', '图鉴就绪后会显示属性。'],
+  ['emptySelection', 'Select a slot to see its stats.', '选择一个格子以查看属性。'],
+  ['sameTypeMerge', 'Same type and rank combine into the next rank.', '相同种类且阶数相同，会升到下一阶。'],
+  ['hybridMerge', 'This pair becomes the hybrid below.', '这一对会变成下面的混合单位。'],
+  ['maxRankNote', 'Rank 4 can form a hybrid with a different rank-4 base tower when a recipe exists.', '4 阶可以与另一座 4 阶的不同基础塔按配方合成混合单位。'],
+  ['supportNote', 'Support range is a circle from this slot. Aura bonuses reach defenders inside that circle. Attacks use the same geometric range.', '支援范围以这个格子为圆心。光环加成覆盖圆内的防守者。攻击也按这个几何距离判定。'],
+  ['youGain', 'Result', '结果'],
+  ['currentStats', 'Stats', '属性'],
+  ['mergeReview', 'Review the merge, then confirm or cancel. Both units stay if you cancel.', '先查看合成结果，再确认或取消。取消会保留双方。'],
+  ['lostOnReplace', 'Removed tower', '被移除的防御塔'],
+  ['chooseEmpty', 'Empty slots are ready for placement.', '空位可以直接放置。'],
+  ['heroStays', 'The hero stays on the board.', '英雄会留在场上。'],
+  ['noValidTarget', 'No legal merge is available from this tower.', '这座防御塔目前没有合法的合成对象。'],
+  ['moveHint', 'Choose a destination. An occupied slot swaps places.', '选择目标格子。已占用的格子会对调。'],
+  ['mergeHint', 'Choose a tower of equal rank. The preview explains the result before you confirm.', '选择一座同阶防御塔。确认前会显示合成结果。'],
+  ['sourceHint', 'Choose the defender to move.', '选择要移动的防守者。'],
+  ['mergeSourceHint', 'Choose the first tower. The hero is not a merge ingredient.', '选择第一座防御塔。英雄不能作为合成材料。'],
+  ['buildPanelLabel', 'Build, draft, and merge', '构筑、整备与合成'],
+  ['kindTower', 'Tower', '防御塔'],
+  ['no_draft', 'There is no draft right now', '当前没有整备'],
+  ['no_options', 'There is no draft right now', '当前没有整备'],
+  ['not_placing', 'There is nothing to place', '当前没有要放置的单位'],
+  ['not_playing', 'The fight is not running', '当前不在战斗中'],
+  ['not_ready', 'Not enough XP for a draft yet', '经验还不够，还不能整备'],
+  ['already_placing', 'Finish placing the current tower first', '请先放好当前的防御塔'],
+  ['busy', 'A draft is already open', '整备已经打开'],
+  ['bad_index', 'That choice is not available', '没有这个选项'],
+  ['bad_option', 'That choice is not available', '没有这个选项'],
+  ['upgrade_failed', 'That upgrade could not be applied', '这次升级没有生效'],
+  ['unknown_tower', 'Unknown tower', '未知防御塔'],
+  ['replace_not_offered', 'This choice cannot replace a tower', '这个选项不能替换防御塔'],
+  ['no_slot', 'The board is full', '格子已满'],
+  ['draft_missing', 'That draft is no longer available', '这次整备已经不在了'],
+  ['unknown_upgrade', 'Unknown upgrade', '未知升级'],
+  ['upgrade_capped', 'Already at max level', '已经达到最高级'],
+  ['no_hero', 'The hero is missing', '场上没有英雄'],
+  ['invalid_state', 'That action is not available', '现在不能这么做']
 ];
 
 function buildMessages(rows) {
@@ -3349,8 +3456,10 @@ const RECIPES = __ff_m1["RECIPES"];
  * contact-shadow row — on (x, y). The cached image is 40×40, inside the
  * 24–40px art range, and slots are 64×72.
  *
- * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Parents
- * come from RECIPES (id + parents), then unit.parents / ingredients /
+ * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Each
+ * hybrid joins that pair's two parent shapes — bow, flame bowl, crystal,
+ * spark coil, flask, banner — so it reads as a combination, not a recolor.
+ * Parents come from RECIPES (id + parents), then unit.parents / ingredients /
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
  * Nothing here reads or writes gameplay RNG or run state.
@@ -4064,51 +4173,199 @@ function paintBolt(p, rank) {
   }
 }
 
-function paintFire(p, rank) {
-  drawFlame(p, 20, 2, rank >= 4 ? 15 : 13, 'fire');
-  speckle(p, 10, 18, 20, 8, 'X', 'K', 'w');
-  p.hline(9, 18, 22, 'n');
-  p.hline(11, 17, 18, 'N');
-  p.fill(13, 20, 14, 4, 'F');
-  p.px(15, 21, 'A');
-  p.px(20, 22, p.frame % 2 ? 'a' : 'f');
-  p.px(24, 21, 'f');
-  p.px(17, 23, 'A');
-  p.vline(12, 26, 5, 'N');
-  p.vline(27, 26, 5, 'N');
-  p.hline(12, 30, 16, 'n');
-  if (rank >= 2) {
-    p.px(9, 18, 'b');
-    p.px(30, 18, 'b');
+function drawCoupling(p, rank) {
+  p.fill(3, 27, 34, 3, 'X');
+  p.hline(3, 27, 34, 'n');
+  p.hline(5, 29, 30, 'k');
+  p.fill(16, 17, 6, 7, 'N');
+  p.hline(16, 17, 6, 'n');
+  p.px(18, 19, p.frame % 2 ? 'b' : 'M');
+  p.px(19, 21, 'k');
+  if (rank >= 3) p.px(17, 18, 'H');
+  if (rank >= 4) p.px(20, 18, 'h');
+}
+
+function drawCompactBow(p, ox, oy, rank) {
+  const lift = p.frame === 1 ? -1 : 0;
+  const cx = ox + 8;
+  const y0 = oy + lift;
+  p.fill(ox + 4, oy + 16, 9, 13, 'r');
+  p.vline(ox + 4, oy + 16, 13, 'R');
+  p.vline(ox + 12, oy + 16, 13, 'R');
+  p.hline(ox + 4, oy + 16, 9, 'Y');
+  p.hline(ox + 4, oy + 22, 9, 'N');
+  p.hline(ox + 5, oy + 27, 7, 'n');
+  p.fill(ox + 6, oy + 14, 5, 4, 'R');
+  p.px(ox + 7, oy + 15, 'Y');
+  p.fill(ox + 6, oy + 19, 5, 4, 'N');
+  p.fill(ox + 7, oy + 20, 3, 2, 'n');
+  p.px(ox + 8, oy + 20, p.frame % 2 ? 'b' : 'M');
+  const limb = [[0, 18], [1, 17], [2, 16], [3, 15], [4, 14], [5, 13], [6, 12], [7, 12]];
+  for (const [dx, dy] of limb) {
+    p.px(ox + dx, oy + dy, 'Y');
+    p.px(ox + dx, oy + dy + 1, 'r');
+    p.px(ox + dx, oy + dy + 2, 'R');
+    const right = ox + 16 - dx;
+    p.px(right, oy + dy, 'Y');
+    p.px(right, oy + dy + 1, 'r');
+    p.px(right, oy + dy + 2, 'R');
   }
-  if (rank >= 4) p.px(20, 1, 'W');
+  p.fill(ox, oy + 19, 3, 2, 'N');
+  p.fill(ox + 14, oy + 19, 3, 2, 'N');
+  p.px(ox, oy + 19, 'n');
+  p.px(ox + 16, oy + 19, 'n');
+  p.hline(ox + 3, oy + 13, 11, 'N');
+  p.px(cx, oy + 13, 'n');
+  p.px(cx, y0, 'W');
+  p.px(cx - 1, y0 + 1, 'n');
+  p.px(cx, y0 + 1, 'M');
+  p.px(cx + 1, y0 + 1, 'n');
+  p.vline(cx, y0 + 2, 8, 'N');
+  p.vline(cx + 1, y0 + 2, 8, 'k');
+  p.px(cx - 2, y0 + 9, 'Y');
+  p.px(cx - 1, y0 + 8, 'r');
+  p.px(cx + 2, y0 + 8, 'r');
+  p.px(cx + 3, y0 + 9, 'Y');
+  if (rank >= 3) p.px(cx, Math.max(0, y0 - 1), 'h');
+  if (rank >= 4) p.px(cx + 1, Math.max(0, y0 - 1), 'W');
+}
+
+function drawEmberBowl(p, cx, top, flameH, wide) {
+  drawFlame(p, cx, top, flameH, 'fire');
+  const rim = top + flameH;
+  const depth = Math.max(6, 27 - rim);
+  for (let i = 0; i < depth; i++) {
+    const t = depth <= 1 ? 0 : i / (depth - 1);
+    const half = Math.max(3, Math.round(wide * (1 - t * 0.2)));
+    const y = rim + i;
+    if (y > 29) break;
+    let color = 'F';
+    if (i === 0) color = 'n';
+    else if (i === 2 || i === Math.floor(depth * 0.55)) color = 'X';
+    else if (i === depth - 1) color = 'k';
+    p.hline(cx - half, y, half * 2 + 1, color);
+    if (color === 'F') p.px(cx - half + 1, y, 'u');
+    if (i === 1) {
+      p.px(cx - 1, y, p.frame % 2 ? 'a' : 'A');
+      p.px(cx + 1, y, 'f');
+    }
+  }
+  const baseY = Math.min(30, rim + depth);
+  if (baseY <= 30) {
+    const bw = Math.max(4, wide * 2 - 3);
+    const bx = cx - Math.floor(bw / 2);
+    p.fill(bx, baseY, bw, Math.max(1, 31 - baseY), 'N');
+    p.hline(bx, baseY, bw, 'n');
+  }
+}
+
+function drawCrystalMount(p, cx, top, height, wide) {
+  const tall = Math.max(14, Math.min(height, 27 - top));
+  drawCrystal(p, cx, top, tall, wide);
+  const seat = top + tall;
+  if (seat <= 30) {
+    p.hline(cx - 4, seat, 9, 'N');
+    p.px(cx - 4, seat, 'M');
+    p.px(cx + 4, seat, 'M');
+    if (seat + 1 <= 30) p.fill(cx - 2, seat + 1, 5, 30 - seat, 'I');
+  }
+}
+
+function drawSparkColumn(p, cx, top, rank) {
+  const sag = p.frame % 2;
+  const rise = rank >= 4 ? 0 : 1;
+  drawZig(p, [
+    [cx, top + rise],
+    [cx + 4, top + 3],
+    [cx - 3, top + 6],
+    [cx + 3, top + 9 + sag],
+    [cx, top + 12]
+  ], 'Z', 'W');
+  drawSparks(p, [[cx - 4, top + 4], [cx + 4, top + 7], [cx, top + rise]]);
+  drawCoils(p, cx, top + 13, 3, 4);
+  p.fill(cx - 4, 26, 9, 4, 'X');
+  p.hline(cx - 4, 26, 9, 'U');
+  p.px(cx, 27, p.frame % 2 ? 'Z' : 'u');
+  if (rank >= 4) p.px(cx + (p.frame % 2 ? 4 : -4), top + 2, 'h');
+}
+
+function drawVial(p, cx, top, liquid, rank) {
+  p.fill(cx - 1, top, 3, 2, 'Y');
+  p.px(cx, top, rank >= 4 ? 'h' : 'y');
+  p.fill(cx - 1, top + 2, 3, 3, 'r');
+  p.px(cx - 1, top + 2, 'R');
+  p.px(cx + 1, top + 3, 'Y');
+  p.fill(cx - 1, top + 5, 3, 2, 'O');
+  p.vline(cx - 1, top + 5, 2, 'o');
+  p.vline(cx + 1, top + 5, 2, 'o');
+  oval(p, cx, top + 12, 6, 6, 'O');
+  oval(p, cx, top + 13, 4.3, 4, liquid, (_x, y) => y >= top + 11);
+  p.hline(cx - 3, top + 11, 7, liquid === 'g' ? 'Q' : 'L');
+  p.px(cx - 4, top + 10, 'W');
+  p.px(cx - 3, top + 12, 'q');
+  const bubble = top + 14 + ((p.frame + 4) % 3);
+  p.px(cx + 2, bubble, 'W');
+  if (rank >= 3) p.px(cx - 1, bubble + 1, 'q');
+  const foot = top + 18;
+  if (foot <= 30) {
+    p.fill(cx - 3, foot, 7, Math.max(1, 30 - foot), 'x');
+    p.hline(cx - 3, foot, 7, 'o');
+  }
+  p.px(cx, Math.min(29, top + 17), p.frame % 2 ? 'Q' : 'g');
+}
+
+function drawBanner(p, ox, top, clothW, clothH) {
+  const poleTop = top + 3;
+  p.vline(ox, poleTop, Math.max(4, 31 - poleTop), 'n');
+  p.vline(ox + 1, poleTop + 1, Math.max(3, 30 - poleTop), 'N');
+  p.fill(ox - 1, top, 4, 3, 'H');
+  p.px(ox, top, p.frame % 2 ? 'W' : 'h');
+  p.px(ox + 1, top + 1, 'b');
+  drawFlag(p, ox + 2, top + 4, clothW, clothH);
+}
+
+function paintFire(p, rank) {
+  const flameH = rank >= 4 ? 14 : 12;
+  const wide = rank >= 3 ? 8 : 7;
+  drawEmberBowl(p, 20, 1, flameH, wide);
+  if (rank >= 2) {
+    p.px(20 - 4, 1 + flameH, 'b');
+    p.px(20 + 4, 1 + flameH, 'b');
+  }
+  if (rank >= 4) p.px(20, 0, 'W');
 }
 
 function paintFrost(p, rank) {
-  drawCrystal(p, 20, 3, rank >= 4 ? 20 : 18, rank >= 3 ? 7 : 6);
-  p.fill(12, 22, 4, 8, 'N');
-  p.fill(24, 22, 4, 8, 'N');
-  p.px(13, 23, 'M');
-  p.px(25, 23, 'M');
-  p.hline(14, 24, 12, 'i');
-  speckle(p, 14, 26, 12, 5, 'I', 'K', 'i');
-  p.px(16, 27, 'l');
-  p.px(23, 28, 'L');
+  const wide = rank >= 3 ? 7 : 6;
+  const tall = rank >= 4 ? 24 : 22;
+  p.fill(12, 24, 16, 6, 'I');
+  p.hline(11, 24, 18, 'i');
+  p.hline(13, 29, 14, 'N');
+  p.px(14, 25, 'l');
+  p.px(25, 26, 'L');
+  p.px(20, 27, p.frame % 2 ? 'W' : 'l');
   if (rank >= 2) {
-    p.px(12, 22, 'b');
-    p.px(27, 22, 'b');
+    p.px(11, 24, 'b');
+    p.px(28, 24, 'b');
   }
+  drawCrystal(p, 20, 1, tall, wide);
 }
 
 function paintLightning(p, rank) {
-  drawCoils(p, 19, 8, rank >= 4 ? 5 : 4, 4);
-  drawSparks(p, [[19, 4], [16, 6], [23, 5], [14, 9], [25, 12]]);
-  p.px(20, 3, p.frame % 2 ? 'W' : 'Z');
-  speckle(p, 13, 26, 14, 5, 'X', 'V', 'w');
-  p.hline(14, 26, 12, 'U');
-  p.px(16, 28, 'Z');
-  p.px(23, 29, 'v');
-  if (rank >= 3) p.px(19, 2, 'h');
+  const sag = p.frame === 2 ? 1 : 0;
+  drawZig(p, [[20, 1], [31, 5], [11, 9], [29, 13], [15, 17 + sag]], 'Z', 'W');
+  drawSparks(p, [[9, 4], [33, 7], [10, 13], [32, 15], [20, 2]]);
+  drawCoils(p, 20, 18, 3, 4);
+  p.hline(12, 29, 16, 'U');
+  p.vline(13, 26, 5, 'V');
+  p.vline(26, 26, 5, 'V');
+  p.px(15, 27, 'Z');
+  p.px(24, 28, 'v');
+  if (rank >= 3) p.px(20, 0, 'h');
+  if (rank >= 4) {
+    p.px(8, 6, 'W');
+    p.px(34, 10, 'z');
+  }
 }
 
 function paintPoison(p, rank) {
@@ -4141,229 +4398,106 @@ function paintSupport(p, rank) {
 }
 
 function paintCinderQuarrel(p, rank) {
-  drawBow(p, 'A', 'f', 'F', 'b', 'R');
-  drawFlame(p, 20, 2, 12, 'fire');
-  p.fill(18, 22, 4, 3, 'F');
-  p.px(19, 23, p.frame % 2 ? 'a' : 'A');
-  p.px(15, 25, 'k');
-  p.px(24, 28, 'F');
-  drawWinch(p, rank);
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
 }
 
 function paintHailSpike(p, rank) {
-  drawBow(p, 'l', 'L', 'I', 'E', 'i');
-  drawCrystal(p, 20, 2, 14, 3);
-  p.px(15, 21, 'W');
-  p.px(25, 24, 'l');
-  p.px(17, 28, 'L');
-  p.px(22, 26, 'I');
-  if (rank >= 2) p.hline(14, 22, 12, 'l');
-  drawWinch(p, rank);
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawCrystalMount(p, 29, 2, rank >= 4 ? 25 : 23, 6);
 }
 
 function paintStormLance(p, rank) {
-  drawBow(p, 'u', 'U', 'B', 'Z', 'N');
-  const shift = p.frame % 2;
-  drawZig(p, [[20, 3], [23, 6], [16, 9], [22, 12 + shift], [18, 16]], 'Z', 'W');
-  p.fill(15, 24, 10, 4, 'V');
-  p.px(17, 25, 'v');
-  p.px(22, 26, p.frame === 2 ? 'z' : 'Z');
-  drawSparks(p, [[14, 18], [26, 18], [20, 2]]);
-  if (rank >= 4) p.px(20, 1, 'W');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawSparkColumn(p, 28, 1, rank);
 }
 
 function paintVenomSpine(p, rank) {
-  drawBow(p, 'Q', 'g', 'G', 'o', 'R');
-  drawFlask(p, 18, 1, 'g', 'q');
-  p.px(16, 12, 'G');
-  p.px(23, 13, 'Q');
-  p.px(15, 14, 'g');
-  p.px(24, 15, 'q');
-  p.px(20, 30, p.frame % 2 ? 'Q' : 'g');
-  p.px(21, 29, 'G');
-  if (rank >= 3) p.px(14, 20, 'q');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawVial(p, 29, 4, 'g', rank);
 }
 
 function paintSignalShot(p, rank) {
-  drawBow(p, 'Y', 'r', 'R', 'b', 'r');
-  drawQuarrel(p, 'H', 'n', 0);
-  drawFlag(p, 26, 8, 8, 12);
-  p.vline(25, 6, 18, 'H');
-  p.px(25, 5, 'h');
-  p.fill(15, 24, 3, 3, 't');
-  p.px(16, 25, 'E');
-  if (rank >= 4) p.hline(12, 17, 16, 'H');
+  drawCoupling(p, rank);
+  drawCompactBow(p, 0, 2, rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintSteamVent(p, rank) {
-  drawCrystal(p, 20, 4, 8, 3);
-  oval(p, 20, 22, 12, 6, 'B');
-  oval(p, 20, 23, 9, 4, 'U');
-  p.fill(16, 20, 8, 4, 'F');
-  p.px(18, 21, 'A');
-  p.px(22, 22, p.frame % 2 ? 'a' : 'f');
-  drawFlame(p, 20, 1, 6, 'steam');
-  p.hline(8, 18, 24, 'b');
-  p.fill(11, 27, 3, 3, 'N');
-  p.fill(26, 27, 3, 3, 'N');
-  p.px(14, 24, 'l');
-  p.px(26, 23, 'L');
-  if (rank >= 3) p.px(20, 16, 'W');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
+  p.px(18, 7 + (p.frame % 3), 'l');
+  p.px(20, 10, 'E');
+  p.px(19, 12, p.frame % 2 ? 'L' : 'a');
+  p.px(21, 14, 'A');
 }
 
 function paintPlasmaBrazier(p, rank) {
-  speckle(p, 10, 12, 20, 18, 'X', 'V', 'w');
-  p.fill(14, 16, 12, 10, 'F');
-  p.hline(13, 15, 14, 'U');
-  p.hline(13, 26, 14, 'u');
-  drawCoils(p, 19, 17, 2, 4);
-  drawFlame(p, 20, 4, rank >= 4 ? 12 : 10, 'plasma');
-  p.vline(12, 16, 10, 'b');
-  p.vline(27, 16, 10, 'b');
-  drawSparks(p, [[14, 14], [26, 13], [20, 3]]);
-  p.px(16, 20, 'z');
-  p.px(23, 22, 'Z');
+  drawCoupling(p, rank);
+  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
+  drawSparkColumn(p, 29, 1, rank);
 }
 
 function paintBlightKiln(p, rank) {
-  oval(p, 18, 22, 9, 7, 'X');
-  oval(p, 18, 23, 6, 4, 'G');
-  p.fill(14, 21, 8, 3, 'g');
-  drawFlame(p, 16, 6, 12, 'green');
-  p.fill(10, 12, 4, 8, 'x');
-  p.vline(11, 8, 6, 'o');
-  p.hline(24, 20, 6, 'U');
-  p.px(29, 19, 'u');
-  p.px(30, 18, p.frame % 2 ? 'Q' : 'g');
-  p.px(29, 21, 'q');
-  p.px(12, 16, 'm');
-  p.px(13, 15, 'Y');
-  if (rank >= 3) p.px(18, 24, 'q');
-  if (rank >= 4) p.px(15, 4, 'W');
+  drawCoupling(p, rank);
+  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
+  drawVial(p, 29, 4, 'g', rank);
+  p.px(16, 12, 'Q');
+  p.px(18, 15, 'g');
+  p.px(22, 18, p.frame % 2 ? 'Q' : 'q');
 }
 
 function paintWarBeacon(p, rank) {
-  p.vline(11, 3, 28, 'R');
-  p.vline(12, 4, 26, 'r');
-  p.fill(10, 2, 4, 3, 'A');
-  p.px(11, 1, p.frame % 2 ? 'W' : 'a');
-  drawFlag(p, 14, 7, 16, 16);
-  drawFlame(p, 22, 2, 8, 'fire');
-  p.hline(14, 7, 16, 'f');
-  p.px(16, 8, 'A');
-  p.px(26, 8, 'a');
-  p.fill(14, 24, 5, 3, 'B');
-  p.px(16, 25, 'H');
-  if (rank >= 4) p.px(12, 1, 'h');
+  drawCoupling(p, rank);
+  drawBanner(p, 1, 2, 12, rank >= 4 ? 15 : 13);
+  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
 }
 
 function paintPrismCoil(p, rank) {
-  drawCrystal(p, 20, 4, 22, rank >= 3 ? 8 : 7);
-  p.hline(12, 12, 16, 'U');
-  p.hline(13, 13, 14, 'u');
-  p.hline(12, 20, 16, 'U');
-  p.hline(13, 21, 14, 'b');
-  drawSparks(p, [[12, 8], [28, 10], [14, 18], [27, 22], [20, 2]]);
-  p.vline(20, 2, 3, 'n');
-  p.px(19, 16, 'Z');
-  p.px(21, 17, p.frame === 1 ? 'W' : 'z');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawSparkColumn(p, 29, 1, rank);
+  p.px(16, 10, 'Z');
+  p.px(18, 13, p.frame % 2 ? 'W' : 'z');
 }
 
 function paintRimeUrn(p, rank) {
-  drawFlask(p, 18, 6, 'g', 'l');
-  drawCrystal(p, 12, 4, 10, 3);
-  drawCrystal(p, 27, 5, 9, 3);
-  p.hline(14, 12, 10, 'l');
-  p.px(16, 13, 'W');
-  p.px(22, 14, 'L');
-  p.px(19, 9, 'I');
-  if (rank >= 2) {
-    p.px(14, 16, 'q');
-    p.px(23, 18, 'L');
-  }
-  if (rank >= 4) p.px(20, 8, 'W');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 22 : 20, 5);
+  drawVial(p, 29, 4, 'g', rank);
+  p.px(24, 16, 'L');
+  p.px(33, 18, 'l');
 }
 
 function paintWardBell(p, rank) {
-  p.vline(20, 2, 4, 'n');
-  p.fill(18, 2, 4, 2, 'H');
-  const bellRows = 16;
-  for (let i = 0; i < bellRows; i++) {
-    const t = i / (bellRows - 1);
-    let half = 2;
-    if (t >= 0.2 && t < 0.72) half = 2 + Math.round(((t - 0.2) / 0.52) * 6);
-    else if (t >= 0.72) half = 8 + Math.round(((t - 0.72) / 0.28) * 2);
-    const y = 6 + i;
-    const color = t < 0.16 ? 'l' : t < 0.55 ? 'L' : t < 0.82 ? 'i' : 'I';
-    p.hline(20 - half, y, half * 2 + 1, color);
-    p.px(20 - Math.max(0, half - 2), y, t > 0.3 && (i + p.frame) % 4 === 0 ? 'W' : 'l');
-    if (t > 0.82) {
-      p.px(20 - half - 1, y, 'n');
-      p.px(20 + half + 1, y, 'n');
-    }
-  }
-  p.hline(10, 21, 21, 'n');
-  p.vline(20, 16, 4, 'B');
-  p.px(20, 20, 'H');
-  drawFlag(p, 26, 8, 8, 10);
-  p.hline(8, 20, 6, 'D');
-  p.px(8, 19, 't');
-  if (rank >= 3) p.px(14, 16, 'h');
-  if (rank >= 4) p.hline(12, 19, 16, 'b');
+  drawCoupling(p, rank);
+  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
+  drawBanner(p, 21, 2, 13, 14);
 }
 
 function paintAcidArc(p, rank) {
-  drawFlask(p, 18, 8, 'g', 'q');
-  drawCoils(p, 8, 14, 2, 4);
-  drawCoils(p, 30, 14, 2, 4);
+  drawCoupling(p, rank);
+  drawSparkColumn(p, 10, 1, rank);
+  drawVial(p, 29, 4, 'g', rank);
   const sag = p.frame % 2;
-  drawZig(p, [[10, 12], [16, 8], [20, 6 - sag], [24, 8], [30, 12]], 'Q', 'z');
-  p.px(20, 5, p.frame === 0 ? 'W' : 'Z');
-  p.fill(16, 26, 6, 2, 'U');
-  if (rank >= 3) p.px(14, 20, 'Z');
-  if (rank >= 4) p.px(24, 18, 'h');
+  drawZig(p, [[15, 7], [20, 4 - sag], [25, 7]], 'Z', 'Q');
 }
 
 function paintRelayStandard(p, rank) {
-  p.vline(14, 4, 27, 'n');
-  p.vline(15, 5, 25, 'N');
-  for (let i = 0; i < 8; i++) {
-    const y = 6 + i * 3;
-    const dir = (i + p.frame) % 2 === 0 ? 1 : -1;
-    p.px(14 + dir * 2, y, 'u');
-    p.px(15 + dir * 2, y, 'U');
-    p.px(14, y + 1, 'Z');
-  }
-  p.fill(12, 2, 5, 3, 'H');
-  p.px(14, 1, p.frame % 2 ? 'W' : 'Z');
-  drawFlag(p, 18, 8, 12, 12);
-  p.fill(12, 24, 6, 5, 'V');
-  p.px(14, 26, 'v');
-  p.px(16, 25, 'Z');
-  drawSparks(p, [[18, 6], [28, 10], [14, 2]]);
-  if (rank >= 4) p.px(15, 0, 'h');
+  drawCoupling(p, rank);
+  drawSparkColumn(p, 10, 1, rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintPlagueAltar(p, rank) {
-  p.vline(20, 2, 3, 'n');
-  for (let i = 0; i < 4; i++) {
-    const y = 5 + i * 3;
-    p.px(19, y, 'N');
-    p.px(20, y, 'M');
-    p.px(21, y, 'N');
-    p.px(20, y + 1, 'n');
-  }
-  oval(p, 20, 22, 7, 5, 'G');
-  oval(p, 20, 23, 5, 3, 'g');
-  p.hline(15, 19, 10, 'o');
-  p.px(17, 21, 'q');
-  p.px(22, 22, p.frame % 2 ? 'Q' : 'g');
-  drawFlame(p, 20, 8, 7, 'green');
-  drawFlag(p, 26, 12, 8, 12);
-  p.fill(12, 24, 4, 3, 'B');
-  p.px(13, 25, 'H');
-  if (rank >= 2) p.px(16, 26, 'm');
-  if (rank >= 4) p.px(20, 7, 'W');
+  drawCoupling(p, rank);
+  drawVial(p, 10, 4, 'g', rank);
+  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
 }
 
 function paintReliquary(p, rank, accent) {
@@ -4505,6 +4639,8 @@ const slotGeometry = __ff_m0["slotGeometry"];
  * is recovered as shot, hit, or status when position or damage is present.
  * Reduced motion keeps markers, rings at their start size, crits, and numbers,
  * and drops traveling debris.
+ * A shot is a short arrow leaving the defender. An impact is a starburst with
+ * a damage number. A fence hit is a red bite in the fence rail with its own number.
  */
 
 
@@ -4719,8 +4855,11 @@ function readRank(event) {
 function readSplash(event) {
   if (event.splash === true) return 18;
   const n = finite(event.splash);
-  if (n == null || n <= 0) return 0;
-  return Math.max(8, Math.min(84, n));
+  if (n != null && n > 0) return Math.max(8, Math.min(84, n));
+  if (n != null) return 0;
+  const attack = normName(event.attack || event.impact || '');
+  if (attack === 'splash' || attack === 'aoe') return 16;
+  return 0;
 }
 
 function readCount(value, max) {
@@ -4972,6 +5111,29 @@ function visualPoint(desc) {
   return fallbackPoint(desc.type);
 }
 
+// Defenders sit below the fence and fire toward the field, so a shot with no
+// target aims up. Eight directions keep the arrow on whole pixels.
+function shotOctant(desc, point) {
+  let dx = 0;
+  let dy = point.y >= ARENA.fenceY - 4 ? -1 : 1;
+  if (desc.target) {
+    const tdx = desc.target.x - point.x;
+    const tdy = desc.target.y - point.y;
+    if (Math.abs(tdx) + Math.abs(tdy) >= 4) {
+      dx = tdx;
+      dy = tdy;
+    }
+  }
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  let ux = 0;
+  let uy = 0;
+  if (adx >= ady * 0.45) ux = dx < 0 ? -1 : 1;
+  if (ady >= adx * 0.45) uy = dy < 0 ? -1 : 1;
+  if (ux === 0 && uy === 0) uy = dy < 0 ? -1 : 1;
+  return { x: ux, y: uy };
+}
+
 function createEffects() {
   const particles = [];
   const floaters = [];
@@ -4992,16 +5154,66 @@ function createEffects() {
     particles.push(particle);
   }
 
-  function pushRing(x, y, radius, grow, color, life) {
+  function pushRing(x, y, radius, grow, color, life, weight) {
     if (!Number.isFinite(x) || !Number.isFinite(y) || !(radius > 0)) return;
     rings.push({
-      x, y,
+      x: Math.round(x),
+      y: Math.round(y),
       r: radius,
       r0: radius,
       vr: grow,
       color,
       life,
       maxLife: life,
+      weight: weight > 1 ? 2 : 1,
+    });
+  }
+
+  function pushStreak(x, y, ux, uy, length, palette, crit, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if ((ux | 0) === 0 && (uy | 0) === 0) return;
+    pushParticle({
+      kind: 'streak',
+      x: Math.round(x),
+      y: Math.round(y),
+      ux: ux | 0,
+      uy: uy | 0,
+      length: Math.max(6, Math.min(16, length | 0)),
+      shaft: palette.hot,
+      head: crit ? '#ffe56a' : palette.core,
+      edge: palette.dim,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushImpact(x, y, arm, palette, crit, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'impact',
+      x: Math.round(x),
+      y: Math.round(y),
+      arm: Math.max(3, Math.min(7, arm | 0)),
+      color: palette.hot,
+      core: palette.core,
+      crit: !!crit,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushNotch(x, y, heavy, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'notch',
+      x: Math.round(x),
+      y: Math.round(y),
+      heavy: !!heavy,
+      life,
+      maxLife: life,
+      motionOnly: false,
     });
   }
 
@@ -5071,7 +5283,7 @@ function createEffects() {
   function pushFloater(x, y, text, color, scale, crit, channel, life, seed) {
     if (!text) return;
     const anchorX = x;
-    const anchorY = y - (channel === 'fence' ? 14 : 12);
+    const anchorY = y - (channel === 'fence' ? 20 : 12);
     const amount = Number(String(text).replace('+', '')) || 0;
     const recent = findFloater(anchorX, anchorY, channel, crit);
     if (recent) {
@@ -5083,12 +5295,13 @@ function createEffects() {
       return;
     }
     const jitter = (rand01(seed) - 0.5) * 6;
-    const originX = anchorX + jitter;
+    const originX = Math.round(anchorX + jitter);
+    const originY = Math.round(anchorY);
     floaters.push({
       x: originX,
-      y: anchorY,
+      y: originY,
       originX,
-      originY: anchorY,
+      originY,
       anchorX,
       anchorY,
       text,
@@ -5118,8 +5331,9 @@ function createEffects() {
   function showNumber(desc, x, y, seed, palette) {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
+      const lift = desc.crit ? 10 : 4;
       pushFloater(
-        x, y, text,
+        x, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
         desc.crit ? 3 : 2,
         desc.crit,
@@ -5135,53 +5349,30 @@ function createEffects() {
     }
   }
 
-  function spawnShot(desc, seed) {
+  function spawnShot(desc) {
     const point = visualPoint(desc);
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
-    const style = STYLE[desc.behavior] || STYLE.hybrid;
-    pushPlus(point.x, point.y, 2, palette.hot, palette.core, 0.16);
-    pushBlock(point.x, point.y, 2, 2, palette.core, 0.08);
-    if (style.ring) pushRing(point.x, point.y, 8, 22, palette.mid, 0.28);
-    if (style.arc && desc.target) {
-      pushArc(point.x, point.y, desc.target.x, desc.target.y, palette.core, desc.behavior === 'lightning' ? 0.1 : 0.14, style.jitter, seed);
-    }
-    if (style.sparks > 0) {
-      burst(point.x, point.y, style.sparks, style.speed, style.gravity, style.up, palette.hot, 0.2, seed, 2);
-    }
+    const aim = shotOctant(desc, point);
+    pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, desc.crit ? 0.2 : 0.16);
   }
 
   function spawnHit(desc, seed) {
     const point = visualPoint(desc);
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
-    const style = STYLE[desc.behavior] || STYLE.hybrid;
-    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28);
-    if (desc.crit) pushRing(point.x, point.y, 7, 34, '#ffe56a', 0.26);
-    pushBlock(point.x, point.y, desc.crit ? 5 : 3, desc.crit ? 5 : 3, palette.core, 0.09);
-    pushPlus(point.x, point.y, desc.crit ? 4 : 2, desc.crit ? '#ffe56a' : palette.hot, palette.core, desc.crit ? 0.28 : 0.18);
-    const sparks = style.sparks + (desc.crit ? 4 : 0);
-    if (sparks > 0) {
-      burst(point.x, point.y, sparks, style.speed * (desc.crit ? 1.25 : 0.85), style.gravity, style.up, palette.hot, 0.22, seed, desc.crit ? 2 : 2);
-    }
-    if (desc.behavior === 'lightning') {
-      if (desc.points.length) {
-        const hops = Math.min(desc.points.length, Math.max(desc.chain, 1));
-        for (let i = 0; i < hops; i++) {
-          const hop = desc.points[i];
-          pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, 14, seed + i * 9);
-        }
-      } else {
-        pushArc(point.x, point.y, point.x + 10, point.y - 16, palette.core, 0.1, 8, seed);
-      }
-    } else if (desc.points.length && desc.chain > 0) {
-      const hops = Math.min(desc.points.length, desc.chain);
+    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
+    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
+    pushImpact(point.x, point.y, desc.crit ? 6 : 4, palette, desc.crit, desc.crit ? 0.28 : 0.2);
+    if (desc.points.length && (desc.behavior === 'lightning' || desc.chain > 0)) {
+      const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : 1, 3);
       for (let i = 0; i < hops; i++) {
-        pushArc(point.x, point.y, desc.points[i].x, desc.points[i].y, palette.hot, 0.12, 6, seed + i);
+        const hop = desc.points[i];
+        pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, desc.behavior === 'lightning' ? 10 : 4, seed + i * 9);
       }
     }
     showNumber(desc, point.x, point.y, seed, palette);
-    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 7, Math.min(4, desc.stacks), palette.mid, 0.36);
+    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
   }
 
   function spawnKill(desc, seed) {
@@ -5197,14 +5388,10 @@ function createEffects() {
   function spawnFence(desc, seed) {
     const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
     const y = ARENA.fenceY;
-    const damage = desc.damage != null && desc.damage > 0 ? desc.damage : 8;
-    const length = Math.max(10, Math.min(36, Math.round(8 + damage / 4)));
-    pushParticle({ kind: 'crack', x, y, length, color: PALETTES.fence.core, life: 0.34, maxLife: 0.34, motionOnly: false });
-    burst(x, y, 6, 42, 140, true, PALETTES.fence.hot, 0.32, seed, 2);
+    const damage = desc.damage != null && desc.damage > 0 ? desc.damage : 0;
+    pushNotch(x, y, damage >= 12, 0.46);
     const text = formatDamage(damage);
-    if (desc.damage != null && desc.damage > 0) {
-      pushFloater(x, y, text, '#ffb4a8', 2, false, 'fence', 0.48, seed);
-    }
+    if (text) pushFloater(x, y, text, '#ffb4a8', 2, false, 'fence', 0.52, seed);
   }
 
   function spawnMerge(desc, seed) {
@@ -5406,15 +5593,103 @@ function createEffects() {
     }
   }
 
-  function drawPixelRing(ctx, x, y, radius, color, alpha) {
+  function drawPixelRing(ctx, x, y, radius, color, alpha, weight) {
     if (!(radius > 0) || alpha < 0.02) return;
-    const steps = Math.max(6, Math.min(28, Math.round(radius * 1.25)));
+    const size = weight > 1 ? 2 : 1;
+    const steps = Math.max(8, Math.min(48, Math.round(radius * 1.15)));
+    const cx = Math.round(x);
+    const cy = Math.round(y);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
     for (let i = 0; i < steps; i++) {
       const angle = (i / steps) * Math.PI * 2;
-      ctx.fillRect(Math.round(x + Math.cos(angle) * radius), Math.round(y + Math.sin(angle) * radius), 1, 1);
+      ctx.fillRect(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius), size, size);
     }
+  }
+
+  function drawStreak(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
+    const ux = particle.ux | 0;
+    const uy = particle.uy | 0;
+    if (ux === 0 && uy === 0) return;
+    const px = -uy;
+    const py = ux;
+    const len = particle.length | 0;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.edge;
+    for (let i = 0; i <= len - 3; i++) {
+      const x = ox + ux * i;
+      const y = oy + uy * i;
+      ctx.fillRect(x + px, y + py, 1, 1);
+      ctx.fillRect(x - px, y - py, 1, 1);
+    }
+    ctx.fillStyle = particle.shaft;
+    for (let i = 0; i <= len - 3; i++) ctx.fillRect(ox + ux * i, oy + uy * i, 1, 1);
+    ctx.fillStyle = particle.head;
+    for (let i = Math.max(0, len - 2); i <= len; i++) ctx.fillRect(ox + ux * i, oy + uy * i, 1, 1);
+    const bx = ox + ux * (len - 2);
+    const by = oy + uy * (len - 2);
+    ctx.fillRect(bx + px * 2, by + py * 2, 1, 1);
+    ctx.fillRect(bx - px * 2, by - py * 2, 1, 1);
+  }
+
+  function drawImpact(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
+    const arm = Math.max(3, particle.arm | 0);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#140e0c';
+    ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
+    ctx.fillRect(cx - 1, cy - arm, 3, arm * 2 + 1);
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(cx - arm, cy, arm * 2 + 1, 1);
+    ctx.fillRect(cx, cy - arm, 1, arm * 2 + 1);
+    for (let i = 2; i < arm; i++) {
+      ctx.fillRect(cx + i, cy + i, 1, 1);
+      ctx.fillRect(cx - i, cy + i, 1, 1);
+      ctx.fillRect(cx + i, cy - i, 1, 1);
+      ctx.fillRect(cx - i, cy - i, 1, 1);
+    }
+    ctx.fillStyle = particle.core || particle.color;
+    ctx.fillRect(cx - 1, cy - 1, 3, 3);
+    if (particle.crit) {
+      ctx.fillStyle = '#ffe56a';
+      ctx.fillRect(cx - arm, cy, 1, 1);
+      ctx.fillRect(cx + arm, cy, 1, 1);
+      ctx.fillRect(cx, cy - arm, 1, 1);
+      ctx.fillRect(cx, cy + arm, 1, 1);
+    }
+  }
+
+  function drawNotch(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const y = Math.round(particle.y);
+    const heavy = particle.heavy ? 1 : 0;
+    const wing = 4 + heavy;
+    const gap = 2 + heavy;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#1a100c';
+    ctx.fillRect(cx - gap, y - 2, gap * 2, 5);
+    ctx.fillStyle = '#fff2dd';
+    ctx.fillRect(cx - wing - gap, y - 2, wing, 2);
+    ctx.fillRect(cx + gap, y - 2, wing, 2);
+    ctx.fillStyle = '#e7c89a';
+    ctx.fillRect(cx - wing - gap, y, wing, 1);
+    ctx.fillRect(cx + gap, y, wing, 1);
+    ctx.fillStyle = '#ff5a3c';
+    ctx.fillRect(cx - 1, y - 8, 2, 6);
+    ctx.fillStyle = '#fff2dd';
+    ctx.fillRect(cx - 1, y - 8, 2, 1);
+    ctx.fillStyle = '#c4543c';
+    ctx.fillRect(cx - 2 - heavy, y + 3, 1, 2);
+    ctx.fillRect(cx + 1 + heavy, y + 3, 1, 2);
+    ctx.fillStyle = '#e7c89a';
+    ctx.fillRect(cx - 3 - heavy, y + 5, 1, 1);
+    ctx.fillRect(cx + 2 + heavy, y + 5, 1, 1);
   }
 
   function drawPlus(ctx, x, y, arm, color, core, alpha) {
@@ -5512,22 +5787,30 @@ function createEffects() {
     if (!text || alpha < 0.02) return;
     const size = Math.max(1, scale | 0);
     const advance = 3 * size + size;
-    let cursor = Math.round(x - (text.length * advance - size) / 2);
+    const origin = Math.round(x - (text.length * advance - size) / 2);
     const top = Math.round(y);
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    for (let c = 0; c < text.length; c++) {
-      const glyph = GLYPHS[text[c]];
-      if (glyph) {
-        for (let row = 0; row < glyph.length; row++) {
-          const line = glyph[row];
-          for (let col = 0; col < line.length; col++) {
-            if (line[col] === '1') ctx.fillRect(cursor + col * size, top + row * size, size, size);
+    const blit = (offsetX, offsetY) => {
+      let cursor = origin + offsetX;
+      const rowTop = top + offsetY;
+      for (let c = 0; c < text.length; c++) {
+        const glyph = GLYPHS[text[c]];
+        if (glyph) {
+          for (let row = 0; row < glyph.length; row++) {
+            const line = glyph[row];
+            for (let col = 0; col < line.length; col++) {
+              if (line[col] === '1') ctx.fillRect(cursor + col * size, rowTop + row * size, size, size);
+            }
           }
         }
+        cursor += advance;
       }
-      cursor += advance;
-    }
+    };
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.fillStyle = '#140e0c';
+    blit(1, 1);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    blit(0, 0);
   }
 
   function drawFloater(ctx, floater, reduced) {
@@ -5564,6 +5847,15 @@ function createEffects() {
       case 'crack':
         drawCrack(ctx, particle, alpha);
         break;
+      case 'streak':
+        drawStreak(ctx, particle, alpha);
+        break;
+      case 'impact':
+        drawImpact(ctx, particle, alpha);
+        break;
+      case 'notch':
+        drawNotch(ctx, particle, alpha);
+        break;
       case 'glowline':
         drawGlowline(ctx, particle, alpha);
         break;
@@ -5580,7 +5872,7 @@ function createEffects() {
       try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
       for (let i = 0; i < rings.length; i++) {
         const ring = rings[i];
-        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95);
+        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95, ring.weight);
       }
       for (let i = 0; i < particles.length; i++) drawParticle(ctx, particles[i], reduced);
       for (let i = 0; i < floaters.length; i++) drawFloater(ctx, floaters[i], reduced);
@@ -5607,6 +5899,11 @@ __ff_exports["drawEnemy"] = drawEnemy;
  * Original enemy sprites. Bottom-center anchor, one logical pixel per cell.
  * enemySize is the opaque grid drawEnemy paints. Walk and attack frames
  * share that box. Hit flash stays a flat wash. No simulation state is touched.
+ *
+ * Each kind keeps one opaque box on every frame:
+ * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
+ * spitter 22×26, swarm 12×14, boss 48×52.
+ * A light rim (palette k) is the outer pixel so the shape reads on #122128.
  */
 const PALETTES = {
   shambler: {k: '#efe6d2', '#': '#2a241c', o: '#8c8374', h: '#d9d0c0', e: '#f4e27a', s: '#1a1612'},
@@ -5634,169 +5931,445 @@ function makeGrid(width, height) {
   };
 }
 
-function block(grid, x, y, width, height, ink) {
-  for (let iy = 0; iy < height; iy += 1) {
-    for (let ix = 0; ix < width; ix += 1) grid.put(x + ix, y + iy, ink);
+function fillEllipse(grid, cx, cy, rx, ry, ink) {
+  const radiusX = rx | 0;
+  const radiusY = ry | 0;
+  if (radiusX < 0 || radiusY < 0) return;
+  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
+    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
+      const dx = radiusX === 0 ? (x === cx ? 0 : 2) : (x - cx) / radiusX;
+      const dy = radiusY === 0 ? (y === cy ? 0 : 2) : (y - cy) / radiusY;
+      if (dx * dx + dy * dy <= 1) grid.put(x, y, ink);
+    }
   }
 }
 
-function plated(grid, x, y, width, height) {
-  block(grid, x, y, width, height, 'k');
-  if (width > 2 && height > 2) block(grid, x + 1, y + 1, width - 2, height - 2, '#');
-  if (width > 4 && height > 4) block(grid, x + 2, y + 2, width - 4, height - 4, 'o');
+function eraseEllipse(grid, cx, cy, rx, ry) {
+  fillEllipse(grid, cx, cy, rx, ry, '.');
 }
 
-function eyes(grid, x, y, gap) {
-  grid.put(x, y, 'e');
-  grid.put(x + 1, y, 'e');
-  grid.put(x + gap, y, 'e');
-  grid.put(x + gap + 1, y, 'e');
+function glaze(grid, cx, cy, rx, ry, ink) {
+  const radiusX = rx | 0;
+  const radiusY = ry | 0;
+  if (radiusX < 0 || radiusY < 0) return;
+  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
+    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
+      const ix = x | 0;
+      const iy = y | 0;
+      if (iy < 0 || ix < 0 || iy >= grid.height || ix >= grid.width) continue;
+      const prev = grid.rows[iy][ix];
+      if (prev === '.' || prev === 'e' || prev === 'r') continue;
+      const dx = radiusX === 0 ? 0 : (ix - cx) / radiusX;
+      const dy = radiusY === 0 ? 0 : (iy - cy) / radiusY;
+      if (dx * dx + dy * dy <= 1) grid.put(ix, iy, ink);
+    }
+  }
+}
+
+function limb(grid, x0, y0, x1, y1, r0, r1, ink) {
+  let x = x0 | 0;
+  let y = y0 | 0;
+  const xEnd = x1 | 0;
+  const yEnd = y1 | 0;
+  const dx = Math.abs(xEnd - x);
+  const dy = Math.abs(yEnd - y);
+  const sx = x < xEnd ? 1 : -1;
+  const sy = y < yEnd ? 1 : -1;
+  let err = dx - dy;
+  const total = Math.max(dx, dy, 1);
+  let walked = 0;
+  const stamp = () => {
+    const t = Math.min(1, walked / total);
+    const radius = Math.max(0, Math.round(r0 + (r1 - r0) * t));
+    fillEllipse(grid, x, y, radius, radius, ink);
+    walked += 1;
+  };
+  stamp();
+  while (x !== xEnd || y !== yEnd) {
+    const e2 = err * 2;
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+      stamp();
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+      stamp();
+    }
+  }
+}
+
+function bresenham(x0, y0, x1, y1, plot) {
+  let x = x0 | 0;
+  let y = y0 | 0;
+  const xEnd = x1 | 0;
+  const yEnd = y1 | 0;
+  const dx = Math.abs(xEnd - x);
+  const dy = Math.abs(yEnd - y);
+  const sx = x < xEnd ? 1 : -1;
+  const sy = y < yEnd ? 1 : -1;
+  let err = dx - dy;
+  plot(x, y);
+  while (x !== xEnd || y !== yEnd) {
+    const e2 = err * 2;
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+    plot(x, y);
+  }
+}
+
+function fillPoly(grid, points, ink) {
+  const n = points.length;
+  if (n < 3) return;
+  let minY = points[0][1];
+  let maxY = points[0][1];
+  for (let i = 1; i < n; i += 1) {
+    if (points[i][1] < minY) minY = points[i][1];
+    if (points[i][1] > maxY) maxY = points[i][1];
+  }
+  for (let y = minY; y <= maxY; y += 1) {
+    const nodes = [];
+    let j = n - 1;
+    for (let i = 0; i < n; i += 1) {
+      const yi = points[i][1];
+      const yj = points[j][1];
+      if ((yi < y && yj >= y) || (yj < y && yi >= y)) {
+        const xi = points[i][0];
+        const xj = points[j][0];
+        nodes.push(xi + ((y - yi) / (yj - yi)) * (xj - xi));
+      }
+      j = i;
+    }
+    nodes.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < nodes.length; i += 2) {
+      const x0 = Math.ceil(nodes[i]);
+      const x1 = Math.floor(nodes[i + 1]);
+      for (let x = x0; x <= x1; x += 1) grid.put(x, y, ink);
+    }
+  }
+  for (let i = 0; i < n; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % n];
+    bresenham(a[0], a[1], b[0], b[1], (x, y) => grid.put(x, y, ink));
+  }
+}
+
+function applyRim(grid) {
+  const {width, height, rows} = grid;
+  const src = rows.map((row) => row.slice());
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const ink = src[y][x];
+      if (ink === '.' || ink === 'e' || ink === 'r') continue;
+      const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1
+        || src[y - 1][x] === '.'
+        || src[y + 1][x] === '.'
+        || src[y][x - 1] === '.'
+        || src[y][x + 1] === '.';
+      if (edge) rows[y][x] = 'k';
+    }
+  }
 }
 
 function sprite(width, height, paint) {
   const grid = makeGrid(width, height);
   paint(grid);
-  return grid.rows.map(row => row.join(''));
+  applyRim(grid);
+  return grid.rows.map((row) => row.join(''));
+}
+
+function eye(grid, x, y) {
+  for (let dx = 0; dx < 2; dx += 1) {
+    const px = x + dx;
+    if (y < 0 || px < 0 || y >= grid.height || px >= grid.width) continue;
+    if (grid.rows[y][px] === '.') continue;
+    grid.put(px, y, 'e');
+  }
+}
+
+function over(grid, x, y, ink) {
+  if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
+  if (grid.rows[y][x] === '.' || grid.rows[y][x] === 'e' || grid.rows[y][x] === 'r') return;
+  grid.put(x, y, ink);
+}
+
+function seam(grid, x, y, length) {
+  if (y < 0 || y >= grid.height) return;
+  for (let i = 0; i < length; i += 1) {
+    const px = x + i;
+    if (px < 0 || px >= grid.width) continue;
+    const prev = grid.rows[y][px];
+    if (prev === '.' || prev === 'e' || prev === 'r') continue;
+    grid.put(px, y, '#');
+  }
 }
 
 function shambler(step, attack) {
   return sprite(22, 26, (grid) => {
-    plated(grid, 6, 0, 9, 8);
-    eyes(grid, 8, 3, 3);
-    grid.put(9, 5, '#');
-    grid.put(11, 5, '#');
-    plated(grid, 5, 7, 11, 10);
-    grid.put(10, 10, 'h');
-    grid.put(10, 12, '#');
-    grid.put(10, 14, '#');
-    plated(grid, 0, 10, 4, attack ? 8 : 10);
-    plated(grid, 18, attack ? 8 : 11, 4, attack ? 12 : 8);
-    plated(grid, 6 - step, 16, 4, 10);
-    plated(grid, 12 + step, 16, 4, 10);
-    block(grid, 6 - step, 25, 3, 1, 's');
-    block(grid, 13 + step, 25, 3, 1, 's');
-    if (attack) block(grid, 19, 19, 2, 1, 'e');
+    fillEllipse(grid, 8, 7, 6, 8, 'o');
+    fillEllipse(grid, 14, 15, 3, 3, 'o');
+    glaze(grid, 7, 4, 3, 2, 'h');
+    over(grid, 8, 3, 'h');
+    over(grid, 8, 6, '#');
+    eye(grid, 12, 15);
+    eye(grid, 14, 15);
+    seam(grid, 12, 14, 4);
+    if (attack) {
+      over(grid, 13, 17, '#');
+      over(grid, 14, 17, '#');
+      over(grid, 15, 17, '#');
+    } else {
+      seam(grid, 13, 17, 3);
+    }
+    fillEllipse(grid, 10, 19, 3, 3, 'o');
+    const lift = attack ? 12 : 19;
+    limb(grid, 4, 12, 2, lift, 1, 1, 'o');
+    limb(grid, 13, 14, 19, 19, 1, 1, 'o');
+    fillEllipse(grid, 1, lift, 2, 2, 'o');
+    fillEllipse(grid, 20, 19, 2, 2, 'o');
+    glaze(grid, 1, lift - 1, 1, 0, 'h');
+    glaze(grid, 20, 18, 1, 0, 'h');
+    const spread = step ? 2 : 0;
+    limb(grid, 8, 21, 7 - spread, 24, 1, 1, 'o');
+    limb(grid, 13, 21, 14 + spread, 24, 1, 1, 'o');
+    fillEllipse(grid, 7 - spread, 24, 2, 1, 'o');
+    fillEllipse(grid, 14 + spread, 24, 2, 1, 'o');
+    eraseEllipse(grid, 11, 23, 1, 2);
   });
 }
 
 function runner(step, attack) {
   return sprite(18, 24, (grid) => {
-    plated(grid, 6, 0, 6, 6);
-    eyes(grid, 7, 2, 2);
-    plated(grid, 7, 5, 4, 8);
-    grid.put(8, 7, 'h');
-    plated(grid, 0, attack ? 4 : 6, 3, attack ? 9 : 6);
-    plated(grid, 15, 6, 3, 7);
-    plated(grid, 5 - step, 12, 3, 12);
-    plated(grid, 10 + step, 12, 3, 12);
-    block(grid, 5 - step, 23, 2, 1, 's');
-    block(grid, 11 + step, 23, 2, 1, 's');
+    limb(grid, 8, 0, 8, 4, 0, 0, 'h');
+    fillEllipse(grid, 8, 6, 2, 2, 'o');
+    fillEllipse(grid, 9, 10, 1, 2, 'o');
+    fillEllipse(grid, 9, 13, 2, 1, 'o');
+    glaze(grid, 8, 5, 1, 1, 'h');
+    eye(grid, 7, 6);
+    if (attack) {
+      over(grid, 7, 8, '#');
+      over(grid, 8, 8, '#');
+      over(grid, 9, 8, '#');
+    } else {
+      over(grid, 8, 7, '#');
+    }
+    const leftY = attack ? 6 : (step ? 7 : 10);
+    const rightY = attack ? 12 : (step ? 11 : 8);
+    limb(grid, 8, 9, 2, leftY, 1, 0, 'o');
+    limb(grid, 10, 9, 15, rightY, 1, 0, 'o');
+    fillEllipse(grid, 1, leftY, 1, 1, 'o');
+    fillEllipse(grid, 16, rightY, 1, 1, 'o');
+    const knee = step ? 2 : -2;
+    limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
+    limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
+    limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
+    limb(grid, 12 - knee, 18, 12, 22, 1, 0, 'o');
+    fillEllipse(grid, 6, 22, 1, 1, 'o');
+    fillEllipse(grid, 12, 22, 1, 1, 'o');
+    eraseEllipse(grid, 9, 20, 1, 3);
   });
 }
 
 function brute(step, attack) {
   return sprite(32, 34, (grid) => {
-    plated(grid, 10, 0, 12, 10);
-    eyes(grid, 13, 4, 4);
-    grid.put(15, 6, '#');
-    grid.put(17, 6, '#');
-    plated(grid, 6, 9, 20, 14);
-    grid.put(15, 13, 'h');
-    grid.put(15, 16, '#');
-    plated(grid, 0, attack ? 8 : 12, 6, attack ? 14 : 10);
-    plated(grid, 26, 12, 6, 10);
-    plated(grid, 8 - step, 22, 6, 12);
-    plated(grid, 18 + step, 22, 6, 12);
-    block(grid, 9 - step, 33, 4, 1, 's');
-    block(grid, 19 + step, 33, 4, 1, 's');
-    if (attack) block(grid, 1, 21, 3, 1, 'e');
+    fillEllipse(grid, 16, 4, 4, 5, 'o');
+    fillEllipse(grid, 16, 16, 7, 6, 'o');
+    fillEllipse(grid, 16, 23, 6, 4, 'o');
+    glaze(grid, 14, 3, 2, 1, 'h');
+    seam(grid, 13, 3, 6);
+    eye(grid, 13, 5);
+    eye(grid, 17, 5);
+    over(grid, 15, 7, '#');
+    over(grid, 17, 7, '#');
+    if (attack) {
+      over(grid, 15, 8, '#');
+      over(grid, 16, 8, '#');
+      over(grid, 17, 8, '#');
+    } else {
+      seam(grid, 15, 8, 3);
+    }
+    const fistY = attack ? 11 : 16;
+    limb(grid, 11, 14, 6, fistY, 2, 1, 'o');
+    limb(grid, 21, 14, 25, 16, 2, 1, 'o');
+    fillEllipse(grid, 3, fistY, 3, 4, 'o');
+    fillEllipse(grid, 28, 16, 3, 4, 'o');
+    glaze(grid, 3, fistY - 2, 2, 1, 'h');
+    glaze(grid, 28, 14, 2, 1, 'h');
+    seam(grid, 2, fistY - 1, 3);
+    seam(grid, 27, 15, 3);
+    const spread = step ? 2 : 0;
+    limb(grid, 12, 26, 10 - spread, 32, 2, 2, 'o');
+    limb(grid, 20, 26, 22 + spread, 32, 2, 2, 'o');
+    fillEllipse(grid, 10 - spread, 32, 3, 1, 'o');
+    fillEllipse(grid, 22 + spread, 32, 3, 1, 'o');
+    eraseEllipse(grid, 16, 31, 2, 2);
   });
 }
 
 function armored(step, attack) {
   return sprite(26, 30, (grid) => {
-    plated(grid, 7, 0, 12, 9);
-    block(grid, 9, 4, 8, 2, 'e');
-    grid.put(12, 4, '#');
-    grid.put(13, 4, '#');
-    plated(grid, 0, 8, 7, 6);
-    plated(grid, 19, 8, 7, 6);
-    block(grid, 2, 10, 3, 1, 'h');
-    block(grid, 21, 10, 3, 1, 'h');
-    plated(grid, 5, 12, 16, 10);
-    block(grid, 12, 14, 2, 6, '#');
-    grid.put(12, 16, 'h');
-    plated(grid, attack ? 0 : 1, 14, 4, attack ? 8 : 5);
-    plated(grid, 21, 14, 4, 5);
-    plated(grid, 7 - step, 21, 4, 9);
-    plated(grid, 15 + step, 21, 4, 9);
-    block(grid, 7 - step, 29, 3, 1, 's');
-    block(grid, 16 + step, 29, 3, 1, 's');
+    fillEllipse(grid, 13, 6, 5, 7, 'o');
+    fillEllipse(grid, 3, 12, 3, 3, 'o');
+    fillEllipse(grid, 22, 12, 3, 3, 'o');
+    limb(grid, 8, 11, 5, 12, 1, 1, 'o');
+    limb(grid, 18, 11, 20, 12, 1, 1, 'o');
+    fillEllipse(grid, 13, 18, 4, 5, 'o');
+    fillEllipse(grid, 13, 22, 5, 2, 'o');
+    glaze(grid, 12, 3, 2, 1, 'h');
+    glaze(grid, 2, 11, 1, 1, 'h');
+    glaze(grid, 23, 11, 1, 1, 'h');
+    seam(grid, 10, 16, 6);
+    seam(grid, 11, 19, 4);
+    over(grid, 12, 17, 'h');
+    over(grid, 13, 20, 'h');
+    seam(grid, 10, 7, 6);
+    const slit = attack ? 'h' : 'e';
+    for (let x = 10; x <= 15; x += 1) over(grid, x, 8, slit);
+    if (attack) {
+      for (let x = 11; x <= 14; x += 1) over(grid, x, 9, 'e');
+    }
+    seam(grid, 10, 9, 6);
+    const punch = attack ? 22 : 18;
+    limb(grid, 3, 14, 2, punch, 1, 1, 'o');
+    limb(grid, 22, 14, 23, 18, 1, 1, 'o');
+    fillEllipse(grid, 2, punch, 2, 2, 'o');
+    fillEllipse(grid, 23, 18, 2, 2, 'o');
+    glaze(grid, 2, punch - 1, 1, 0, 'h');
+    glaze(grid, 23, 17, 1, 0, 'h');
+    const spread = step ? 1 : 0;
+    limb(grid, 11, 23, 9 - spread, 28, 2, 1, 'o');
+    limb(grid, 15, 23, 17 + spread, 28, 2, 1, 'o');
+    fillEllipse(grid, 9 - spread, 28, 2, 1, 'o');
+    fillEllipse(grid, 17 + spread, 28, 2, 1, 'o');
+    eraseEllipse(grid, 13, 27, 1, 2);
   });
 }
 
 function spitter(step, attack) {
   return sprite(22, 26, (grid) => {
-    plated(grid, 5, 0, 8, 7);
-    eyes(grid, 7, 2, 3);
-    plated(grid, 4, 6, 8, 9);
-    plated(grid, 0, 9, 3, 7);
-    const sacY = attack ? 10 : 12;
-    const sacH = attack ? 10 : 8;
-    plated(grid, 12, sacY, 10, sacH);
-    block(grid, 15, sacY + 3, 4, 3, 'h');
-    block(grid, 16, sacY + 4, 2, 1, 'e');
-    plated(grid, 5 - step, 16, 3, 10);
-    plated(grid, 9 + step, 16, 3, 10);
-    block(grid, 5 - step, 25, 2, 1, 's');
-    block(grid, 10 + step, 25, 2, 1, 's');
+    fillEllipse(grid, 11, 4, 3, 4, 'o');
+    fillEllipse(grid, 11, 12, attack ? 7 : 8, attack ? 5 : 6, 'h');
+    fillEllipse(grid, 2, 12, 2, 3, 'h');
+    fillEllipse(grid, 19, 12, 2, 3, 'h');
+    glaze(grid, 11, attack ? 13 : 11, 3, 2, 'e');
+    seam(grid, 9, 12, 2);
+    seam(grid, 13, 14, 2);
+    eye(grid, 9, 4);
+    eye(grid, 12, 4);
+    if (attack) {
+      over(grid, 10, 6, '#');
+      over(grid, 11, 6, 'e');
+      over(grid, 12, 6, 'e');
+      over(grid, 13, 6, '#');
+    } else {
+      seam(grid, 10, 6, 3);
+    }
+    fillEllipse(grid, 11, 18, 3, 2, 'o');
+    const spread = step ? 2 : 0;
+    limb(grid, 9, 19, 7 - spread, 24, 1, 0, 'o');
+    limb(grid, 13, 19, 15 + spread, 24, 1, 0, 'o');
+    fillEllipse(grid, 7 - spread, 24, 1, 1, 'o');
+    fillEllipse(grid, 15 + spread, 24, 1, 1, 'o');
+    eraseEllipse(grid, 11, 23, 1, 2);
   });
 }
 
 function swarm(step, attack) {
   return sprite(12, 14, (grid) => {
-    grid.put(4, 0, 'k');
-    grid.put(7, 0, 'k');
-    grid.put(4, 1, '#');
-    grid.put(7, 1, '#');
-    block(grid, 0, 3, 2, attack ? 5 : 4, 'k');
-    block(grid, 10, 3, 2, attack ? 5 : 4, 'k');
-    plated(grid, 2, 2, 8, 7);
-    grid.put(4, 4, 'e');
-    grid.put(7, 4, 'e');
-    grid.put(5, 5, 'h');
-    plated(grid, 3 - step, 8, 2, 6);
-    plated(grid, 7 + step, 8, 2, 6);
-    grid.put(3 - step, 13, 's');
-    grid.put(8 + step, 13, 's');
+    const lift = attack ? 4 : (step ? 6 : 1);
+    fillPoly(grid, [
+      [3, 4], [0, lift], [0, lift + 3], [3, 8]
+    ], 'h');
+    fillPoly(grid, [
+      [8, 4], [11, lift], [11, lift + 3], [8, 8]
+    ], 'h');
+    fillEllipse(grid, 5, 5, 2, 2, 'o');
+    fillEllipse(grid, 5, 8, 2, 2, '#');
+    limb(grid, 4, 4, 4, 0, 0, 0, 'o');
+    limb(grid, 7, 4, 7, 0, 0, 0, 'o');
+    eye(grid, 4, 5);
+    if (attack) {
+      over(grid, 5, 7, '#');
+      over(grid, 6, 7, 'e');
+    }
+    limb(grid, 4, 9, 4, 13, 0, 0, 'o');
+    limb(grid, 6, 9, 6, 13, 0, 0, 'o');
+    if (step) {
+      limb(grid, 4, 12, 3, 13, 0, 0, 'o');
+      limb(grid, 6, 12, 8, 13, 0, 0, 'o');
+    }
   });
+}
+
+function claw(grid, side, y, ink) {
+  const x = side < 0 ? 0 : 47;
+  const dir = side < 0 ? 1 : -1;
+  fillPoly(grid, [
+    [x, y],
+    [x + dir * 2, y - 6],
+    [x + dir * 4, y - 1],
+    [x + dir * 6, y - 7],
+    [x + dir * 8, y],
+    [x + dir * 8, y + 4],
+    [x, y + 4]
+  ], ink);
 }
 
 function boss(step, attack) {
   return sprite(48, 52, (grid) => {
-    for (let i = 0; i < 8; i += 1) {
-      block(grid, 8 + i, i, 3, 3, 'k');
-      block(grid, 9 + i, i + 1, 1, 1, '#');
-      block(grid, 37 - i, i, 3, 3, 'k');
-      block(grid, 38 - i, i + 1, 1, 1, '#');
+    fillPoly(grid, [
+      [18, 20], [12, 28], [14, 34], [11, 42],
+      [18, 44], [24, 42], [30, 44], [37, 42],
+      [34, 34], [36, 28], [30, 20]
+    ], 'o');
+    fillEllipse(grid, 24, 18, 8, 8, 'o');
+    fillPoly(grid, [
+      [16, 20], [12, 14], [9, 8], [7, 3], [8, 0],
+      [12, 2], [13, 8], [16, 14], [19, 18]
+    ], '#');
+    fillPoly(grid, [
+      [31, 20], [35, 14], [38, 8], [40, 3], [39, 0],
+      [35, 2], [34, 8], [31, 14], [28, 18]
+    ], '#');
+    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], 'h');
+    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], 'h');
+    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], 'h');
+    seam(grid, 19, 15, 10);
+    eye(grid, 19, 17);
+    eye(grid, 26, 17);
+    if (attack) {
+      over(grid, 22, 21, '#');
+      over(grid, 23, 21, '#');
+      over(grid, 24, 21, '#');
+      over(grid, 25, 21, '#');
+    } else {
+      seam(grid, 22, 21, 4);
     }
-    plated(grid, 16, 0, 16, 4);
-    block(grid, 18, 0, 2, 3, 'k');
-    block(grid, 23, 0, 2, 4, 'k');
-    block(grid, 28, 0, 2, 3, 'k');
-    plated(grid, 14, 6, 20, 10);
-    eyes(grid, 19, 9, 6);
-    block(grid, 21, 12, 6, 2, '#');
-    plated(grid, 8, 14, 32, 18);
-    block(grid, 18, 20, 12, 8, 'r');
-    block(grid, 21, 22, 6, 4, 'h');
-    plated(grid, 0, attack ? 14 : 18, 8, attack ? 16 : 12);
-    plated(grid, 40, 18, 8, 12);
-    plated(grid, 12 - step, 30, 8, 22);
-    plated(grid, 28 + step, 30, 8, 22);
-    block(grid, 14 - step, 51, 4, 1, 's');
-    block(grid, 30 + step, 51, 4, 1, 's');
-    if (attack) block(grid, 1, 28, 3, 1, 'e');
+    const core = attack ? 6 : 4;
+    fillEllipse(grid, 24, 31, core + 2, core + 3, '#');
+    fillEllipse(grid, 24, 31, core, core + 1, 'r');
+    grid.put(22, 30, 'h');
+    grid.put(23, 29, 'h');
+    const clawY = attack ? 24 : 30;
+    limb(grid, 14, 28, 8, clawY, 2, 2, 'o');
+    limb(grid, 34, 28, 39, 30, 2, 2, 'o');
+    claw(grid, -1, clawY, 'o');
+    claw(grid, 1, 30, 'o');
+    glaze(grid, 4, clawY, 2, 1, 'h');
+    glaze(grid, 43, 29, 2, 1, 'h');
+    const spread = step ? 2 : 0;
+    limb(grid, 18, 42, 15 - spread, 50, 3, 3, 'o');
+    limb(grid, 30, 42, 32 + spread, 50, 3, 3, 'o');
+    fillEllipse(grid, 15 - spread, 50, 4, 1, 'o');
+    fillEllipse(grid, 32 + spread, 50, 4, 1, 'o');
+    eraseEllipse(grid, 24, 49, 2, 3);
   });
 }
 
@@ -5932,6 +6505,10 @@ const MAX_CLOUDS = 32;
 const CUE_MS = 240;
 const FLASH_MS = 150;
 const RANGE_LIMIT = 900;
+const HP_FILL = 3;
+const SPRITE_GAP = 3;
+const STATUS_CELL = 7;
+const STATUS_GAP = 2;
 
 const PALETTE = {
   bolt: {main: '#f2d56a', core: '#fff6cf', edge: '#6e5424'},
@@ -6183,14 +6760,38 @@ function drawHpBar(ctx, x, y, width, hp, maxHp, emphasize) {
   if (!Number.isFinite(hp)) return;
   const max = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : Math.max(hp, 1);
   const ratio = clamp(hp / max, 0, 1);
-  const fillW = Math.round(width * ratio);
-  ctx.fillStyle = 'rgba(8, 10, 12, 0.82)';
-  ctx.fillRect(x - 1, y - 1, width + 2, 5);
-  ctx.fillStyle = ratio > 0.55 ? '#7ea45a' : ratio > 0.28 ? '#e0b15a' : '#d25a45';
-  if (emphasize && ratio <= 0.28) ctx.fillStyle = '#ffb2a6';
-  if (fillW > 0) ctx.fillRect(x, y, fillW, 3);
-  ctx.fillStyle = 'rgba(255, 244, 220, 0.35)';
-  ctx.fillRect(x, y, width, 1);
+  const fillW = Math.max(0, Math.min(width, Math.round(width * ratio)));
+  const plateY = y - 1;
+  const plateH = HP_FILL + 2;
+  ctx.fillStyle = '#101418';
+  ctx.fillRect(x - 1, plateY, width + 2, plateH);
+  ctx.fillStyle = '#efe6d2';
+  ctx.fillRect(x - 1, plateY, width + 2, 1);
+  ctx.fillRect(x - 1, plateY + plateH - 1, width + 2, 1);
+  ctx.fillRect(x - 1, plateY, 1, plateH);
+  ctx.fillRect(x + width, plateY, 1, plateH);
+  let fill = ratio > 0.55 ? '#8fbf62' : ratio > 0.28 ? '#f0c15a' : '#e15a42';
+  if (emphasize) fill = ratio > 0.55 ? '#d7f5a4' : ratio > 0.28 ? '#ffe3a0' : '#ffc2b4';
+  if (fillW > 0) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, fillW, HP_FILL);
+    ctx.fillStyle = 'rgba(255, 248, 230, 0.5)';
+    ctx.fillRect(x, y, fillW, 1);
+  }
+}
+
+function drawTargetMark(ctx, x, y, width) {
+  const top = y - 1;
+  const bottom = y + HP_FILL;
+  ctx.fillStyle = '#fff6c8';
+  ctx.fillRect(x - 4, top, 2, 1);
+  ctx.fillRect(x - 4, top, 1, 2);
+  ctx.fillRect(x + width + 2, top, 2, 1);
+  ctx.fillRect(x + width + 3, top, 1, 2);
+  ctx.fillRect(x - 4, bottom, 2, 1);
+  ctx.fillRect(x - 4, bottom - 1, 1, 2);
+  ctx.fillRect(x + width + 2, bottom, 2, 1);
+  ctx.fillRect(x + width + 3, bottom - 1, 1, 2);
 }
 
 function drawStatusIcon(ctx, status, x, y) {
@@ -6259,12 +6860,19 @@ function drawStatuses(ctx, enemy, anchorX, y) {
   if (!shown.length) return;
   shown.sort((a, b) => (STATUS_RANK[a.type] ?? 9) - (STATUS_RANK[b.type] ?? 9));
   if (shown.length > 5) shown.length = 5;
-  const rowWidth = shown.length * 6 - 1;
+  const stride = STATUS_CELL + 1;
+  const rowWidth = shown.length * stride - 1;
   let x = Math.round(anchorX - rowWidth / 2);
   const top = Math.round(y);
   for (let i = 0; i < shown.length; i++) {
-    drawStatusIcon(ctx, shown[i], x, top);
-    x += 6;
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(x, top, STATUS_CELL, STATUS_CELL);
+    ctx.fillStyle = '#d5e0d4';
+    ctx.fillRect(x, top, STATUS_CELL, 1);
+    ctx.fillRect(x, top, 1, STATUS_CELL);
+    ctx.fillRect(x + STATUS_CELL - 1, top, 1, STATUS_CELL);
+    drawStatusIcon(ctx, shown[i], x + 1, top + 1);
+    x += stride;
   }
 }
 
@@ -6495,6 +7103,20 @@ function enemyAnchor(enemy) {
     size,
     x: Math.round(enemy.x),
     y: Math.round(enemy.y + size.height / 2),
+  };
+}
+
+// Cues sit in the clear rows above the sprite. The plate never reaches spriteTop.
+function enemyCueLayout(anchor) {
+  const spriteTop = anchor.y - anchor.size.height;
+  const barW = clamp(Math.round(anchor.size.width * 0.85), 12, 48);
+  const plateBottom = spriteTop - 1 - SPRITE_GAP;
+  const barY = plateBottom - HP_FILL;
+  return {
+    barX: Math.round(anchor.x - barW / 2),
+    barY,
+    barW,
+    statusY: (barY - 1) - STATUS_GAP - STATUS_CELL,
   };
 }
 
@@ -6789,8 +7411,10 @@ function createRenderer(canvas) {
       if (projectile.x < -48 || projectile.y < -48 || projectile.x > ARENA.width + 48 || projectile.y > ARENA.height + 48) continue;
       visibleShots.push(projectile);
     }
+    const targeted = Object.create(null);
     for (let i = 0; i < visibleShots.length; i++) {
       const projectile = visibleShots[i];
+      if (projectile.targetId != null) targeted[projectile.targetId] = true;
       drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
     }
 
@@ -6800,12 +7424,16 @@ function createRenderer(canvas) {
       const enemy = enemies[i];
       if (enemy.dead) continue;
       const anchor = anchors[i];
-      const barW = clamp(Math.round(anchor.size.width * 0.85), 12, 48);
-      const barX = Math.round(anchor.x - barW / 2);
-      const barY = anchor.y - anchor.size.height - 5;
+      const cue = enemyCueLayout(anchor);
       const fresh = enemyFlash(enemy, hits, now, flashSpan) > 0.4;
-      drawHpBar(ctx, barX, barY, barW, enemy.hp, enemy.maxHp, fresh);
-      drawStatuses(ctx, enemy, anchor.x, barY - 7);
+      const maxHp = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : null;
+      const low = maxHp != null && Number.isFinite(enemy.hp) && enemy.hp / maxHp <= 0.28;
+      const emphasize = fresh || (!reduced && low && Math.floor(visualTime * 6) % 2 === 0);
+      drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize);
+      if (Number.isFinite(enemy.hp) && (fresh || targeted[enemy.id] === true)) {
+        drawTargetMark(ctx, cue.barX, cue.barY, cue.barW);
+      }
+      drawStatuses(ctx, enemy, anchor.x, cue.statusY);
     }
 
     drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
@@ -6907,9 +7535,11 @@ const ARENA = __ff_m0["ARENA"];
 const slotGeometry = __ff_m0["slotGeometry"];
 /**
  * Battlefield backdrop, logical 360×640.
- * drawWorld paints sky, open ground, the shared fence and exactly two rows of five slots.
- * It does not draw units, enemies, projectiles or gameplay clouds, and it does not
- * mutate run state or advance the gameplay RNG. Animation uses the `time` argument.
+ * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
+ * then the ground both defender rows stand on, with exactly two rows of five slots.
+ * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
+ * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
+ * Animation uses the `time` argument.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 
@@ -6942,6 +7572,9 @@ const STARS = Object.freeze([
   [188, 4, 0], [228, 10, 1], [262, 6, 0], [330, 9, 0], [348, 5, 0], [22, 13, 0]
 ]);
 const POSTS = Object.freeze([0, 86, 174, 262, 348]);
+const ENTRY_Y = 46;
+const SLEEPER_Y = 466;
+const GROUND_Y = 472;
 const SCUFFS = Object.freeze([
   [28, 128, 42], [196, 168, 34], [64, 214, 30], [236, 258, 40],
   [36, 304, 28], [176, 346, 32], [88, 392, 24], [214, 418, 22]
@@ -7140,6 +7773,78 @@ function drawTree(ctx, x, height) {
   ctx.fillRect(x - 1, base - 2, trunk + 2, 2);
 }
 
+function paintEntryEdge(ctx) {
+  const y = ENTRY_Y;
+  ctx.fillStyle = '#101816';
+  ctx.fillRect(0, y + 10, W, 6);
+  ctx.fillStyle = '#6a8074';
+  ctx.fillRect(0, y + 3, W, 8);
+  ctx.fillStyle = '#314038';
+  ctx.fillRect(0, y + 8, W, 4);
+  ctx.fillStyle = '#d5e2d6';
+  ctx.fillRect(0, y + 1, W, 2);
+  let x = 0;
+  let stone = 0;
+  while (x < W) {
+    const n = hash2(stone * 3 + 1, 41);
+    const span = 7 + (n % 11);
+    const rise = (n >>> 3) & 1;
+    ctx.fillStyle = (n & 32) ? '#d5e2d6' : '#b7c8ba';
+    ctx.fillRect(x, y + rise, span, 1);
+    ctx.fillStyle = (n & 32) ? '#5e7268' : '#4a5c52';
+    ctx.fillRect(x, y + 2 + rise, Math.max(1, span - 1), 2);
+    ctx.fillStyle = '#1a2420';
+    ctx.fillRect(x + span - 1, y + 1, 1, 10);
+    if ((n % 4) === 0) {
+      ctx.fillStyle = '#101816';
+      ctx.fillRect(x + 2, y + 5, 1, 4);
+    }
+    if ((n % 6) === 0) {
+      ctx.fillStyle = '#2a342e';
+      ctx.fillRect(x + 1, y - 4, 2, 5);
+      ctx.fillStyle = '#d5e2d6';
+      ctx.fillRect(x + 1, y - 4, 2, 1);
+    }
+    x += span;
+    stone += 1;
+  }
+  ctx.fillStyle = '#0e1612';
+  ctx.fillRect(0, y + 12, W, 2);
+  ctx.fillStyle = '#6a7e72';
+  ctx.fillRect(0, y + 14, W, 1);
+}
+
+function paintApproach(ctx) {
+  ctx.fillStyle = '#161e1c';
+  ctx.fillRect(0, 418, W, 48);
+  ctx.fillStyle = '#4a5c52';
+  ctx.fillRect(0, 418, W, 1);
+  ctx.fillStyle = '#101816';
+  ctx.fillRect(0, 454, W, 12);
+  for (let x = 0; x < W; x += 4) {
+    const n = hash2(x, 422);
+    if ((n & 3) !== 0) continue;
+    const y = 422 + ((n >>> 2) & 7) * 2;
+    ctx.fillStyle = (n & 16) ? '#2a3830' : '#101816';
+    ctx.fillRect(x, y, 3 + (n & 1), 1);
+  }
+}
+
+function fillStandingGround(ctx, x, y, width, height) {
+  ctx.fillStyle = '#3a2c22';
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = '#a08058';
+  ctx.fillRect(x, y, width, 1);
+  if (height > 6 && width > 8) {
+    ctx.fillStyle = '#5c4634';
+    ctx.fillRect(x + 4, y + 4, width - 8, 1);
+  }
+  if (height > 3) {
+    ctx.fillStyle = '#241c16';
+    ctx.fillRect(x, y + height - 3, width, 3);
+  }
+}
+
 function paintField(ctx) {
   for (let x = 0; x < W; x += 2) {
     const near = horizonY(x);
@@ -7152,9 +7857,22 @@ function paintField(ctx) {
   for (let x = 0; x < W; x += 2) {
     const y0 = horizonY(x);
     const edge = Math.min(x, W - 1 - x);
-    ctx.fillStyle = edge < 16 ? '#202826' : edge < 34 ? '#242c2a' : '#262e2c';
-    ctx.fillRect(x, y0, 2, 466 - y0);
-    ctx.fillStyle = '#6a7c70';
+    const margin = edge < 16 ? 0 : edge < 36 ? 1 : 2;
+    const far = margin === 0 ? '#1e2824' : margin === 1 ? '#28322c' : '#343e36';
+    const mid = margin === 0 ? '#1a2420' : margin === 1 ? '#222c28' : '#2c3630';
+    const near = margin === 0 ? '#161e1c' : margin === 1 ? '#1c2420' : '#242c28';
+    const farEnd = 168;
+    const midEnd = 320;
+    const lip = ENTRY_Y + 16;
+    ctx.fillStyle = margin === 0 ? '#121a18' : '#1a2420';
+    ctx.fillRect(x, y0, 2, Math.max(0, lip - y0));
+    ctx.fillStyle = far;
+    ctx.fillRect(x, lip, 2, farEnd - lip);
+    ctx.fillStyle = mid;
+    ctx.fillRect(x, farEnd, 2, midEnd - farEnd);
+    ctx.fillStyle = near;
+    ctx.fillRect(x, midEnd, 2, SLEEPER_Y - midEnd);
+    ctx.fillStyle = '#8ea094';
     ctx.fillRect(x, y0, 2, 1);
   }
   for (const [x, height] of TREES) drawTree(ctx, x, height);
@@ -7204,6 +7922,8 @@ function paintField(ctx) {
     ctx.fillStyle = '#141c18';
     ctx.fillRect(x, y + 2, 3, 1);
   }
+  paintApproach(ctx);
+  paintEntryEdge(ctx);
 }
 
 function drawEdgeRuins(ctx) {
@@ -7219,28 +7939,24 @@ function drawEdgeRuins(ctx) {
 }
 
 function paintYard(ctx) {
-  ctx.fillStyle = '#3a3428';
-  ctx.fillRect(0, 458, W, 8);
-  ctx.fillStyle = '#2a241c';
-  ctx.fillRect(0, 466, W, 6);
-  ctx.fillStyle = '#101416';
-  ctx.fillRect(0, 472, W, H - 472);
-  ctx.fillStyle = '#243038';
-  ctx.fillRect(0, 472, W, 3);
-  ctx.fillStyle = '#6a8490';
-  ctx.fillRect(0, 472, W, 1);
-  for (let y = 478; y < 626; y += 6) {
-    const offset = ((y / 6) & 1) ? 4 : 0;
-    for (let x = -4 + offset; x < W; x += 9) {
-      const n = hash2(x + 3, y);
-      ctx.fillStyle = (n % 5) === 0 ? '#1c262c' : '#172024';
-      ctx.fillRect(x, y, 8, 5);
-    }
+  fillStandingGround(ctx, 0, GROUND_Y, W, H - GROUND_Y);
+  for (let y = 476; y < 632; y += 4) {
+    ctx.fillStyle = ((y >> 2) & 1) ? '#34281f' : '#463628';
+    ctx.fillRect(0, y, W, 1);
   }
-  ctx.fillStyle = '#0c1014';
-  ctx.fillRect(0, 630, W, 10);
-  ctx.fillStyle = '#3a4c56';
-  ctx.fillRect(0, 630, W, 1);
+  // Footing under each row, then the open board between the rows and at the heel.
+  fillStandingGround(ctx, 0, 524, W, 20);
+  fillStandingGround(ctx, 0, 608, W, 20);
+  fillStandingGround(ctx, 0, 544, W, 12);
+  fillStandingGround(ctx, 0, 628, W, 12);
+  for (let x = 5; x < W; x += 13) {
+    const n = hash2(x, 548);
+    ctx.fillStyle = (n & 1) ? '#c4a06a' : '#6e5432';
+    ctx.fillRect(x + (n & 3), 548, 1, 1);
+    ctx.fillRect(x + ((n >>> 2) & 3), 632, 1, 1);
+  }
+  ctx.fillStyle = '#1c1612';
+  ctx.fillRect(0, 636, W, 4);
 }
 
 function paintBackdrop(ctx) {
@@ -7426,11 +8142,35 @@ function drawRubble(ctx, kit, ratio) {
   ctx.fillRect(300, 458, 22, 1);
 }
 
+function drawSleeper(ctx, ratio, kit) {
+  const y = SLEEPER_Y;
+  ctx.fillStyle = kit.edge;
+  ctx.fillRect(0, y, W, 6);
+  ctx.fillStyle = kit.dark;
+  ctx.fillRect(0, y + 1, W, 4);
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(0, y + 1, W, 2);
+  ctx.fillStyle = kit.light;
+  ctx.fillRect(0, y, W, 1);
+  if (ratio <= 0.34) {
+    for (let i = 0; i < PICKETS; i++) {
+      if (ratio > breakAt(i) * 0.45) continue;
+      ctx.fillStyle = '#1a1612';
+      ctx.fillRect(i * 12 + 4, y + 1, 6, 4);
+    }
+  }
+  for (let x = 8; x < W; x += 12) {
+    ctx.fillStyle = kit.iron;
+    ctx.fillRect(x, y + 2, 1, 2);
+  }
+}
+
 function drawFence(ctx, ratio) {
   const kit = woodKit(ratio);
   const intact = new Array(PICKETS);
   for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
   drawWire(ctx, intact, kit, ratio);
+  drawSleeper(ctx, ratio, kit);
   for (const x of POSTS) drawPost(ctx, x, ratio, kit);
   drawRubble(ctx, kit, ratio);
 }
@@ -7514,22 +8254,23 @@ function drawSlot(ctx, slot, time, reduced, phase) {
   ctx.fillRect(x, y + 71, 64, 1);
   ctx.fillRect(x + 63, y, 1, 72);
   ctx.fillStyle = occupied ? (front ? '#1a2c36' : '#14242c') : '#0e161c';
-  ctx.fillRect(x + 4, y + 4, 56, 64);
+  ctx.fillRect(x + 4, y + 4, 56, 48);
   ctx.fillStyle = '#5c6a72';
   ctx.fillRect(x + 3, y + 3, 2, 2);
   ctx.fillRect(x + 59, y + 3, 2, 2);
-  ctx.fillRect(x + 3, y + 67, 2, 2);
-  ctx.fillRect(x + 59, y + 67, 2, 2);
+  ctx.fillRect(x + 3, y + 48, 2, 2);
+  ctx.fillRect(x + 59, y + 48, 2, 2);
   const foot = y + 36;
   ctx.fillStyle = front ? '#314654' : '#283848';
-  ctx.fillRect(x + 8, foot - 2, 48, 16);
+  ctx.fillRect(x + 8, foot - 2, 48, 14);
   ctx.fillStyle = hero ? '#d3b984' : '#6a8490';
   ctx.fillRect(x + 8, foot - 2, 48, 1);
   ctx.fillStyle = '#10181c';
-  ctx.fillRect(x + 10, foot + 8, 44, 4);
+  ctx.fillRect(x + 10, foot + 8, 44, 3);
   ctx.fillStyle = '#243844';
   ctx.fillRect(x + 6, foot, 4, 8);
   ctx.fillRect(x + 54, foot, 4, 8);
+  fillStandingGround(ctx, x + 2, y + 52, 60, 18);
   if (!occupied) {
     const pulse = phase === 'placing' && !reduced && Math.sin(time * 3) > 0;
     const cx = x + 31;
@@ -11152,6 +11893,7 @@ __ff_exports["previewMerge"] = previewMerge;
 __ff_exports["mergeUnits"] = mergeUnits;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/data/recipes.js");
+const __ff_m2 = __ff_load("src/data/towers.js");
 const BASE_TYPES = __ff_m0["BASE_TYPES"];
 const canPlan = __ff_m0["canPlan"];
 const createUnit = __ff_m0["createUnit"];
@@ -11160,9 +11902,11 @@ const HYBRID_RANK_MAX = __ff_m1["HYBRID_RANK_MAX"];
 const findRecipe = __ff_m1["findRecipe"];
 const getRecipe = __ff_m1["getRecipe"];
 const isRecipeId = __ff_m1["isRecipeId"];
+const TOWERS = __ff_m2["TOWERS"];
 // Merge planning. previewMerge is pure; mergeUnits is the only mutation.
 // Merges are legal only while canPlan(state) is true (paused, or phase draft).
 // The source slot is consumed and the target slot receives the result.
+
 
 
 
@@ -11185,7 +11929,7 @@ const MERGE_REASONS = Object.freeze({
   invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的槽位。' }),
   same_slot: Object.freeze({ en: 'Choose two different slots.', zh: '请选择两个不同的槽位。' }),
   empty_slot: Object.freeze({ en: 'Both slots need a unit. Nothing was changed.', zh: '两个槽位都要有单位。没有改动。' }),
-  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄不能合成，也不能被替换。' }),
+  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄永不合成，也不能被替换。' }),
   rank_mismatch: Object.freeze({ en: 'Both units must be the same rank. Unequal ranks stay as they are.', zh: '双方必须同阶。不同阶会原样保留。' }),
   rank_cap: Object.freeze({ en: 'Rank 4 is the cap. Same-type merges stop there.', zh: '4 阶已是上限，同型不能再合成。' }),
   hybrid_locked: Object.freeze({ en: 'A hybrid only merges with the same hybrid at the same rank.', zh: '杂交单位只能与同名同阶的杂交单位再合成。' }),
@@ -11220,7 +11964,9 @@ function classify(unit) {
 }
 
 function displayName(type) {
-  return getRecipe(type)?.name || BASE_LABELS[type] || { en: type, zh: type };
+  const named = TOWERS[type]?.name || getRecipe(type)?.name || BASE_LABELS[type];
+  if (named?.en && named?.zh) return named;
+  return { en: String(type), zh: String(type) };
 }
 
 function placeholder(type, rank, kind) {
@@ -11231,15 +11977,14 @@ function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
   return {
-    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. It stays on the target slot and the source slot is cleared.`,
-    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。结果留在目标槽，来源槽清空。`,
+    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
+    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
   };
 }
 
-function hybridDescription(entry, rank) {
-  const [first, second] = entry.parents;
-  const left = displayName(first);
-  const right = displayName(second);
+function hybridDescription(entry, rank, fromType, toType) {
+  const left = displayName(fromType);
+  const right = displayName(toType);
   return {
     en: `${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
     zh: `${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
@@ -11268,7 +12013,7 @@ function planMerge(state, fromIndex, toIndex) {
   if (from.rank !== to.rank) return fail('rank_mismatch');
   const entry = findRecipe(from.type, to.type);
   if (!entry) return fail('no_recipe');
-  return { ok: true, unit: placeholder(entry.id, from.rank, 'hybrid'), description: hybridDescription(entry, from.rank), parents: entry.parents };
+  return { ok: true, unit: placeholder(entry.id, from.rank, 'hybrid'), description: hybridDescription(entry, from.rank, from.type, to.type), parents: entry.parents };
 }
 
 function previewMerge(state, fromIndex, toIndex) {
@@ -11677,9 +12422,12 @@ const clamp = __ff_m0["clamp"];
 // Settlement is immutable. A second call returns the same object and does not pay.
 //
 // Save order: settleRun(profile, state), then saveProfile, then saveRun.
-// Profile-first keeps the currency if the run write fails. state.settlement and
-// profile.settledRuns / profile.settlementLedger stop a reload from paying again.
-// settledRuns keeps the newest 64 ids. Buying equipment does not equip it.
+// Profile-first keeps the currency if the run write fails. state.settlement,
+// profile.settledRuns, and profile.settlementLedger each stop a second payout.
+// settledRuns keeps paid ids (up to 2000, the profile save ceiling). The ledger
+// keeps full results for the newest 64 ids only. Dropping an id would let that
+// run pay again. A run with no id is locked on the run object. Buying equipment
+// does not equip it.
 // One owned item can be equipped in its own slot and replaces the previous one.
 // Permanent bonuses are per rank; price is costs[currentLevel] until cap.
 // Buy / equip / upgrade failures use reason:
@@ -11708,6 +12456,8 @@ __ff_exports["PROGRESSION_RULES"] = PROGRESSION_RULES;
 
 
 const EQUIP_SLOTS = ['weapon', 'charm', 'armor'];
+// Profile saves reject settledRuns longer than 2000. Stay under that ceiling.
+const PAID_RUN_LIMIT = 2000;
 const PERMANENT_KEYS = ['damage', 'haste', 'vitality'];
 const FRACTION_KEYS = ['damage', 'haste', 'critChance', 'reward'];
 const ABSOLUTE_KEYS = ['range', 'fence'];
@@ -11916,12 +12666,15 @@ function getProfileBonuses(profile) {
   const milli = {damage: 0, haste: 0, critChance: 0, reward: 0};
   const absolute = {range: 0, fence: 0};
   const equipped = profile.equipped && typeof profile.equipped === 'object' ? profile.equipped : null;
+  const seenItems = new Set();
   if (equipped) {
     for (const slot of EQUIP_SLOTS) {
       const id = equipped[slot];
-      if (typeof id !== 'string' || !owns(profile, id)) continue;
+      // One owned item, one slot. A repeated id must not stack its bonuses.
+      if (typeof id !== 'string' || seenItems.has(id) || !owns(profile, id)) continue;
       const item = EQUIPMENT[id];
       if (!item || item.slot !== slot) continue;
+      seenItems.add(id);
       addSource(milli, absolute, item.bonuses, 1);
     }
   }
@@ -11929,6 +12682,7 @@ function getProfileBonuses(profile) {
   if (permanent) {
     for (const id of PERMANENT_KEYS) {
       const spec = PERMANENT_UPGRADES[id];
+      // Level is how many times this rank bonus has been bought. Count it once per rank.
       const level = boundedLevel(permanent[id], spec.cap);
       if (level > 0) addSource(milli, absolute, spec.bonuses, level);
     }
@@ -12095,17 +12849,54 @@ function hasSettled(profile, runId) {
   return typeof runId === 'string' && runId !== '' && Array.isArray(profile.settledRuns) && profile.settledRuns.includes(runId);
 }
 
+function ledgerSettlement(profile, runId) {
+  if (typeof runId !== 'string' || runId === '') return null;
+  const ledger = profile.settlementLedger;
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) return null;
+  const saved = ledger[runId];
+  return isSettlement(saved) ? saved : null;
+}
+
 function remember(profile, settlement) {
   const id = settlement.runId;
   if (typeof id !== 'string' || id === '') return;
   ensureLedger(profile);
-  if (!profile.settledRuns.includes(id)) profile.settledRuns.push(id);
-  if (!profile.settlementLedger[id]) profile.settlementLedger[id] = settlement;
-  const limit = PROGRESSION_RULES.settledRunLimit;
-  while (profile.settledRuns.length > limit) {
-    const old = profile.settledRuns.shift();
-    if (old) delete profile.settlementLedger[old];
+  if (!profile.settledRuns.includes(id)) {
+    profile.settledRuns.push(id);
+    while (profile.settledRuns.length > PAID_RUN_LIMIT) {
+      const old = profile.settledRuns.shift();
+      if (old) delete profile.settlementLedger[old];
+    }
   }
+  if (!profile.settlementLedger[id]) profile.settlementLedger[id] = settlement;
+  const recent = new Set(profile.settledRuns.slice(-PROGRESSION_RULES.settledRunLimit));
+  for (const key of Object.keys(profile.settlementLedger)) {
+    if (!recent.has(key)) delete profile.settlementLedger[key];
+  }
+}
+
+function progressionBag(state) {
+  const systems = state.systems;
+  if (!systems || typeof systems !== 'object' || Array.isArray(systems)) return null;
+  const bag = systems.progression;
+  if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return null;
+  return bag;
+}
+
+// A missing run id cannot be stored on the profile. Keep the first payout on the run.
+function rememberUnkeyed(state, settlement) {
+  if (!settlement || settlement.runId !== '') return;
+  if (!state.systems || typeof state.systems !== 'object' || Array.isArray(state.systems)) state.systems = {};
+  const bag = progressionBag(state);
+  const next = bag ? {...bag} : {};
+  if (!isSettlement(next.settlement)) next.settlement = settlement;
+  state.systems.progression = next;
+}
+
+function unkeyedSettlement(state) {
+  const bag = progressionBag(state);
+  if (!bag) return null;
+  return isSettlement(bag.settlement) ? bag.settlement : null;
 }
 
 function updateBest(profile, settlement) {
@@ -12159,19 +12950,30 @@ function settleRun(profile, state) {
   }
   if (isSettlement(state.settlement)) {
     if (isProfile(profile) && !hasSettled(profile, state.settlement.runId)) remember(profile, state.settlement);
+    rememberUnkeyed(state, state.settlement);
     return state.settlement;
   }
   if (!isProfile(profile)) return Object.freeze(buildSettlement(state, earnedCurrency(state, resolveResult(state)), resolveResult(state)));
   const runId = typeof state.runId === 'string' ? state.runId : '';
-  if (hasSettled(profile, runId)) {
-    const saved = profile.settlementLedger && profile.settlementLedger[runId];
-    if (isSettlement(saved)) {
+  if (runId === '') {
+    const locked = unkeyedSettlement(state);
+    if (locked) {
+      state.settlement = locked;
+      return locked;
+    }
+  }
+  const saved = ledgerSettlement(profile, runId);
+  if (hasSettled(profile, runId) || saved) {
+    if (saved) {
       state.settlement = saved;
+      if (!hasSettled(profile, runId)) remember(profile, saved);
       return saved;
     }
+    // The id was paid, but the full result aged out of the ledger. Do not pay again.
     const restored = Object.freeze(buildSettlement(state, 0, resolveResult(state)));
     state.settlement = restored;
     remember(profile, restored);
+    rememberUnkeyed(state, restored);
     return restored;
   }
   const result = resolveResult(state);
@@ -12180,6 +12982,7 @@ function settleRun(profile, state) {
   state.settlement = settlement;
   addCurrency(profile, amount);
   remember(profile, settlement);
+  rememberUnkeyed(state, settlement);
   updateBest(profile, settlement);
   return settlement;
 }
@@ -12739,10 +13542,14 @@ const spawnEnemy = __ff_m2["spawnEnemy"];
 // director.done flips only after the last queued campaign spawn has been handed to
 // spawnEnemy. Summons created by a living boss are not campaign spawns; they keep
 // happening after done until that boss is dead. Endless play never sets done.
+// director.hasBoss is true when the current wave's groups include a boss. It is
+// copied from that wave in the existing schedule and does not change counts,
+// timings, kinds, or difficulty multipliers. Endless play keeps the same flag
+// for the endless wave that is current.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
-//   endlessNext, endlessWave, doneEmitted, current {id,name,hint,intro}
+//   endlessNext, endlessWave, doneEmitted, current {id,name,hint,intro,boss}
 // Boss bodies may gain enraged (boolean) and summonAt (absolute simulation time
 // of the next call). Save both. dt is accepted and ignored: the lead advances
 // state.time before this call, and spawns/summons key off that clock so a large
@@ -13053,6 +13860,7 @@ function updateWaves(state, dt = 0) {
     }
   }
 
+  syncBossFlag(state, director, sys);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -13126,6 +13934,7 @@ function getWaveInfo(state) {
     countMultiplier: mult,
     finalSpawn: SCHEDULE_END,
     bossAlive,
+    hasBoss: readHasBoss(state, director),
   };
 }
 
@@ -13160,6 +13969,7 @@ function buildWaves(phases) {
         hint: {en: hint.en, zh: hint.zh},
         groups,
         intro,
+        boss: groups.some(group => group.kind === 'boss'),
       });
     }
   }
@@ -13293,6 +14103,7 @@ function makeEndlessWave(index, start) {
     hint: autoHint(groups),
     groups,
     intro: null,
+    boss: groups.some(group => group.kind === 'boss'),
   };
 }
 
@@ -13404,12 +14215,42 @@ function groupSpan(groups) {
   return end;
 }
 
+function waveContainsBoss(wave) {
+  return Array.isArray(wave?.groups) && wave.groups.some(group => group?.kind === 'boss');
+}
+
+// Current campaign wave comes from WAVES. Once endless waves have started, the
+// flag already stored on the current snapshot is the schedule for that wave.
+function syncBossFlag(state, director, sys) {
+  const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  if (endlessRunning) {
+    director.hasBoss = sys?.current?.boss === true;
+    return;
+  }
+  if (started <= 0 || WAVES.length === 0) {
+    director.hasBoss = false;
+    return;
+  }
+  director.hasBoss = waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
+function readHasBoss(state, director) {
+  if (typeof director?.hasBoss === 'boolean') return director.hasBoss;
+  const stored = state?.systems?.waves?.current;
+  if (typeof stored?.boss === 'boolean') return stored.boss;
+  const started = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
+  if (started <= 0 || WAVES.length === 0) return false;
+  return waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
 function snapshotWave(wave) {
   return {
     id: wave.id,
     name: {en: wave.name.en, zh: wave.name.zh},
     hint: {en: wave.hint.en, zh: wave.hint.zh},
     intro: wave.intro || null,
+    boss: wave?.boss === true || waveContainsBoss(wave),
   };
 }
 
@@ -13491,9 +14332,10 @@ const formatNumber = __ff_m5["formatNumber"];
  *
  * renderBuildPanel(container, state, api) rebuilds only the given container.
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
- * data-ui="panel" shows inspection. Move and merge controls stay on the panel
- * while playing, and move onto the overlay during a draft so a covering modal
- * still has a way to rearrange a full board.
+ * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
+ * while playing. A draft overlay keeps three short choice cards and does not
+ * include the 10-slot rearrange grid. Merge preview stays available there as a
+ * short pair list, then the confirm step.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
  * Clicks on its own controls stop at this panel so a parent bubble listener
@@ -13536,6 +14378,8 @@ const CSS = `
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
 .ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
+.ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
+.ff-build.is-draft .ff-draft-merge .btn{width:100%}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -14936,46 +15780,209 @@ function draftIntro(lang) {
     : 'Pick one. Towers are placed next. Hero upgrades apply now.';
 }
 
-function shotLine(lang) {
+function choiceLimit(lang) {
+  return lang === 'zh' ? 20 : 36;
+}
+
+function fitChoice(segments, max) {
+  const chosen = segments.filter((segment) => segment && segment.text);
+  const length = () => chosen.map((segment) => segment.text).join(' · ').length;
+  while (length() > max) {
+    let index = -1;
+    let rank = -1;
+    for (let i = 0; i < chosen.length; i += 1) {
+      if (!chosen[i].optional) continue;
+      const drop = chosen[i].drop ?? 1;
+      if (drop >= rank) {
+        rank = drop;
+        index = i;
+      }
+    }
+    if (index < 0) break;
+    chosen.splice(index, 1);
+  }
+  return chosen.map((segment) => segment.text).join(' · ');
+}
+
+function towerRole(type, lang) {
+  return localizeSafe(towerRecord(type)?.role, lang);
+}
+
+function roleSegment(role, signature) {
+  if (!role) return '';
+  if (signature && signature.toLowerCase().includes(role.toLowerCase())) return '';
+  return role;
+}
+
+function signatureLine(stats, lang, tr) {
+  if (!stats) return lang === 'zh' ? '单体射击' : 'Single-target shot';
+  if (stats.burn && typeof stats.burn === 'object') {
+    const dps = fmtNum(Number(stats.burn.dps ?? stats.burn.damage), lang);
+    const splash = Number(stats.splash) > 0;
+    if (lang === 'zh') return splash ? `溅射燃烧 ${dps}/秒` : `燃烧 ${dps}/秒`;
+    return splash ? `Splash and burn ${dps}/s` : `Burn ${dps}/s`;
+  }
+  if (stats.slow && typeof stats.slow === 'object') {
+    const factor = Number(stats.slow.factor ?? stats.slow.power);
+    if (Number.isFinite(factor) && factor > 0 && factor <= 1) {
+      const kept = fmtNum(Math.round(factor * 100), lang);
+      return lang === 'zh' ? `减速至 ${kept}%` : `Slows to ${kept}% speed`;
+    }
+    return lang === 'zh' ? '减速单个敌人' : 'Slows one enemy';
+  }
+  if (stats.poison && typeof stats.poison === 'object') {
+    const stacks = fmtNum(Number(stats.poison.maxStacks ?? stats.poison.stacks ?? 1), lang);
+    const dps = fmtNum(Number(stats.poison.dps ?? stats.poison.damage), lang);
+    return lang === 'zh' ? `${tr('poison')} ${dps}/秒，${stacks} 层` : `${tr('poison')} ${dps}/s, ${stacks} stacks`;
+  }
+  if (stats.aura && typeof stats.aura === 'object') {
+    const damage = percentNumber(stats.aura.damage);
+    const haste = percentNumber(stats.aura.haste);
+    const parts = [];
+    if (damage) parts.push(`+${fmtNum(damage, lang)}% ${tr('damage')}`);
+    if (haste) parts.push(`+${fmtNum(haste, lang)}% ${tr('haste')}`);
+    const body = parts.join(lang === 'zh' ? '，' : ', ');
+    return body ? `${tr('aura')} ${body}` : tr('aura');
+  }
+  if (Number(stats.chain) > 0) return `${tr('chain')} ${fmtNum(stats.chain, lang)}`;
+  if (Number(stats.pierce) > 0) return `${tr('pierce')} ${fmtNum(stats.pierce, lang)}`;
+  if (Number(stats.splash) > 0) return lang === 'zh' ? '范围溅射' : 'Splash on impact';
   return lang === 'zh' ? '单体射击' : 'Single-target shot';
 }
 
+function heroEffectLine(record, lang, tr) {
+  const effect = record?.effect;
+  if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
+  if (finite(effect.damageAdd) && Number(effect.damageAdd) !== 0) {
+    return `${tr('damage')} +${fmtNum(effect.damageAdd, lang)}`;
+  }
+  if (finite(effect.haste) && Number(effect.haste) !== 0) {
+    return `${tr('attackSpeed')} +${fmtNum(Math.round(Number(effect.haste) * 100), lang)}%`;
+  }
+  if (finite(effect.range) && Number(effect.range) !== 0) {
+    return `${tr('range')} +${fmtNum(effect.range, lang)}`;
+  }
+  if (finite(effect.critChance) && Number(effect.critChance) !== 0) {
+    return `${tr('crit')} +${fmtNum(Math.round(Number(effect.critChance) * 100), lang)}%`;
+  }
+  if (finite(effect.critMultiplier) && Number(effect.critMultiplier) !== 0) {
+    return `${tr('critDamage')} +${fmtNum(effect.critMultiplier, lang)}×`;
+  }
+  if (finite(effect.pierce) && Number(effect.pierce) !== 0) {
+    return `${tr('pierce')} +${fmtNum(effect.pierce, lang)}`;
+  }
+  if (effect.poison && typeof effect.poison === 'object') {
+    const dps = fmtNum(effect.poison.dps, lang);
+    const duration = fmtNum(effect.poison.duration, lang);
+    return lang === 'zh'
+      ? `${tr('poison')} ${dps}/秒，${duration} 秒`
+      : `${tr('poison')} ${dps}/s for ${duration}s`;
+  }
+  const sentence = localizeSafe(record?.description, lang).replace(/\s+/g, ' ').trim();
+  if (!sentence) return '';
+  const first = sentence.split(/(?<=[。！？.!?])\s*/)[0] || sentence;
+  return first.replace(/[。.!]$/, '');
+}
+
 function compactOffer(state, option, lang, tr) {
+  const max = choiceLimit(lang);
   if (option?.kind === 'hero_upgrade') {
     const id = resolveUpgradeId(option);
     const record = upgradeRecord(id);
     const hero = findHero(state);
-    const before = hero ? safeStats(hero, state) : null;
-    const after = hero && id ? safeStats(withUpgrade(hero, id), state) : null;
-    const deltas = deltaLines(before, after, lang, tr);
-    const fallback = effectObjectLines(record, lang, tr);
-    const facts = deltas.length ? deltas : fallback;
-    const level = upgradeLevel(hero, id);
-    const cap = Number(record?.cap);
-    const levelText = Number.isFinite(cap) ? `${tr('level')} ${fmtNum(level, lang)}/${fmtNum(cap, lang)}` : '';
-    const blurb = facts[0] || tr('chooseUpgrade');
-    const stats = facts.slice(1, 3);
-    if (levelText) stats.push(levelText);
-    return { blurb, stats: stats.slice(0, 3) };
+    const effect = heroEffectLine(record, lang, tr) || tr('chooseUpgrade');
+    const cap = Number(record?.cap ?? option?.cap);
+    const current = upgradeLevel(hero, id);
+    const next = Number.isFinite(Number(option?.nextLevel)) ? Number(option.nextLevel) : current + 1;
+    const levelText = Number.isFinite(cap) ? `${tr('level')} ${fmtNum(next, lang)}/${fmtNum(cap, lang)}` : '';
+    const blurb = fitChoice([
+      { text: tr('hero'), optional: true, drop: 2 },
+      { text: effect, optional: false },
+      { text: levelText, optional: true, drop: 1 },
+    ], max);
+    return { blurb, stats: [] };
   }
   const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
   const preview = option?.unit && typeof option.unit === 'object'
     ? option.unit
-    : { id: `preview-${option?.type || 'tower'}`, kind: 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
-  const described = describeStats(safeStats(preview, state), lang, tr);
-  const special = described.specials[0] || shotLine(lang);
-  const blurb = option?.replace ? `${tr('replace')} · ${special}` : special;
-  const stats = [];
-  const damage = described.rows.find((item) => item.id === 'stat-damage');
-  const range = described.rows.find((item) => item.id === 'stat-range');
-  if (damage) stats.push(`${damage.label} ${damage.value}`);
-  const interval = Number(safeStats(preview, state)?.interval);
-  if (interval > 0) stats.push(`${tr('attackSpeed')} ${fmtNum(1 / interval, lang)}${perSecond(lang)}`);
-  if (range) stats.push(`${range.label} ${range.value}`);
-  return { blurb, stats };
+    : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
+  const stats = safeStats(preview, state);
+  const signature = signatureLine(stats, lang, tr);
+  const role = roleSegment(towerRole(option?.type || preview.type, lang), signature);
+  const aura = stats?.aura && typeof stats.aura === 'object';
+  const damage = !aura && finite(stats?.damage) ? `${tr('damage')} ${fmtNum(stats.damage, lang)}` : '';
+  const interval = Number(stats?.interval);
+  const speed = !aura && interval > 0 ? `${tr('attackSpeed')} ${fmtNum(1 / interval, lang)}${perSecond(lang)}` : '';
+  const blurb = fitChoice([
+    { text: option?.replace ? tr('replace') : '', optional: false },
+    { text: role, optional: true, drop: 2 },
+    { text: signature, optional: false },
+    { text: damage, optional: true, drop: 1 },
+    { text: speed, optional: true, drop: 3 },
+  ], max);
+  return { blurb, stats: [] };
 }
 
-function renderDraft(state, lang, tr, idSuffix) {
+function legalMergePairs(state) {
+  const towers = nonHeroSlots(state);
+  const pairs = [];
+  for (let left = 0; left < towers.length; left += 1) {
+    for (let right = left + 1; right < towers.length; right += 1) {
+      const preview = safePreview(state, towers[left], towers[right]);
+      if (preview.ok) pairs.push({ from: towers[left], to: towers[right] });
+    }
+  }
+  return pairs;
+}
+
+function pairLabel(state, from, to, lang, tr) {
+  const side = (index) => {
+    const unit = slotUnit(state, index);
+    const rank = Number(unit?.rank) || 1;
+    const rankBit = rank > 1 ? ` ${tr('rank')}${fmtNum(rank, lang)}` : '';
+    return `${index + 1} ${unitLabel(unit, lang, tr)}${rankBit}`;
+  };
+  return `${side(from)} + ${side(to)}`;
+}
+
+function renderDraftMerge(state, lang, tr, ui) {
+  if (mergeConfirmActive(ui)) return null;
+  if (nonHeroSlots(state).length < 2) return null;
+  const wrap = el('div', { class: 'ff-draft-merge', 'data-testid': 'draft-merge' });
+  if (ephemeral.mode !== 'merge') {
+    wrap.append(button({
+      'data-intent': 'pick-merge',
+      'data-testid': 'draft-merge-open',
+      text: tr('mergePreview'),
+    }));
+    return wrap;
+  }
+  const pairs = legalMergePairs(state);
+  if (!pairs.length) {
+    wrap.append(el('p', { 'data-testid': 'no-valid-target', text: tr('noValidTarget') }));
+  } else {
+    const list = el('div', { class: 'ff-draft-list', 'data-testid': 'draft-merge-pairs' });
+    for (const pair of pairs) {
+      list.append(button({
+        'data-action': 'mergePreview',
+        'data-from': String(pair.from),
+        'data-to': String(pair.to),
+        'data-testid': `draft-merge-${pair.from}-${pair.to}`,
+        text: pairLabel(state, pair.from, pair.to, lang, tr),
+      }));
+    }
+    wrap.append(list);
+  }
+  wrap.append(el('p', { class: 'muted', text: tr('heroProtected') }));
+  wrap.append(button({
+    'data-intent': 'cancel-mode',
+    'data-testid': 'cancel-merge',
+    text: tr('mergeCancel'),
+  }));
+  return wrap;
+}
+
+function renderDraft(state, lang, tr, idSuffix, ui) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
@@ -14992,13 +15999,15 @@ function renderDraft(state, lang, tr, idSuffix) {
     const name = draftOptionName(option, lang, tr);
     const offer = compactOffer(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
+    const statText = offer.stats.join(' · ');
     const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
     card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
-    if (offer.stats.length) {
-      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: offer.stats.join(' · ') }));
+    if (statText) {
+      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
     }
     const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
+    const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
     card.append(button({
       primary: true,
       'data-action': 'chooseDraft',
@@ -15010,12 +16019,14 @@ function renderDraft(state, lang, tr, idSuffix) {
       'data-option-id': option?.id || '',
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
-      'aria-label': `${name}. ${offer.blurb}. ${actionLabel}`,
+      'aria-label': `${name}. ${described}. ${actionLabel}`,
       text: actionLabel,
     }));
     list.append(el('li', {}, card));
   });
   section.append(list);
+  const merge = renderDraftMerge(state, lang, tr, ui);
+  if (merge) section.append(merge);
   return section;
 }
 
@@ -15434,7 +16445,7 @@ function renderBuildPanel(container, state, api) {
     root.append(el('p', { class: 'muted', 'data-testid': 'xp-progress', text: progressText(state, tr, lang) }));
   }
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
-  if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main'));
+  if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main', ui));
   if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr));
   if (includeDetails) {
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;

@@ -3,6 +3,7 @@
 // The source slot is consumed and the target slot receives the result.
 import { BASE_TYPES, canPlan, createUnit, emit } from '../shared.js';
 import { HYBRID_RANK_MAX, findRecipe, getRecipe, isRecipeId } from '../data/recipes.js';
+import { TOWERS } from '../data/towers.js';
 
 export const PREVIEW_UNIT_ID = 'preview';
 
@@ -21,7 +22,7 @@ export const MERGE_REASONS = Object.freeze({
   invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的槽位。' }),
   same_slot: Object.freeze({ en: 'Choose two different slots.', zh: '请选择两个不同的槽位。' }),
   empty_slot: Object.freeze({ en: 'Both slots need a unit. Nothing was changed.', zh: '两个槽位都要有单位。没有改动。' }),
-  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄不能合成，也不能被替换。' }),
+  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄永不合成，也不能被替换。' }),
   rank_mismatch: Object.freeze({ en: 'Both units must be the same rank. Unequal ranks stay as they are.', zh: '双方必须同阶。不同阶会原样保留。' }),
   rank_cap: Object.freeze({ en: 'Rank 4 is the cap. Same-type merges stop there.', zh: '4 阶已是上限，同型不能再合成。' }),
   hybrid_locked: Object.freeze({ en: 'A hybrid only merges with the same hybrid at the same rank.', zh: '杂交单位只能与同名同阶的杂交单位再合成。' }),
@@ -54,7 +55,9 @@ function classify(unit) {
 }
 
 function displayName(type) {
-  return getRecipe(type)?.name || BASE_LABELS[type] || { en: type, zh: type };
+  const named = TOWERS[type]?.name || getRecipe(type)?.name || BASE_LABELS[type];
+  if (named?.en && named?.zh) return named;
+  return { en: String(type), zh: String(type) };
 }
 
 function placeholder(type, rank, kind) {
@@ -65,15 +68,14 @@ function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
   return {
-    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. It stays on the target slot and the source slot is cleared.`,
-    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。结果留在目标槽，来源槽清空。`,
+    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
+    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
   };
 }
 
-function hybridDescription(entry, rank) {
-  const [first, second] = entry.parents;
-  const left = displayName(first);
-  const right = displayName(second);
+function hybridDescription(entry, rank, fromType, toType) {
+  const left = displayName(fromType);
+  const right = displayName(toType);
   return {
     en: `${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
     zh: `${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
@@ -102,7 +104,7 @@ function planMerge(state, fromIndex, toIndex) {
   if (from.rank !== to.rank) return fail('rank_mismatch');
   const entry = findRecipe(from.type, to.type);
   if (!entry) return fail('no_recipe');
-  return { ok: true, unit: placeholder(entry.id, from.rank, 'hybrid'), description: hybridDescription(entry, from.rank), parents: entry.parents };
+  return { ok: true, unit: placeholder(entry.id, from.rank, 'hybrid'), description: hybridDescription(entry, from.rank, from.type, to.type), parents: entry.parents };
 }
 
 export function previewMerge(state, fromIndex, toIndex) {

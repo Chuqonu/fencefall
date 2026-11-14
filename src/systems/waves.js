@@ -11,10 +11,14 @@
 // director.done flips only after the last queued campaign spawn has been handed to
 // spawnEnemy. Summons created by a living boss are not campaign spawns; they keep
 // happening after done until that boss is dead. Endless play never sets done.
+// director.hasBoss is true when the current wave's groups include a boss. It is
+// copied from that wave in the existing schedule and does not change counts,
+// timings, kinds, or difficulty multipliers. Endless play keeps the same flag
+// for the endless wave that is current.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
-//   endlessNext, endlessWave, doneEmitted, current {id,name,hint,intro}
+//   endlessNext, endlessWave, doneEmitted, current {id,name,hint,intro,boss}
 // Boss bodies may gain enraged (boolean) and summonAt (absolute simulation time
 // of the next call). Save both. dt is accepted and ignored: the lead advances
 // state.time before this call, and spawns/summons key off that clock so a large
@@ -323,6 +327,7 @@ export function updateWaves(state, dt = 0) {
     }
   }
 
+  syncBossFlag(state, director, sys);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -396,6 +401,7 @@ export function getWaveInfo(state) {
     countMultiplier: mult,
     finalSpawn: SCHEDULE_END,
     bossAlive,
+    hasBoss: readHasBoss(state, director),
   };
 }
 
@@ -430,6 +436,7 @@ function buildWaves(phases) {
         hint: {en: hint.en, zh: hint.zh},
         groups,
         intro,
+        boss: groups.some(group => group.kind === 'boss'),
       });
     }
   }
@@ -563,6 +570,7 @@ function makeEndlessWave(index, start) {
     hint: autoHint(groups),
     groups,
     intro: null,
+    boss: groups.some(group => group.kind === 'boss'),
   };
 }
 
@@ -674,12 +682,42 @@ function groupSpan(groups) {
   return end;
 }
 
+function waveContainsBoss(wave) {
+  return Array.isArray(wave?.groups) && wave.groups.some(group => group?.kind === 'boss');
+}
+
+// Current campaign wave comes from WAVES. Once endless waves have started, the
+// flag already stored on the current snapshot is the schedule for that wave.
+function syncBossFlag(state, director, sys) {
+  const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  if (endlessRunning) {
+    director.hasBoss = sys?.current?.boss === true;
+    return;
+  }
+  if (started <= 0 || WAVES.length === 0) {
+    director.hasBoss = false;
+    return;
+  }
+  director.hasBoss = waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
+function readHasBoss(state, director) {
+  if (typeof director?.hasBoss === 'boolean') return director.hasBoss;
+  const stored = state?.systems?.waves?.current;
+  if (typeof stored?.boss === 'boolean') return stored.boss;
+  const started = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
+  if (started <= 0 || WAVES.length === 0) return false;
+  return waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
 function snapshotWave(wave) {
   return {
     id: wave.id,
     name: {en: wave.name.en, zh: wave.name.zh},
     hint: {en: wave.hint.en, zh: wave.hint.zh},
     intro: wave.intro || null,
+    boss: wave?.boss === true || waveContainsBoss(wave),
   };
 }
 

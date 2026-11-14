@@ -42,4 +42,4 @@ Art and copy can land together. Combat, waves, drafts, hero, and progression lan
 ## Log
 
 - Cycle 1 delivered the playable campaign, compact drafts, resume, phone drawer, readable enemy boxes, and the live-save fix.
-- Cycle 2 is the next disjoint batch. No worker from jobs 01–26 is being relaunched.
+- Cycle 2 ran 22 isolated Fast/xhigh workers. All 22 returned. Integrated art, audio, copy, boss-wave flag, paid-run memory, and two new test files. 66 tests passed. Held back `src/systems/combat.js`: chain jumps would re-roll crits and change seeded fights. Hero, movement, drafts, status, and the meta panel were already correct and stayed as they were.
