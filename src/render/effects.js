@@ -1,0 +1,1108 @@
+/**
+ * Fencefall combat feedback visuals.
+ *
+ * createEffects() -> {ingest(events), update(dt), draw(ctx, {reducedMotion}), clear()}
+ * Draw in logical arena pixels. The renderer owns the view transform.
+ * Call ingest, then update(seconds), then draw. Do not ingest during draw.
+ * This module never reads or advances gameplay RNG.
+ *
+ * Event names: shot, hit, kill, fence_hit, merge, draft, victory, defeat, ui.
+ * Optional fields: x, y, targetX, targetY, damage, crit, towerType, rank, splash,
+ * chain, points, stacks, slot/slotIndex/fromIndex/toIndex, time.
+ * Missing fields are skipped. emit() copies payload after `type`, so a payload
+ * `type` of bolt/fire/frost/lightning/poison/support/hero/burn/slow/stun/brittle
+ * is recovered as shot, hit, or status when position or damage is present.
+ * Reduced motion keeps markers, rings at their start size, crits, and numbers,
+ * and drops traveling debris.
+ */
+import { ARENA, slotGeometry } from '../shared.js';
+
+const MAX_PARTICLES = 140;
+const MAX_FLOATERS = 18;
+const MAX_RINGS = 16;
+const SCAN_LIMIT = 400;
+
+const LIMITS = Object.freeze({
+  shot: 8,
+  hit: 12,
+  kill: 8,
+  fence_hit: 4,
+  merge: 3,
+  draft: 2,
+  victory: 1,
+  defeat: 1,
+  ui: 4,
+  status: 6,
+  boss: 1,
+});
+
+const PALETTES = Object.freeze({
+  bolt: { core: '#fff6d2', hot: '#ffe56a', mid: '#e2a63a', dim: '#7a4e16' },
+  fire: { core: '#fff1c9', hot: '#ff9a3c', mid: '#e23b16', dim: '#6a160e' },
+  frost: { core: '#f4fdff', hot: '#b9f3ff', mid: '#3ec4e0', dim: '#1c5f8a' },
+  lightning: { core: '#ffffff', hot: '#d5e4ff', mid: '#7aa2ff', dim: '#2a3e98' },
+  poison: { core: '#f2ffc8', hot: '#b6e84a', mid: '#4f8f1e', dim: '#1e320c' },
+  support: { core: '#fff8e6', hot: '#f0cb72', mid: '#5ec8b0', dim: '#1f564c' },
+  hero: { core: '#fff8e8', hot: '#f0cb72', mid: '#e09a3a', dim: '#6d3c12' },
+  neutral: { core: '#f2f5f4', hot: '#d5ddd8', mid: '#8aa097', dim: '#3d524c' },
+  brittle: { core: '#fff8ee', hot: '#f0cb72', mid: '#d7a25a', dim: '#6a4a28' },
+  fence: { core: '#fff2dd', hot: '#e7c89a', mid: '#9b7951', dim: '#5c4128' },
+  kill: { core: '#fff4ea', hot: '#ffd0a8', mid: '#d07048', dim: '#5a241c' },
+  victory: { core: '#fff8dc', hot: '#f0cb72', mid: '#8fd18a', dim: '#2f6a48' },
+  defeat: { core: '#ffd0c8', hot: '#e07068', mid: '#a33b3b', dim: '#4a1c22' },
+  ui: { core: '#e7eef0', hot: '#c5d4d8', mid: '#7f989e', dim: '#31464c' },
+  draft: { core: '#fff6d4', hot: '#f0cb72', mid: '#d7a441', dim: '#6a4a16' },
+  boss: { core: '#ffe8ff', hot: '#e2a0ea', mid: '#8d3eae', dim: '#3c1848' },
+  heal: { core: '#f3fff8', hot: '#9be7c4', mid: '#3eae86', dim: '#145445' },
+});
+
+const HYBRID_PALETTES = Object.freeze([
+  { core: '#fff0e0', hot: '#ffb15a', mid: '#e25a3a', dim: '#6a2418' },
+  { core: '#f3fbff', hot: '#9fd4ff', mid: '#4a78e0', dim: '#1c2a66' },
+  { core: '#f4ffe4', hot: '#c6e86a', mid: '#3e9a8a', dim: '#14322c' },
+  { core: '#fff4f8', hot: '#f0a0c8', mid: '#c45a8a', dim: '#5a2040' },
+  { core: '#f3f6ff', hot: '#c9d4ff', mid: '#6a7ad0', dim: '#242848' },
+  { core: '#fff8e8', hot: '#e6c36a', mid: '#c47a3a', dim: '#4a3014' },
+  { core: '#eefcf6', hot: '#8ee0c0', mid: '#2a9a78', dim: '#12382c' },
+  { core: '#fff2ea', hot: '#ffc2a0', mid: '#d06040', dim: '#4a2018' },
+]);
+
+const ELEMENT_BEHAVIOR = Object.freeze({
+  bolt: 'bolt',
+  fire: 'fire',
+  burn: 'fire',
+  frost: 'frost',
+  slow: 'frost',
+  lightning: 'lightning',
+  stun: 'lightning',
+  brittle: 'brittle',
+  poison: 'poison',
+  support: 'support',
+  aura: 'support',
+  heal: 'support',
+  buff: 'support',
+  hero: 'hero',
+});
+
+const FEEDBACK = new Set([
+  'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
+  'victory', 'defeat', 'ui', 'status', 'boss',
+]);
+
+const ALIAS = Object.freeze({
+  fencehit: 'fence_hit',
+  fence_damage: 'fence_hit',
+  fence_attack: 'fence_hit',
+  death: 'kill',
+  enemy_killed: 'kill',
+  killed: 'kill',
+  merged: 'merge',
+  merge_units: 'merge',
+  draft_open: 'draft',
+  win: 'victory',
+  lose: 'defeat',
+  lost: 'defeat',
+  click: 'ui',
+  button: 'ui',
+  boss_spawn: 'boss',
+  boss_enter: 'boss',
+});
+
+const CRIT_TYPES = new Set(['crit', 'critical', 'critical_hit']);
+const SKIP_TAG = new Set(['crit', 'critical', 'splash', 'pierce', 'chain', 'aoe']);
+
+const GLYPHS = Object.freeze({
+  0: ['111', '101', '101', '101', '111'],
+  1: ['010', '110', '010', '010', '111'],
+  2: ['111', '001', '111', '100', '111'],
+  3: ['111', '001', '111', '001', '111'],
+  4: ['101', '101', '111', '001', '001'],
+  5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'],
+  7: ['111', '001', '010', '010', '010'],
+  8: ['111', '101', '111', '101', '111'],
+  9: ['111', '101', '111', '001', '111'],
+  '.': ['000', '000', '000', '000', '010'],
+  '+': ['000', '010', '111', '010', '000'],
+});
+
+const STYLE = Object.freeze({
+  bolt: { jitter: 3, sparks: 4, speed: 78, gravity: 0, up: false, arc: true },
+  fire: { jitter: 7, sparks: 6, speed: 48, gravity: -30, up: true, arc: true },
+  frost: { jitter: 2, sparks: 5, speed: 30, gravity: 0, up: false, arc: true },
+  lightning: { jitter: 16, sparks: 3, speed: 96, gravity: 0, up: false, arc: true },
+  poison: { jitter: 2, sparks: 5, speed: 26, gravity: 110, up: false, arc: false },
+  support: { jitter: 0, sparks: 0, speed: 0, gravity: 0, up: false, arc: false, ring: true },
+  hero: { jitter: 4, sparks: 4, speed: 64, gravity: 16, up: false, arc: true },
+  brittle: { jitter: 2, sparks: 4, speed: 38, gravity: 20, up: false, arc: false },
+  neutral: { jitter: 3, sparks: 4, speed: 44, gravity: 0, up: false, arc: true },
+  hybrid: { jitter: 6, sparks: 5, speed: 52, gravity: 0, up: false, arc: true },
+});
+
+function finite(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normName(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function hashString(text) {
+  let h = 2166136261;
+  const s = String(text);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mix(n) {
+  let x = n >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x7feb352d);
+  x = Math.imul(x ^ (x >>> 15), 0x846ca68b);
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+function rand01(seed) {
+  return mix(seed) / 4294967296;
+}
+
+function saneX(x) {
+  return x >= -80 && x <= ARENA.width + 80;
+}
+
+function saneY(y) {
+  return y >= -120 && y <= ARENA.height + 120;
+}
+
+function readTags(event) {
+  if (Array.isArray(event.tags)) return event.tags;
+  if (typeof event.tags === 'string') return [event.tags];
+  return [];
+}
+
+function isCrit(event) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.crit === true || event.critical === true || event.isCrit === true) return true;
+  if (event.crit === 1 || event.critical === 1) return true;
+  if (typeof event.crit === 'number' && Number.isFinite(event.crit) && event.crit > 1) return true;
+  const tags = readTags(event);
+  for (let i = 0; i < tags.length; i++) {
+    const name = normName(tags[i]);
+    if (name === 'crit' || name === 'critical') return true;
+  }
+  return false;
+}
+
+function readDamage(event) {
+  const direct = finite(event.damage);
+  if (direct != null) return direct;
+  return finite(event.amount);
+}
+
+function readHeal(event, hint) {
+  const direct = finite(event.heal);
+  if (direct != null && direct > 0) return Math.min(direct, 9999);
+  const alt = finite(event.healing);
+  if (alt != null && alt > 0) return Math.min(alt, 9999);
+  if (hint === 'heal' || hint === 'buff') {
+    const amount = finite(event.amount);
+    if (amount != null && amount > 0) return Math.min(amount, 9999);
+    const damage = finite(event.damage);
+    if (damage != null && damage > 0) return Math.min(damage, 9999);
+  }
+  return null;
+}
+
+function readRank(event) {
+  const n = finite(event.rank);
+  if (n == null) return null;
+  const rounded = Math.round(n);
+  if (rounded > 4) return 4;
+  if (rounded < 1) return null;
+  return rounded;
+}
+
+function readSplash(event) {
+  if (event.splash === true) return 18;
+  const n = finite(event.splash);
+  if (n == null || n <= 0) return 0;
+  return Math.max(8, Math.min(84, n));
+}
+
+function readCount(value, max) {
+  if (value === true) return 1;
+  const n = finite(value);
+  if (n == null || n <= 0) return 0;
+  return Math.max(0, Math.min(max, Math.round(n)));
+}
+
+function readElement(event, hint, feedbackType) {
+  const statusName = normName(event.status) || normName(event.statusType);
+  if (feedbackType === 'status' && statusName) return statusName;
+  const keys = ['towerType', 'unitType', 'sourceType', 'attackerType', 'damageType', 'element'];
+  for (let i = 0; i < keys.length; i++) {
+    const name = normName(event[keys[i]]);
+    if (name) return name;
+  }
+  if (statusName) return statusName;
+  const tags = readTags(event);
+  for (let i = 0; i < tags.length; i++) {
+    const name = normName(tags[i]);
+    if (!name || SKIP_TAG.has(name)) continue;
+    return name;
+  }
+  return hint || '';
+}
+
+function behaviorFrom(element) {
+  const key = normName(element);
+  if (ELEMENT_BEHAVIOR[key]) return ELEMENT_BEHAVIOR[key];
+  if (!key) return 'neutral';
+  return 'hybrid';
+}
+
+function paletteFor(element, behavior) {
+  if (behavior === 'hybrid') {
+    const index = hashString(normName(element) || 'hybrid') % HYBRID_PALETTES.length;
+    return HYBRID_PALETTES[index];
+  }
+  return PALETTES[behavior] || PALETTES.neutral;
+}
+
+function readLooseXY(event) {
+  let x = finite(event.x);
+  let y = finite(event.y);
+  if (x == null) x = finite(event.fx);
+  if (y == null) y = finite(event.fy);
+  if ((x == null || y == null) && event.position && typeof event.position === 'object') {
+    if (x == null) x = finite(event.position.x);
+    if (y == null) y = finite(event.position.y);
+  }
+  return {
+    x: x != null && saneX(x) ? x : null,
+    y: y != null && saneY(y) ? y : null,
+  };
+}
+
+function readTarget(event) {
+  let x = finite(event.targetX);
+  let y = finite(event.targetY);
+  if (x == null) x = finite(event.tx);
+  if (y == null) y = finite(event.ty);
+  if (x == null) x = finite(event.toX);
+  if (y == null) y = finite(event.toY);
+  if (x == null || y == null || !saneX(x) || !saneY(y)) return null;
+  return { x, y };
+}
+
+function readSlot(event, type) {
+  const keys = type === 'shot'
+    ? ['fromIndex', 'sourceSlot', 'slot', 'slotIndex']
+    : type === 'merge'
+      ? ['toIndex', 'targetSlot', 'slot', 'slotIndex', 'fromIndex', 'sourceSlot']
+      : ['slot', 'slotIndex', 'toIndex', 'targetSlot'];
+  for (let i = 0; i < keys.length; i++) {
+    const value = event[keys[i]];
+    if (Number.isInteger(value) && value >= 0 && value < 10) return value;
+  }
+  return null;
+}
+
+function readPoints(event) {
+  const sources = [event.points, event.hops, event.chainPoints];
+  const out = [];
+  for (let s = 0; s < sources.length; s++) {
+    const list = sources[s];
+    if (!Array.isArray(list)) continue;
+    const limit = Math.min(list.length, 12);
+    for (let i = 0; i < limit && out.length < 6; i++) {
+      const point = list[i];
+      if (!point || typeof point !== 'object') continue;
+      const x = finite(point.x);
+      const y = finite(point.y);
+      if (x == null || y == null || !saneX(x) || !saneY(y)) continue;
+      out.push({ x, y });
+    }
+    if (out.length) break;
+  }
+  return out;
+}
+
+function resolveKind(event) {
+  const raw = normName(event.type);
+  const hinted = normName(event.eventType || event.event);
+  const candidates = [];
+  if (raw) candidates.push(raw);
+  if (hinted && hinted !== raw) candidates.push(hinted);
+  for (let i = 0; i < candidates.length; i++) {
+    const name = candidates[i];
+    if (CRIT_TYPES.has(name)) return { type: 'hit', forceCrit: true, hint: '' };
+    const aliased = ALIAS[name] || name;
+    if (FEEDBACK.has(aliased)) return { type: aliased, forceCrit: false, hint: '' };
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    if (ELEMENT_BEHAVIOR[candidates[i]]) return { type: '', forceCrit: false, hint: candidates[i] };
+  }
+  return null;
+}
+
+function slotPoint(event, type) {
+  const index = readSlot(event, type);
+  if (index == null) return null;
+  const slot = slotGeometry(index);
+  return { x: slot.x, y: slot.y, fromSlot: true };
+}
+
+/**
+ * Pure description of one feedback event. Returns null when the event is not visual/audio feedback.
+ * @param {object} event
+ */
+export function describeFeedback(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+  const resolved = resolveKind(event);
+  if (!resolved) return null;
+  const element = readElement(event, resolved.hint, resolved.type);
+  const behavior = behaviorFrom(element);
+  let type = resolved.type;
+  const target = readTarget(event);
+  const damage = readDamage(event);
+  if (!type) {
+    const hint = resolved.hint;
+    if (hint === 'heal' || hint === 'buff' || hint === 'aura') type = 'status';
+    else if ((damage != null && damage > 0) || isCrit(event)) type = 'hit';
+    else if (target) type = 'shot';
+    else type = 'status';
+  }
+  if (!FEEDBACK.has(type)) return null;
+  const loose = readLooseXY(event);
+  let position = loose.x != null && loose.y != null ? { x: loose.x, y: loose.y, fromSlot: false } : null;
+  if (!position) position = slotPoint(event, type);
+  const cueName = normName(event.name || event.tone || event.id || '');
+  const cue = type === 'ui' && (cueName === 'error' || cueName === 'invalid' || cueName === 'cancel' || event.ok === false)
+    ? 'error'
+    : (type === 'ui' ? 'ui' : '');
+  return {
+    type,
+    element,
+    behavior,
+    crit: resolved.forceCrit || isCrit(event),
+    damage,
+    heal: readHeal(event, resolved.hint || element),
+    position,
+    x: loose.x != null ? loose.x : (position ? position.x : null),
+    y: loose.y != null ? loose.y : (position ? position.y : null),
+    target,
+    rank: readRank(event),
+    splash: readSplash(event),
+    chain: readCount(event.chain, 8),
+    stacks: readCount(event.stacks, 8),
+    points: readPoints(event),
+    time: finite(event.time) ?? 0,
+    cue,
+  };
+}
+
+function asList(events) {
+  if (Array.isArray(events)) return events;
+  if (events && typeof events === 'object' && (typeof events.type === 'string' || typeof events.event === 'string' || typeof events.eventType === 'string')) {
+    return [events];
+  }
+  return [];
+}
+
+/**
+ * Cap and describe a shared event batch. Does not mutate the input array.
+ * When `limits` is provided, only its own keys are kept.
+ */
+export function collectFeedback(events, limits) {
+  const list = asList(events);
+  if (!list.length) return [];
+  const start = Math.max(0, list.length - SCAN_LIMIT);
+  const groups = new Map();
+  for (let i = start; i < list.length; i++) {
+    const desc = describeFeedback(list[i]);
+    if (!desc) continue;
+    let bucket = groups.get(desc.type);
+    if (!bucket) {
+      bucket = [];
+      groups.set(desc.type, bucket);
+    }
+    bucket.push(desc);
+  }
+  const table = limits || LIMITS;
+  const out = [];
+  for (const [type, bucket] of groups) {
+    if (!Object.prototype.hasOwnProperty.call(table, type)) continue;
+    const cap = table[type];
+    if (!Number.isFinite(cap) || cap <= 0) continue;
+    if (type === 'hit' || type === 'kill') {
+      bucket.sort((a, b) => Number(b.crit) - Number(a.crit) || (b.damage || 0) - (a.damage || 0));
+    }
+    const count = Math.min(bucket.length, Math.floor(cap));
+    for (let i = 0; i < count; i++) out.push(bucket[i]);
+  }
+  return out;
+}
+
+function formatDamage(value) {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const rounded = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  if (!(rounded > 0)) return '';
+  const capped = Math.min(rounded, 9999);
+  return Number.isInteger(capped) ? String(capped) : capped.toFixed(1);
+}
+
+function fade(item) {
+  const max = item.maxLife > 0 ? item.maxLife : 1;
+  const t = item.life / max;
+  if (!(t > 0)) return 0;
+  return t > 0.8 ? 1 : t / 0.8;
+}
+
+function fallbackPoint(type) {
+  if (type === 'fence_hit' || type === 'defeat') return { x: ARENA.width / 2, y: ARENA.fenceY };
+  if (type === 'merge') return { x: ARENA.width / 2, y: ARENA.frontY - 24 };
+  if (type === 'draft') return { x: ARENA.width / 2, y: 76 };
+  if (type === 'victory') return { x: ARENA.width / 2, y: 220 };
+  if (type === 'boss') return { x: ARENA.width / 2, y: 84 };
+  return null;
+}
+
+function visualPoint(desc) {
+  if (desc.position) {
+    if (desc.position.fromSlot && (desc.type === 'shot' || desc.type === 'merge' || desc.type === 'status')) {
+      return { x: desc.position.x, y: desc.position.y - 14 };
+    }
+    return { x: desc.position.x, y: desc.position.y };
+  }
+  return fallbackPoint(desc.type);
+}
+
+export function createEffects() {
+  const particles = [];
+  const floaters = [];
+  const rings = [];
+  let salt = 1;
+
+  function nextSeed(desc, index) {
+    salt = (salt + 0x6d2b79f5) >>> 0;
+    const x = Math.round((desc.x ?? desc.position?.x ?? 0) * 4);
+    const y = Math.round((desc.y ?? desc.position?.y ?? 0) * 4);
+    const t = Math.round((desc.time || 0) * 1000);
+    return mix(salt ^ Math.imul(t, 0x9e3779b1) ^ Math.imul(x, 0x85ebca6b) ^ Math.imul(y, 0xc2b2ae35) ^ (index * 17));
+  }
+
+  function pushParticle(particle) {
+    if (particle.x != null && !Number.isFinite(particle.x)) return;
+    if (particle.y != null && !Number.isFinite(particle.y)) return;
+    particles.push(particle);
+  }
+
+  function pushRing(x, y, radius, grow, color, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !(radius > 0)) return;
+    rings.push({
+      x, y,
+      r: radius,
+      r0: radius,
+      vr: grow,
+      color,
+      life,
+      maxLife: life,
+    });
+  }
+
+  function pushSpark(x, y, angle, speed, color, life, size, gravity) {
+    pushParticle({
+      kind: 'spark',
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size,
+      color,
+      life,
+      maxLife: life,
+      gravity,
+      motionOnly: true,
+    });
+  }
+
+  function burst(x, y, count, speed, gravity, upward, color, life, seed, size) {
+    for (let i = 0; i < count; i++) {
+      const roll = rand01(seed + i * 19);
+      const angle = upward
+        ? -Math.PI / 2 + (roll - 0.5) * Math.PI
+        : roll * Math.PI * 2;
+      const varied = speed * (0.55 + rand01(seed + i * 31) * 0.7);
+      pushSpark(x, y, angle, varied, color, life, size, gravity);
+    }
+  }
+
+  function pushArc(x0, y0, x1, y1, color, life, jitter, seed) {
+    if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
+    if (Math.hypot(x1 - x0, y1 - y0) < 6) return;
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const segs = Math.max(2, Math.min(8, Math.round(dist / 18)));
+    const points = [{ x: x0, y: y0 }];
+    for (let i = 1; i < segs; i++) {
+      const t = i / segs;
+      const jx = (rand01(seed + i * 13) - 0.5) * jitter;
+      const jy = (rand01(seed + i * 29) - 0.5) * jitter;
+      points.push({ x: x0 + (x1 - x0) * t + jx, y: y0 + (y1 - y0) * t + jy });
+    }
+    points.push({ x: x1, y: y1 });
+    particles.push({ kind: 'arc', points, color, life, maxLife: life, motionOnly: false });
+  }
+
+  function pushPlus(x, y, arm, color, core, life) {
+    pushParticle({ kind: 'plus', x, y, arm, color, core, life, maxLife: life, motionOnly: false });
+  }
+
+  function pushBlock(x, y, w, h, color, life) {
+    pushParticle({ kind: 'block', x, y, w, h, color, life, maxLife: life, motionOnly: false });
+  }
+
+  function pushPips(x, y, count, color, life) {
+    if (!(count > 0)) return;
+    pushParticle({
+      kind: 'pips',
+      x, y,
+      count: Math.max(1, Math.min(4, count)),
+      color,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushFloater(x, y, text, color, scale, crit, channel, life, seed) {
+    if (!text) return;
+    const anchorX = x;
+    const anchorY = y - (channel === 'fence' ? 14 : 12);
+    const amount = Number(String(text).replace('+', '')) || 0;
+    const recent = findFloater(anchorX, anchorY, channel, crit);
+    if (recent) {
+      recent.amount = (recent.amount || 0) + amount;
+      const merged = formatDamage(recent.amount);
+      if (merged) recent.text = channel === 'heal' ? `+${merged}` : merged;
+      recent.life = recent.maxLife;
+      recent.scale = Math.max(recent.scale, scale);
+      return;
+    }
+    const jitter = (rand01(seed) - 0.5) * 6;
+    const originX = anchorX + jitter;
+    floaters.push({
+      x: originX,
+      y: anchorY,
+      originX,
+      originY: anchorY,
+      anchorX,
+      anchorY,
+      text,
+      color,
+      scale,
+      crit,
+      channel,
+      amount,
+      vy: -22,
+      life,
+      maxLife: life,
+    });
+  }
+
+  function findFloater(x, y, channel, crit) {
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      const floater = floaters[i];
+      if (floater.channel !== channel || floater.crit !== crit) continue;
+      if (floater.maxLife - floater.life > 0.12) continue;
+      const ax = floater.anchorX ?? floater.originX;
+      const ay = floater.anchorY ?? floater.originY;
+      if (Math.abs(ax - x) <= 14 && Math.abs(ay - y) <= 14) return floater;
+    }
+    return null;
+  }
+
+  function showNumber(desc, x, y, seed, palette) {
+    if (desc.damage != null && desc.damage > 0) {
+      const text = formatDamage(desc.damage);
+      pushFloater(
+        x, y, text,
+        desc.crit ? '#ffe56a' : palette.hot,
+        desc.crit ? 3 : 2,
+        desc.crit,
+        'hit',
+        desc.crit ? 0.62 : 0.5,
+        seed,
+      );
+      return;
+    }
+    if (desc.heal != null && desc.heal > 0) {
+      const text = formatDamage(desc.heal);
+      if (text) pushFloater(x, y, `+${text}`, PALETTES.heal.hot, 2, false, 'heal', 0.5, seed);
+    }
+  }
+
+  function spawnShot(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = paletteFor(desc.element, desc.behavior);
+    const style = STYLE[desc.behavior] || STYLE.hybrid;
+    pushPlus(point.x, point.y, 2, palette.hot, palette.core, 0.16);
+    pushBlock(point.x, point.y, 2, 2, palette.core, 0.08);
+    if (style.ring) pushRing(point.x, point.y, 8, 22, palette.mid, 0.28);
+    if (style.arc && desc.target) {
+      pushArc(point.x, point.y, desc.target.x, desc.target.y, palette.core, desc.behavior === 'lightning' ? 0.1 : 0.14, style.jitter, seed);
+    }
+    if (style.sparks > 0) {
+      burst(point.x, point.y, style.sparks, style.speed, style.gravity, style.up, palette.hot, 0.2, seed, 2);
+    }
+  }
+
+  function spawnHit(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = paletteFor(desc.element, desc.behavior);
+    const style = STYLE[desc.behavior] || STYLE.hybrid;
+    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28);
+    if (desc.crit) pushRing(point.x, point.y, 7, 34, '#ffe56a', 0.26);
+    pushBlock(point.x, point.y, desc.crit ? 5 : 3, desc.crit ? 5 : 3, palette.core, 0.09);
+    pushPlus(point.x, point.y, desc.crit ? 4 : 2, desc.crit ? '#ffe56a' : palette.hot, palette.core, desc.crit ? 0.28 : 0.18);
+    const sparks = style.sparks + (desc.crit ? 4 : 0);
+    if (sparks > 0) {
+      burst(point.x, point.y, sparks, style.speed * (desc.crit ? 1.25 : 0.85), style.gravity, style.up, palette.hot, 0.22, seed, desc.crit ? 2 : 2);
+    }
+    if (desc.behavior === 'lightning') {
+      if (desc.points.length) {
+        const hops = Math.min(desc.points.length, Math.max(desc.chain, 1));
+        for (let i = 0; i < hops; i++) {
+          const hop = desc.points[i];
+          pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, 14, seed + i * 9);
+        }
+      } else {
+        pushArc(point.x, point.y, point.x + 10, point.y - 16, palette.core, 0.1, 8, seed);
+      }
+    } else if (desc.points.length && desc.chain > 0) {
+      const hops = Math.min(desc.points.length, desc.chain);
+      for (let i = 0; i < hops; i++) {
+        pushArc(point.x, point.y, desc.points[i].x, desc.points[i].y, palette.hot, 0.12, 6, seed + i);
+      }
+    }
+    showNumber(desc, point.x, point.y, seed, palette);
+    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 7, Math.min(4, desc.stacks), palette.mid, 0.36);
+  }
+
+  function spawnKill(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = paletteFor(desc.element, desc.behavior);
+    pushRing(point.x, point.y, 8, 40, PALETTES.kill.hot, 0.32);
+    pushPlus(point.x, point.y, 3, PALETTES.kill.core, palette.hot, 0.2);
+    burst(point.x, point.y, 8, 58, 40, false, PALETTES.kill.mid, 0.34, seed, 2);
+    burst(point.x, point.y, 3, 70, 0, true, palette.hot, 0.24, seed + 5, 2);
+  }
+
+  function spawnFence(desc, seed) {
+    const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
+    const y = ARENA.fenceY;
+    const damage = desc.damage != null && desc.damage > 0 ? desc.damage : 8;
+    const length = Math.max(10, Math.min(36, Math.round(8 + damage / 4)));
+    pushParticle({ kind: 'crack', x, y, length, color: PALETTES.fence.core, life: 0.34, maxLife: 0.34, motionOnly: false });
+    burst(x, y, 6, 42, 140, true, PALETTES.fence.hot, 0.32, seed, 2);
+    const text = formatDamage(damage);
+    if (desc.damage != null && desc.damage > 0) {
+      pushFloater(x, y, text, '#ffb4a8', 2, false, 'fence', 0.48, seed);
+    }
+  }
+
+  function spawnMerge(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = paletteFor(desc.element, desc.behavior);
+    pushRing(point.x, point.y, 6, 26, palette.core, 0.42);
+    pushRing(point.x, point.y, 12, 18, palette.mid, 0.5);
+    pushPlus(point.x, point.y, 4, palette.hot, palette.core, 0.3);
+    pushBlock(point.x, point.y, 4, 4, palette.core, 0.12);
+    for (let i = 0; i < 8; i++) {
+      const angle = rand01(seed + i * 11) * Math.PI * 2;
+      pushParticle({
+        kind: 'orbit',
+        cx: point.x,
+        cy: point.y,
+        angle,
+        radius: 12 + rand01(seed + i * 7) * 10,
+        spin: (rand01(seed + i) < 0.5 ? -1 : 1) * (5 + rand01(seed + i * 3) * 3),
+        radial: -26,
+        x: point.x,
+        y: point.y,
+        size: 2,
+        color: i % 2 ? palette.hot : palette.core,
+        life: 0.48,
+        maxLife: 0.48,
+        motionOnly: true,
+      });
+    }
+    if (desc.rank != null) pushPips(point.x, point.y - 16, desc.rank, palette.hot, 0.62);
+  }
+
+  function spawnDraft(desc) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 10, 8, PALETTES.draft.mid, 0.4);
+    for (let i = 0; i < 3; i++) {
+      pushBlock(point.x + (i - 1) * 8, point.y, 3, 3, i === 1 ? PALETTES.draft.hot : PALETTES.draft.core, 0.46);
+    }
+  }
+
+  function spawnVictory(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 12, 22, PALETTES.victory.hot, 0.6);
+    pushParticle({ kind: 'glowline', y: ARENA.fenceY, color: PALETTES.victory.hot, broken: false, life: 0.7, maxLife: 0.7, motionOnly: false });
+    for (let i = 0; i < 8; i++) {
+      const x = 28 + rand01(seed + i * 17) * (ARENA.width - 56);
+      pushParticle({
+        kind: 'mote',
+        x,
+        y: ARENA.fenceY - rand01(seed + i) * 16,
+        vx: (rand01(seed + i * 5) - 0.5) * 14,
+        vy: -(18 + rand01(seed + i * 9) * 28),
+        size: 2,
+        color: i % 2 ? PALETTES.victory.core : PALETTES.victory.hot,
+        life: 0.62,
+        maxLife: 0.62,
+        motionOnly: true,
+      });
+    }
+  }
+
+  function spawnDefeat(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushParticle({ kind: 'glowline', y: ARENA.fenceY, color: PALETTES.defeat.hot, broken: true, life: 0.7, maxLife: 0.7, motionOnly: false });
+    pushParticle({ kind: 'crack', x: ARENA.width / 2, y: ARENA.fenceY, length: 48, color: PALETTES.defeat.core, life: 0.6, maxLife: 0.6, motionOnly: false });
+    pushRing(point.x, ARENA.fenceY, 10, 16, PALETTES.defeat.mid, 0.45);
+    burst(ARENA.width / 2, ARENA.fenceY, 7, 36, 90, true, PALETTES.defeat.hot, 0.4, seed, 2);
+  }
+
+  function spawnUi(desc) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = desc.cue === 'error' ? PALETTES.defeat : PALETTES.ui;
+    pushPlus(point.x, point.y, 2, palette.hot, palette.core, 0.16);
+  }
+
+  function spawnStatus(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const palette = desc.element === 'heal' || desc.heal ? PALETTES.heal : paletteFor(desc.element, desc.behavior);
+    const style = STYLE[desc.behavior] || STYLE.neutral;
+    pushPlus(point.x, point.y, 2, palette.hot, palette.core, 0.16);
+    if (style.ring || desc.behavior === 'support') pushRing(point.x, point.y, 7, 14, palette.mid, 0.24);
+    burst(point.x, point.y, 3, 28, style.gravity, desc.behavior === 'fire', palette.mid, 0.2, seed, 2);
+    if (!(desc.damage > 0)) showNumber(desc, point.x, point.y, seed, palette);
+    if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 6, Math.min(4, desc.stacks), palette.mid, 0.32);
+  }
+
+  function spawnBoss(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 12, 18, PALETTES.boss.hot, 0.46);
+    pushPlus(point.x, point.y, 4, PALETTES.boss.core, PALETTES.boss.hot, 0.28);
+    burst(point.x, point.y, 6, 40, 0, false, PALETTES.boss.mid, 0.3, seed, 2);
+  }
+
+  function spawn(desc, index) {
+    const seed = nextSeed(desc, index);
+    switch (desc.type) {
+      case 'shot': spawnShot(desc, seed); break;
+      case 'hit': spawnHit(desc, seed); break;
+      case 'kill': spawnKill(desc, seed); break;
+      case 'fence_hit': spawnFence(desc, seed); break;
+      case 'merge': spawnMerge(desc, seed); break;
+      case 'draft': spawnDraft(desc); break;
+      case 'victory': spawnVictory(desc, seed); break;
+      case 'defeat': spawnDefeat(desc, seed); break;
+      case 'ui': spawnUi(desc); break;
+      case 'status': spawnStatus(desc, seed); break;
+      case 'boss': spawnBoss(desc, seed); break;
+      default: break;
+    }
+  }
+
+  function trimAll() {
+    if (particles.length > MAX_PARTICLES) particles.splice(0, particles.length - MAX_PARTICLES);
+    if (floaters.length > MAX_FLOATERS) floaters.splice(0, floaters.length - MAX_FLOATERS);
+    if (rings.length > MAX_RINGS) rings.splice(0, rings.length - MAX_RINGS);
+  }
+
+  function ingest(events) {
+    const batch = collectFeedback(events);
+    for (let i = 0; i < batch.length; i++) spawn(batch[i], i);
+    trimAll();
+  }
+
+  function stepParticle(particle, dt) {
+    if (particle.kind === 'spark') {
+      particle.vy += (particle.gravity || 0) * dt;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+    } else if (particle.kind === 'mote') {
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+    } else if (particle.kind === 'orbit') {
+      particle.angle += particle.spin * dt;
+      particle.radius = Math.max(0, particle.radius + particle.radial * dt);
+      particle.x = particle.cx + Math.cos(particle.angle) * particle.radius;
+      particle.y = particle.cy + Math.sin(particle.angle) * particle.radius * 0.72;
+    }
+  }
+
+  function driftedOut(particle) {
+    if (particle.kind !== 'spark' && particle.kind !== 'mote' && particle.kind !== 'orbit') return false;
+    return particle.x < -48 || particle.x > ARENA.width + 48 || particle.y < -96 || particle.y > ARENA.height + 48;
+  }
+
+  function step(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const particle = particles[i];
+      particle.life -= dt;
+      if (particle.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+      stepParticle(particle, dt);
+      if (driftedOut(particle) || (particle.x != null && !Number.isFinite(particle.x)) || (particle.y != null && !Number.isFinite(particle.y))) {
+        particles.splice(i, 1);
+      }
+    }
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      const floater = floaters[i];
+      floater.life -= dt;
+      if (floater.life <= 0 || !Number.isFinite(floater.life)) {
+        floaters.splice(i, 1);
+        continue;
+      }
+      floater.y += floater.vy * dt;
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const ring = rings[i];
+      ring.life -= dt;
+      if (ring.life <= 0) {
+        rings.splice(i, 1);
+        continue;
+      }
+      ring.r = Math.min(ring.r0 + 52, ring.r + ring.vr * dt);
+    }
+  }
+
+  function update(dt) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    if (particles.length + floaters.length + rings.length === 0) return;
+    // A stalled tab should drop leftover flashes instead of replaying them.
+    if (dt >= 1.25) {
+      clear();
+      return;
+    }
+    let left = dt;
+    const slice = 1 / 30;
+    let guard = 0;
+    while (left > 1e-8 && guard++ < 45) {
+      const h = left > slice ? slice : left;
+      step(h);
+      left -= h;
+    }
+  }
+
+  function drawPixelRing(ctx, x, y, radius, color, alpha) {
+    if (!(radius > 0) || alpha < 0.02) return;
+    const steps = Math.max(6, Math.min(28, Math.round(radius * 1.25)));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    for (let i = 0; i < steps; i++) {
+      const angle = (i / steps) * Math.PI * 2;
+      ctx.fillRect(Math.round(x + Math.cos(angle) * radius), Math.round(y + Math.sin(angle) * radius), 1, 1);
+    }
+  }
+
+  function drawPlus(ctx, x, y, arm, color, core, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    const reach = Math.max(1, arm | 0);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - reach, cy, reach * 2 + 1, 1);
+    ctx.fillRect(cx, cy - reach, 1, reach * 2 + 1);
+    ctx.fillStyle = core || color;
+    ctx.fillRect(cx, cy, 1, 1);
+  }
+
+  function drawDot(ctx, particle, alpha) {
+    if (alpha < 0.02 || !Number.isFinite(particle.x) || !Number.isFinite(particle.y)) return;
+    const size = particle.life < particle.maxLife * 0.35 ? 1 : (particle.size || 2);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(Math.round(particle.x - size / 2), Math.round(particle.y - size / 2), size, size);
+  }
+
+  function drawSegment(ctx, x0, y0, x1, y1) {
+    if (![x0, y0, x1, y1].every(Number.isFinite)) return;
+    let x = Math.round(x0);
+    let y = Math.round(y0);
+    const xe = Math.round(x1);
+    const ye = Math.round(y1);
+    const dx = Math.abs(xe - x);
+    const dy = Math.abs(ye - y);
+    const sx = x < xe ? 1 : -1;
+    const sy = y < ye ? 1 : -1;
+    let err = dx - dy;
+    const maxSteps = Math.min(720, dx + dy + 1);
+    for (let n = 0; n < maxSteps; n++) {
+      ctx.fillRect(x, y, 1, 1);
+      if (x === xe && y === ye) break;
+      const e2 = err * 2;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx) { err += dx; y += sy; }
+    }
+  }
+
+  function drawArc(ctx, particle, alpha) {
+    if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    for (let i = 1; i < particle.points.length; i++) {
+      const a = particle.points[i - 1];
+      const b = particle.points[i];
+      drawSegment(ctx, a.x, a.y, b.x, b.y);
+    }
+  }
+
+  function drawPips(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const count = particle.count | 0;
+    const total = count * 2 + Math.max(0, count - 1);
+    let cursor = Math.round(particle.x - total / 2);
+    const y = Math.round(particle.y);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    for (let i = 0; i < count; i++) {
+      ctx.fillRect(cursor, y, 2, 2);
+      cursor += 3;
+    }
+  }
+
+  function drawCrack(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const y = Math.round(particle.y);
+    const start = Math.round(particle.x - particle.length / 2);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    for (let i = 0; i < particle.length; i += 2) {
+      const drop = i % 4 === 0 ? 1 : 0;
+      ctx.fillRect(start + i, y + drop, 2, 1);
+    }
+  }
+
+  function drawGlowline(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.fillStyle = particle.color;
+    const y = Math.round(particle.y);
+    for (let x = 8; x < ARENA.width - 8; x += 3) {
+      if (particle.broken && x % 9 === 0) continue;
+      const jag = particle.broken && x % 12 < 4 ? 1 : 0;
+      ctx.fillRect(x, y + jag, 2, 1);
+    }
+  }
+
+  function drawText(ctx, text, x, y, color, scale, alpha) {
+    if (!text || alpha < 0.02) return;
+    const size = Math.max(1, scale | 0);
+    const advance = 3 * size + size;
+    let cursor = Math.round(x - (text.length * advance - size) / 2);
+    const top = Math.round(y);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    for (let c = 0; c < text.length; c++) {
+      const glyph = GLYPHS[text[c]];
+      if (glyph) {
+        for (let row = 0; row < glyph.length; row++) {
+          const line = glyph[row];
+          for (let col = 0; col < line.length; col++) {
+            if (line[col] === '1') ctx.fillRect(cursor + col * size, top + row * size, size, size);
+          }
+        }
+      }
+      cursor += advance;
+    }
+  }
+
+  function drawFloater(ctx, floater, reduced) {
+    const alpha = fade(floater);
+    const x = reduced ? floater.originX : floater.x;
+    const y = reduced ? floater.originY : floater.y;
+    drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
+  }
+
+  function drawParticle(ctx, particle, reduced) {
+    if (reduced && particle.motionOnly) return;
+    const alpha = fade(particle);
+    switch (particle.kind) {
+      case 'spark':
+      case 'mote':
+      case 'orbit':
+        drawDot(ctx, particle, alpha);
+        break;
+      case 'plus':
+        drawPlus(ctx, particle.x, particle.y, particle.arm, particle.color, particle.core, alpha);
+        break;
+      case 'block':
+        if (alpha < 0.02) break;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = particle.color;
+        ctx.fillRect(Math.round(particle.x - particle.w / 2), Math.round(particle.y - particle.h / 2), particle.w, particle.h);
+        break;
+      case 'arc':
+        drawArc(ctx, particle, alpha);
+        break;
+      case 'pips':
+        drawPips(ctx, particle, alpha);
+        break;
+      case 'crack':
+        drawCrack(ctx, particle, alpha);
+        break;
+      case 'glowline':
+        drawGlowline(ctx, particle, alpha);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function draw(ctx, options) {
+    if (!ctx || typeof ctx.save !== 'function' || typeof ctx.fillRect !== 'function') return;
+    const reduced = Boolean(options && options.reducedMotion);
+    ctx.save();
+    try {
+      try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
+      for (let i = 0; i < rings.length; i++) {
+        const ring = rings[i];
+        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95);
+      }
+      for (let i = 0; i < particles.length; i++) drawParticle(ctx, particles[i], reduced);
+      for (let i = 0; i < floaters.length; i++) drawFloater(ctx, floaters[i], reduced);
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  function clear() {
+    particles.length = 0;
+    floaters.length = 0;
+    rings.length = 0;
+  }
+
+  return { ingest, update, draw, clear };
+}

@@ -129,7 +129,9 @@ function resolveOutcome(state) {
     return;
   }
   const alive = Array.isArray(state.enemies) && state.enemies.some(enemy => enemy && enemy.dead !== true && enemy.hp > 0);
-  if (state.phase === 'playing' && state.director?.done === true && !alive) {
+  const queue = state.director?.queue;
+  const queueEmpty = !Array.isArray(queue) || queue.length === 0;
+  if (state.phase === 'playing' && state.endless !== true && state.director?.done === true && queueEmpty && !alive) {
     state.phase = 'victory';
     emit(state, 'victory', {time:state.time, wave:state.wave, kills:state.kills});
   }
@@ -176,7 +178,8 @@ export function advance(state, realDt) {
     state.accumulator = 0;
     return state;
   }
-  state.accumulator += Math.min(realDt, 0.25) * (state.speed || 1);
+  const speed = state.speed === 1.5 || state.speed === 3 ? state.speed : 1;
+  state.accumulator += Math.min(realDt, 0.25) * speed;
   let count = 0;
   while (state.accumulator + 1e-10 >= STEP && count++ < 90) {
     state.accumulator -= STEP;

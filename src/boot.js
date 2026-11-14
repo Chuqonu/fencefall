@@ -539,6 +539,33 @@ function clear(node) {
   if (node) node.replaceChildren();
 }
 
+function payloadFrom(node, root) {
+  const action = node.dataset.action;
+  const payload = {};
+  if (node.dataset.difficulty) payload.difficulty = node.dataset.difficulty;
+  if (node.dataset.name) payload.name = node.dataset.name;
+  if (node.dataset.index) payload.index = Number(node.dataset.index);
+  if (node.dataset.from) payload.from = Number(node.dataset.from);
+  if (node.dataset.to) payload.to = Number(node.dataset.to);
+  if (node.dataset.value != null) payload.value = action === 'speed' ? Number(node.dataset.value) : node.dataset.value;
+  if (action === 'importSave') payload.text = root.querySelector('#import-text')?.value || '';
+  return payload;
+}
+
+function fillMenu(container, api) {
+  clear(container);
+  const hud = el('div');
+  hud.style.display = 'flex';
+  hud.style.flexWrap = 'wrap';
+  hud.style.gap = '8px';
+  const panel = el('div');
+  container.append(hud, panel);
+  const view = api.getUI();
+  if (view.screen === 'menu') renderMenu(hud, api);
+  else if (view.screen === 'results') renderResults(hud, panel, api);
+  else renderPage(hud, panel, api, view.screen);
+}
+
 function mountFallback(root, api) {
   clear(root);
   const header = el('header');
@@ -818,16 +845,19 @@ async function mount() {
     seen = mark;
     try {
       if (shell) {
-        shell.render?.();
         const stateNow = api.getState();
         if (view.screen === 'battle' && stateNow && typeof modules.build?.renderBuildPanel === 'function') {
           const host = stateNow.phase === 'draft' || stateNow.phase === 'placing' || view.mergePreview ? shell.overlayRoot : shell.panelRoot;
           clear(host === shell.overlayRoot ? shell.panelRoot : shell.overlayRoot);
           modules.build.renderBuildPanel(host, stateNow, api);
+        } else if (view.screen === 'battle') {
+          clear(shell.overlayRoot);
+          clear(shell.panelRoot);
         }
         if (view.screen !== 'battle' && typeof modules.meta?.renderMetaPanel === 'function') {
           modules.meta.renderMetaPanel(shell.menuRoot || shell.panelRoot, view.screen, stateNow, api.getProfile(), api);
-        }
+        } else if (view.screen !== 'battle') fillMenu(shell.menuRoot, api);
+        else clear(shell.menuRoot);
       } else fallback.render();
     } catch (error) {
       console.error('[fencefall] ui render failed', error);
@@ -840,6 +870,14 @@ async function mount() {
     last = performance.now();
     refresh();
   });
+  if (shell?.menuRoot) {
+    shell.menuRoot.addEventListener('click', event => {
+      const node = event.target.closest('[data-action]');
+      if (!node || !shell.menuRoot.contains(node)) return;
+      api.act(node.dataset.action, payloadFrom(node, root));
+      refresh();
+    });
+  }
   if (!shell) {
     document.addEventListener('keydown', event => {
       const tag = event.target?.tagName;
@@ -860,16 +898,7 @@ async function mount() {
     root.addEventListener('click', event => {
       const node = event.target.closest('[data-action]');
       if (!node || !root.contains(node)) return;
-      const action = node.dataset.action;
-      const payload = {};
-      if (node.dataset.difficulty) payload.difficulty = node.dataset.difficulty;
-      if (node.dataset.name) payload.name = node.dataset.name;
-      if (node.dataset.index) payload.index = Number(node.dataset.index);
-      if (node.dataset.from) payload.from = Number(node.dataset.from);
-      if (node.dataset.to) payload.to = Number(node.dataset.to);
-      if (node.dataset.value != null) payload.value = action === 'speed' ? Number(node.dataset.value) : node.dataset.value;
-      if (action === 'importSave') payload.text = root.querySelector('#import-text')?.value || '';
-      api.act(action, payload);
+      api.act(node.dataset.action, payloadFrom(node, root));
       refresh();
     });
   }
@@ -891,6 +920,7 @@ async function mount() {
       if (state.phase !== phase && (state.phase === 'victory' || state.phase === 'defeat')) api.settleTerminal();
     }
     try { draw(); } catch (error) { console.error(error); }
+    try { shell?.render?.(); } catch (error) { console.error(error); }
     const statusNode = root.querySelector('#status');
     if (statusNode && !shell) {
       const live = api.getState();
