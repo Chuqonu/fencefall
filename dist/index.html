@@ -11453,8 +11453,11 @@ const applyStatus = __ff_m2["applyStatus"];
 // Pierce is the number of extra bodies the shot may hit along its direction.
 // Chain is the number of extra jumps to a new enemy within chainRange (default 70).
 // A shot with both pierces first, then chains from the last direct hit.
+// Crit is rolled when the shot is fired. Pierce keeps that roll. Each chain
+// jump that connects rolls again, and only when the projectile's critChance
+// is greater than 0. The opening hit does not roll a second time.
 // Splash is full pre-armor damage to other enemy centers within the radius.
-// Direct hits apply statuses; splash does not. Armor and brittle apply inside
+// Direct hits, pierce hits, and splash targets apply statuses. Armor and brittle apply inside
 // damageEnemy, including damage from status ticks. Armor is a fractional
 // reduction clamped to [0, 0.8].
 //
@@ -11812,7 +11815,17 @@ function applySplash(state, projectile, primary) {
   }
 }
 
+function rollChainCrit(state, projectile) {
+  const chance = finite(projectile.critChance, 0);
+  if (!(chance > 0)) return;
+  projectile.crit = random(state) < chance;
+}
+
 function resolveHit(state, projectile, enemy) {
+  // Chain impacts only. Pierce and the opening hit keep the fired roll, and
+  // this call sits before splash so that splash still uses the crit of the
+  // hit that caused it.
+  if (projectile.impactType === 'chain') rollChainCrit(state, projectile);
   if (!projectile.visited.includes(enemy.id)) projectile.visited.push(enemy.id);
   const attack = projectile.impactType || 'projectile';
   damageEnemy(state, enemy, impactDamage(projectile, enemy), {
@@ -12018,7 +12031,8 @@ function makeProjectile(state, unit, slot, stats, target, rolled, mechanics) {
     speed,
     damage: rolled.damage,
     crit: rolled.crit,
-    critMultiplier: rolled.critMultiplier,
+    critMultiplier: chain > 0 && rolled.critChance > 0 ? rolled.baseCritMultiplier : rolled.critMultiplier,
+    critChance: rolled.critChance,
     tags: buildTags(unit, stats, mechanics),
     splash: Math.max(0, finite(stats.splash, 0)),
     chain,
@@ -12049,7 +12063,13 @@ function rollShot(state, stats, bonus) {
   const critMultiplier = Math.max(1, finite(stats.critMultiplier, DEFAULT_CRIT_MULTIPLIER));
   let crit = false;
   if (damage > 0 && critChance > 0) crit = random(state) < critChance;
-  return {damage, crit, critMultiplier: crit ? critMultiplier : 1};
+  return {
+    damage,
+    crit,
+    critChance,
+    critMultiplier: crit ? critMultiplier : 1,
+    baseCritMultiplier: critMultiplier
+  };
 }
 
 function fireUnit(state, unit, slot, stats, bonus) {
