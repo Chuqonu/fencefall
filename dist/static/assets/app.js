@@ -1781,8 +1781,8 @@ const ENEMIES = {
   boss: {
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. At or below 0.5 of its maximum health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
-      zh: '首领。生命降至最大生命的 0.5 或以下时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
+      en: 'Boss. At or below half (0.5) of its maximum health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
+      zh: '首领。生命降至最大生命的一半（0.5）或以下时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,
