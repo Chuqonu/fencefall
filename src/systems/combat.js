@@ -42,7 +42,7 @@ import {getUnitStats} from '../data/towers.js';
 import {applyStatus} from './status.js';
 
 export const AURA_DAMAGE_CAP = 0.6;
-export const AURA_HASTE_CAP = 0.5;
+export const AURA_HASTE_CAP = 0.45;
 export const BRITTLE_CAP = 1;
 export const MIN_ATTACK_INTERVAL = 0.05;
 export const ARMOR_CAP = 0.8;
@@ -367,6 +367,7 @@ function applySplash(state, projectile, primary) {
       crit: false,
       towerType: projectile.towerType
     });
+    applyPayload(enemy, projectile);
   }
 }
 
@@ -662,7 +663,6 @@ function computeAura(roster) {
     const addHaste = Math.max(0, finite(aura.haste, 0));
     if (addDamage === 0 && addHaste === 0) continue;
     for (const target of roster) {
-      if (target.unit.id === source.unit.id) continue;
       if (distance(source.slot, target.slot) <= aura.range) {
         bonus[target.unit.id].damage += addDamage;
         bonus[target.unit.id].haste += addHaste;

@@ -1,5 +1,19 @@
 import {ARENA, DIFFICULTIES, canPlan, clone, hitSlot, slotGeometry} from './shared.js';
 import {advance, createProfile, createRun, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
+import * as hero from './systems/hero.js';
+import * as merges from './systems/merges.js';
+import * as drafts from './systems/drafts.js';
+import * as progression from './systems/progression.js';
+import * as storage from './storage.js';
+import * as i18n from './i18n.js';
+import * as towers from './data/towers.js';
+import * as recipes from './data/recipes.js';
+import * as waves from './systems/waves.js';
+import * as shellMod from './ui/shell.js';
+import * as build from './ui/build-panel.js';
+import * as meta from './ui/meta-panel.js';
+import * as audioMod from './audio.js';
+import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
 export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
@@ -39,22 +53,10 @@ const TEXT = {
   },
 };
 
-const OPTIONAL = [
-  ['hero', './systems/hero.js'],
-  ['merges', './systems/merges.js'],
-  ['drafts', './systems/drafts.js'],
-  ['progression', './systems/progression.js'],
-  ['storage', './storage.js'],
-  ['i18n', './i18n.js'],
-  ['towers', './data/towers.js'],
-  ['recipes', './data/recipes.js'],
-  ['waves', './systems/waves.js'],
-  ['shell', './ui/shell.js'],
-  ['build', './ui/build-panel.js'],
-  ['meta', './ui/meta-panel.js'],
-  ['renderer', './render/renderer.js'],
-  ['audio', './audio.js'],
-];
+const MODULES = {
+  hero, merges, drafts, progression, storage, i18n, towers, recipes, waves,
+  shell: shellMod, build, meta, audio: audioMod, renderer: rendererMod,
+};
 
 function detectLanguage() {
   const value = globalThis.navigator?.languages?.[0] || globalThis.navigator?.language || 'en';
@@ -70,20 +72,8 @@ function integerSlot(index) {
   return Number.isInteger(index) && index >= 0 && index < 10;
 }
 
-async function loadOptional() {
-  const loaded = {};
-  await Promise.all(OPTIONAL.map(async ([key, href]) => {
-    try {
-      loaded[key] = await import(href);
-    } catch {
-      loaded[key] = null;
-    }
-  }));
-  return loaded;
-}
-
 export async function createController(options = {}) {
-  const modules = await loadOptional();
+  const modules = MODULES;
   const injected = options.storage || null;
   let profile = options.profile || null;
   let run = null;
@@ -491,7 +481,7 @@ export async function createController(options = {}) {
     unlockAudio() { try { audio?.unlock?.(); } catch (error) { console.error(error); } },
     publish(events) { if (events?.length) try { audio?.playEvents?.(events); } catch (error) { console.error(error); } },
     settleTerminal,
-    integration:() => ({engine:integrationInfo(), modules:Object.fromEntries(OPTIONAL.map(([key]) => [key, !!modules[key]]))}),
+    integration:() => ({engine:integrationInfo(), modules:Object.fromEntries(Object.entries(MODULES).map(([key, value]) => [key, !!value]))}),
   };
   return api;
 }
@@ -502,7 +492,7 @@ function copyValue(value) {
 
 function statusLine(api, state, language, ready, online) {
   if (!state) return `${api.t('missing')}: ${online.engine.missing.length}`;
-  return `${api.t('fence')} ${formatNumber(Math.max(0, state.fence.hp), language)}/${formatNumber(state.fence.maxHp, language)} · ${api.t('wave')} ${formatNumber(state.wave, language)} · ${api.t('time')} ${formatNumber(Math.floor(state.time), language)}s · ${api.t('systems')} ${ready}/6`;
+  return `${api.t('fence')} ${formatNumber(Math.max(0, state.fence.hp), language)}/${formatNumber(state.fence.maxHp, language)} · ${api.t('wave')} ${formatNumber(state.wave, language)} · ${api.t('time')} ${formatNumber(Math.floor(state.time), language)}s`;
 }
 
 function formatNumber(value, language, i18n) {
@@ -809,14 +799,7 @@ async function mount() {
   const root = document.getElementById('app');
   if (!root) return;
   const api = await createController();
-  let modules = {};
-  try {
-    const loaded = await loadOptional();
-    modules = loaded;
-  } catch (error) {
-    console.error(error);
-  }
-  // createController already imported the modules; this second load hits the module cache.
+  const modules = MODULES;
   const shell = mountShell(root, api, modules);
   const canvas = shell?.canvas || root.querySelector('canvas');
   let renderer = null;

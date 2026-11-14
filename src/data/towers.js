@@ -52,7 +52,7 @@ export const AURA_RULES = Object.freeze({
  */
 export const RANK_SCALE = Object.freeze({
   maxRank: 4,
-  damage: Object.freeze([1, 1.48, 2.02, 2.6]),
+  damage: Object.freeze([1, 2.05, 4.3, 9]),
   interval: Object.freeze([1, 0.94, 0.88, 0.82]),
   rangeAdd: Object.freeze([0, 8, 16, 26]),
   critAdd: Object.freeze([0, 0.015, 0.03, 0.05]),
@@ -62,7 +62,7 @@ export const RANK_SCALE = Object.freeze({
   chainAdd: Object.freeze([0, 0, 1, 2]),
   chainRangeAdd: Object.freeze([0, 8, 14, 20]),
   pierceAdd: Object.freeze([0, 0, 0, 1]),
-  effect: Object.freeze([1, 1.28, 1.58, 1.9]),
+  effect: Object.freeze([1, 1.8, 3.2, 5.5]),
   duration: Object.freeze([1, 1.1, 1.2, 1.32]),
   slowFactorReduce: Object.freeze([0, 0.04, 0.08, 0.12]),
   poisonStacksAdd: Object.freeze([0, 0, 0, 1]),

@@ -87,7 +87,7 @@ function equipmentDescription(flavorEn, flavorZh, bonuses) {
   }
   if (bonuses.fence) {
     en.push(`+${bonuses.fence} starting fence HP`);
-    zh.push(`开局篱笆生命+${bonuses.fence}`);
+    zh.push(`开局栅栏生命+${bonuses.fence}`);
   }
   if (bonuses.reward) {
     en.push(`+${formatPercent(bonuses.reward)}% run rewards`);
@@ -139,7 +139,7 @@ const rawEquipment = [
   gear('runner_charm', 'charm', 55, {haste: 0.06}, 'A light charm worn by runners on the wall.', '墙头奔行者佩的轻护符。'),
   gear('survey_bead', 'charm', 150, {range: 24, damage: 0.03}, 'A bead ground to measure the open field.', '用来丈量空地的测距珠。'),
   gear('bounty_seal', 'charm', 280, {reward: 0.10, critChance: 0.02}, 'Runs that start with this charm equipped pay a larger purse. Difficulty still multiplies the total.', '开局就装备此护符的对局会提高赏金，难度倍率仍会计入。'),
-  gear('fence_nails', 'armor', 45, {fence: 30}, 'Extra nails driven into the fence before the fight.', '战前多钉进篱笆的钉子。'),
+  gear('fence_nails', 'armor', 45, {fence: 30}, 'Extra nails driven into the fence before the fight.', '战前多钉进栅栏的钉子。'),
   gear('ward_planks', 'armor', 130, {fence: 60, damage: 0.02}, 'Spare planks braced behind the weak posts.', '撑在薄弱木桩后的备用板。'),
   gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守篱人穿的叠片甲。')
 ];
@@ -165,7 +165,7 @@ function track(id, cap, costs, bonuses, name, flavorEn, flavorZh) {
 const permanentRecord = {
   damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.02}, {en: 'Sharpened Instinct', zh: '锐化直觉'}, 'Training that stays between runs.', '跨对局保留的训练。'),
   haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.02}, {en: 'Quick Hands', zh: '迅捷手法'}, 'Repetition that shortens the gap between shots.', '缩短射击间隔的练习。'),
-  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 12}, {en: 'Deep Roots', zh: '深根'}, 'Deeper posts for the starting fence.', '把开局篱笆立得更深。')
+  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 12}, {en: 'Deep Roots', zh: '深根'}, 'Deeper posts for the starting fence.', '把开局栅栏立得更深。')
 };
 
 function deepFreeze(value) {

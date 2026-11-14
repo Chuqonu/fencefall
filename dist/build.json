@@ -1,0 +1,48 @@
+{
+  "entry": "src/boot.js",
+  "modules": [
+    "src/audio.js",
+    "src/boot.js",
+    "src/data/enemies.js",
+    "src/data/recipes.js",
+    "src/data/towers.js",
+    "src/engine.js",
+    "src/i18n.js",
+    "src/render/defenders.js",
+    "src/render/effects.js",
+    "src/render/enemies.js",
+    "src/render/renderer.js",
+    "src/render/world.js",
+    "src/shared.js",
+    "src/state.js",
+    "src/storage.js",
+    "src/systems/combat.js",
+    "src/systems/drafts.js",
+    "src/systems/hero.js",
+    "src/systems/merges.js",
+    "src/systems/movement.js",
+    "src/systems/progression.js",
+    "src/systems/status.js",
+    "src/systems/waves.js",
+    "src/ui/build-panel.js",
+    "src/ui/meta-panel.js",
+    "src/ui/shell.js"
+  ],
+  "cssFiles": [
+    "src/styles.css"
+  ],
+  "warnings": [],
+  "devDependencies": [],
+  "externalRuntimeRequests": false,
+  "outputs": {
+    "standalone": "dist/index.html",
+    "staticIndex": "dist/static/index.html",
+    "script": "dist/static/assets/app.js",
+    "css": "dist/static/assets/app.css"
+  },
+  "bytes": {
+    "standalone": 689609,
+    "script": 678707,
+    "css": 10493
+  }
+}

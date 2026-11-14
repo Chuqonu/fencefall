@@ -1,53 +1,30 @@
-// Fixed-step integration. Domain modules are optional live dependencies.
-// A missing module is absent, not a passing stub. Speed changes how many
-// STEP updates run per wall second; it is never passed into gameplay dt.
+// Fixed-step integration. Speed changes how many STEP updates run per wall
+// second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit} from './shared.js';
+import {updateMovement} from './systems/movement.js';
+import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
+import {updateStatuses} from './systems/status.js';
+import {updateWaves} from './systems/waves.js';
+import {updateDrafts} from './systems/drafts.js';
+import {getProfileBonuses} from './systems/progression.js';
 
 export {createRun, createProfile} from './state.js';
 
-const SPECS = [
-  ['movement', './systems/movement.js'],
-  ['combat', './systems/combat.js'],
-  ['status', './systems/status.js'],
-  ['waves', './systems/waves.js'],
-  ['drafts', './systems/drafts.js'],
-  ['progression', './systems/progression.js'],
-];
-
-const modules = {};
-const missing = [];
-const failed = new Map();
-
-// Variable import() is transitional so this file can boot before workers land.
-// Once every domain module is in the tree, these become static imports. esbuild
-// cannot follow a variable href, and a missing core system must then fail the build.
-await Promise.all(SPECS.map(async ([key, href]) => {
-  try {
-    modules[key] = await import(href);
-  } catch (error) {
-    modules[key] = null;
-    missing.push(href);
-    const name = error && typeof error === 'object' && 'code' in error ? error.code : 'missing';
-    failed.set(key, String(name));
-  }
-}));
-
 const ZERO_BONUSES = Object.freeze({damage:0, haste:0, range:0, critChance:0, fence:0, reward:0});
 
-function has(key, name) {
-  const mod = modules[key];
-  return !!mod && typeof mod[name] === 'function' && !failed.has(`${key}:run`);
+function requireFn(fn, name) {
+  if (typeof fn !== 'function') throw new Error(`Fencefall core system missing: ${name}`);
+  return fn;
 }
 
-function call(key, fn) {
-  if (failed.has(`${key}:run`)) return;
-  try {
-    fn();
-  } catch (error) {
-    failed.set(`${key}:run`, error instanceof Error ? error.message : String(error));
-    console.error(`[fencefall] ${key} stopped for this session`, error);
-  }
-}
+requireFn(updateMovement, 'updateMovement');
+requireFn(updateCombat, 'updateCombat');
+requireFn(damageEnemy, 'damageEnemy');
+requireFn(killEnemy, 'killEnemy');
+requireFn(updateStatuses, 'updateStatuses');
+requireFn(updateWaves, 'updateWaves');
+requireFn(updateDrafts, 'updateDrafts');
+requireFn(getProfileBonuses, 'getProfileBonuses');
 
 function sanitizeBonuses(value) {
   const out = {...ZERO_BONUSES};
@@ -75,31 +52,15 @@ export function applyProfileBonuses(state, bonuses) {
 
 export function prepare(state) {
   if (!state || state.initialized) return state;
-  let bonuses = null;
-  if (has('progression', 'getProfileBonuses')) {
-    try {
-      bonuses = modules.progression.getProfileBonuses(state.profileSnapshot);
-    } catch (error) {
-      failed.set('progression:run', error instanceof Error ? error.message : String(error));
-      console.error('[fencefall] profile bonuses unavailable', error);
-    }
-  }
-  return applyProfileBonuses(state, bonuses);
+  return applyProfileBonuses(state, getProfileBonuses(state.profileSnapshot));
 }
 
 export function integrationInfo() {
   return {
     contract:1,
-    present:{
-      movement:has('movement', 'updateMovement'),
-      combat:has('combat', 'updateCombat') && has('combat', 'damageEnemy'),
-      status:has('status', 'updateStatuses'),
-      waves:has('waves', 'updateWaves'),
-      drafts:has('drafts', 'updateDrafts'),
-      progression:has('progression', 'getProfileBonuses'),
-    },
-    missing:[...missing],
-    failed:Object.fromEntries(failed),
+    present:{movement:true, combat:true, status:true, waves:true, drafts:true, progression:true},
+    missing:[],
+    failed:{},
   };
 }
 
@@ -110,11 +71,9 @@ function halted(state) {
 function cleanup(state) {
   if (!Array.isArray(state.enemies)) state.enemies = [];
   if (!Array.isArray(state.projectiles)) state.projectiles = [];
-  if (has('combat', 'killEnemy')) {
-    for (const enemy of [...state.enemies]) {
-      if (!enemy || enemy.dead || !(typeof enemy.hp === 'number') || enemy.hp > 0) continue;
-      call('combat', () => modules.combat.killEnemy(state, enemy, null));
-    }
+  for (const enemy of [...state.enemies]) {
+    if (!enemy || enemy.dead || !(typeof enemy.hp === 'number') || enemy.hp > 0) continue;
+    killEnemy(state, enemy, null);
   }
   state.enemies = state.enemies.filter(enemy => enemy && enemy.dead !== true && typeof enemy.hp === 'number' && enemy.hp > 0);
   state.projectiles = state.projectiles.filter(projectile => projectile && !(typeof projectile.life === 'number' && projectile.life <= 0));
@@ -149,18 +108,16 @@ function stepBody(state) {
   }
   state.time += STEP;
   state.tick += 1;
-  if (has('waves', 'updateWaves')) call('waves', () => modules.waves.updateWaves(state, STEP));
+  updateWaves(state, STEP);
   if (halted(state)) return;
-  if (has('movement', 'updateMovement')) call('movement', () => modules.movement.updateMovement(state, STEP));
+  updateMovement(state, STEP);
   if (halted(state)) return;
-  if (has('status', 'updateStatuses') && has('combat', 'damageEnemy')) {
-    call('status', () => modules.status.updateStatuses(state, STEP, modules.combat.damageEnemy));
-  }
+  updateStatuses(state, STEP, damageEnemy);
   if (halted(state)) return;
-  if (has('combat', 'updateCombat')) call('combat', () => modules.combat.updateCombat(state, STEP));
+  updateCombat(state, STEP);
   cleanup(state);
   resolveOutcome(state);
-  if (!halted(state) && has('drafts', 'updateDrafts')) call('drafts', () => modules.drafts.updateDrafts(state));
+  if (!halted(state)) updateDrafts(state);
 }
 
 export function step(state) {
