@@ -79,16 +79,16 @@ function equipmentDescription(flavorEn, flavorZh, bonuses) {
     zh.push(`英雄伤害+${formatPercent(bonuses.damage)}%`);
   }
   if (bonuses.critChance) {
-    en.push(`+${formatPercent(bonuses.critChance)}% crit chance`);
-    zh.push(`暴击率+${formatPercent(bonuses.critChance)}%`);
+    en.push(`+${formatPercent(bonuses.critChance)}% hero crit chance`);
+    zh.push(`英雄暴击率+${formatPercent(bonuses.critChance)}%`);
   }
   if (bonuses.haste) {
-    en.push(`+${formatPercent(bonuses.haste)}% attack speed`);
-    zh.push(`攻击速度+${formatPercent(bonuses.haste)}%`);
+    en.push(`+${formatPercent(bonuses.haste)}% hero attack speed`);
+    zh.push(`英雄攻击速度+${formatPercent(bonuses.haste)}%`);
   }
   if (bonuses.range) {
-    en.push(`+${bonuses.range} range`);
-    zh.push(`射程+${bonuses.range}`);
+    en.push(`+${bonuses.range} hero range`);
+    zh.push(`英雄射程+${bonuses.range}`);
   }
   if (bonuses.fence) {
     en.push(`+${bonuses.fence} starting fence HP`);

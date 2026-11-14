@@ -5765,6 +5765,7 @@ const ALIAS = Object.freeze({
   button: 'ui',
   boss_spawn: 'boss',
   boss_enter: 'boss',
+  boss_enrage: 'boss',
 });
 
 const CRIT_TYPES = new Set(['crit', 'critical', 'critical_hit']);
@@ -7545,15 +7546,13 @@ function runner(step, attack) {
     fillEllipse(grid, 0, leftY, 1, 1, 'h');
     fillEllipse(grid, 17, rightY, 1, 1, 'h');
     seam(grid, 8, 11, 3);
-    // Walk frames open and close the stride. Attack keeps the shorter plant.
-    const knee = attack ? -2 : (step ? 2 : -4);
-    const plant = attack ? 0 : (step ? -1 : 1);
+    const knee = step ? 2 : -2;
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6 - plant, 22, 1, 0, 'o');
+    limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
     limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12 + plant, 22, 1, 0, 'o');
-    fillEllipse(grid, 6 - plant, 22, 1, 1, 'o');
-    fillEllipse(grid, 12 + plant, 22, 1, 1, 'o');
+    limb(grid, 12 - knee, 18, 12, 22, 1, 0, 'o');
+    fillEllipse(grid, 6, 22, 1, 1, 'o');
+    fillEllipse(grid, 12, 22, 1, 1, 'o');
     eraseEllipse(grid, 9, 20, 1, 3);
   });
 }
@@ -12957,7 +12956,8 @@ const random = __ff_m2["random"];
  * `generateDraft` advances `state.rng` and must be called once per opening
  * (updateDrafts does that). Rendering and UI read `state.draft.options`.
  *
- * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?}`.
+ * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?, description?}`.
+ * A hero card's `description` is the catalog `{en, zh}` sentence for that upgrade.
  * Hero levels live at `hero.upgrades[upgradeId]` (finite number) with `spec.cap`.
  * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
  * Empty board slots produce placeable tower cards. When empty slots remain, a
@@ -13345,17 +13345,27 @@ function towerCard(type, replace) {
 }
 
 function heroCard(state, id) {
+  const spec = upgradeSpec(id);
   const card = {
     id: `hero_upgrade:${id}`,
     kind: 'hero_upgrade',
     upgradeId: id,
     replace: false
   };
-  const cap = readCap(upgradeSpec(id));
+  const cap = readCap(spec);
   const level = readLevel(findHero(state), id);
   if (cap != null) card.cap = cap;
   if (level != null) card.nextLevel = level + 1;
+  const description = catalogDescription(spec);
+  if (description) card.description = description;
   return card;
+}
+
+function catalogDescription(spec) {
+  const text = spec?.description;
+  if (!text || typeof text !== 'object' || Array.isArray(text)) return null;
+  if (typeof text.en !== 'string' || !text.en || typeof text.zh !== 'string' || !text.zh) return null;
+  return text;
 }
 
 function allValidCards(state, heroIds) {
@@ -13944,7 +13954,9 @@ function placeholder(type, rank, kind) {
   return { id: PREVIEW_UNIT_ID, kind, type, rank, upgrades: {}, cooldown: 0, kills: 0 };
 }
 
-// The first sentence names the result and its rank. The explanation follows.
+// The first sentence names the result and its rank. The battle HUD prints the whole line.
+const PREVIEW_LIMIT = 160;
+
 function resultLead(name, rank) {
   return {
     en: `${name.en} at rank ${rank}.`,
@@ -13952,24 +13964,27 @@ function resultLead(name, rank) {
   };
 }
 
+function hudLine(lead, enDetail, zhDetail) {
+  const en = `${lead.en} ${enDetail}`;
+  const zh = `${lead.zh}${zhDetail}`;
+  return {
+    en: en.length <= PREVIEW_LIMIT ? en : lead.en,
+    zh: zh.length <= PREVIEW_LIMIT ? zh : lead.zh,
+  };
+}
+
 function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
   const lead = resultLead(name, next);
-  return {
-    en: `${lead.en} Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
-    zh: `${lead.zh}两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
-  };
+  return hudLine(lead, `Two rank ${rank} ${name.en} units become one.`, `两个 ${rank} 阶${name.zh}合为一个。`);
 }
 
 function hybridDescription(entry, rank, fromType, toType) {
   const left = displayName(fromType);
   const right = displayName(toType);
   const lead = resultLead(entry.name, rank);
-  return {
-    en: `${lead.en} ${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
-    zh: `${lead.zh}${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
-  };
+  return hudLine(lead, `${left.en} + ${right.en} keep rank ${rank}.`, `${left.zh}＋${right.zh}仍是 ${rank} 阶。`);
 }
 
 function planMerge(state, fromIndex, toIndex) {
@@ -14458,16 +14473,16 @@ function equipmentDescription(flavorEn, flavorZh, bonuses) {
     zh.push(`英雄伤害+${formatPercent(bonuses.damage)}%`);
   }
   if (bonuses.critChance) {
-    en.push(`+${formatPercent(bonuses.critChance)}% crit chance`);
-    zh.push(`暴击率+${formatPercent(bonuses.critChance)}%`);
+    en.push(`+${formatPercent(bonuses.critChance)}% hero crit chance`);
+    zh.push(`英雄暴击率+${formatPercent(bonuses.critChance)}%`);
   }
   if (bonuses.haste) {
-    en.push(`+${formatPercent(bonuses.haste)}% attack speed`);
-    zh.push(`攻击速度+${formatPercent(bonuses.haste)}%`);
+    en.push(`+${formatPercent(bonuses.haste)}% hero attack speed`);
+    zh.push(`英雄攻击速度+${formatPercent(bonuses.haste)}%`);
   }
   if (bonuses.range) {
-    en.push(`+${bonuses.range} range`);
-    zh.push(`射程+${bonuses.range}`);
+    en.push(`+${bonuses.range} hero range`);
+    zh.push(`英雄射程+${bonuses.range}`);
   }
   if (bonuses.fence) {
     en.push(`+${bonuses.fence} starting fence HP`);

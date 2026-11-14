@@ -14,7 +14,8 @@
  * `generateDraft` advances `state.rng` and must be called once per opening
  * (updateDrafts does that). Rendering and UI read `state.draft.options`.
  *
- * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?}`.
+ * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?, description?}`.
+ * A hero card's `description` is the catalog `{en, zh}` sentence for that upgrade.
  * Hero levels live at `hero.upgrades[upgradeId]` (finite number) with `spec.cap`.
  * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
  * Empty board slots produce placeable tower cards. When empty slots remain, a
@@ -402,17 +403,27 @@ function towerCard(type, replace) {
 }
 
 function heroCard(state, id) {
+  const spec = upgradeSpec(id);
   const card = {
     id: `hero_upgrade:${id}`,
     kind: 'hero_upgrade',
     upgradeId: id,
     replace: false
   };
-  const cap = readCap(upgradeSpec(id));
+  const cap = readCap(spec);
   const level = readLevel(findHero(state), id);
   if (cap != null) card.cap = cap;
   if (level != null) card.nextLevel = level + 1;
+  const description = catalogDescription(spec);
+  if (description) card.description = description;
   return card;
+}
+
+function catalogDescription(spec) {
+  const text = spec?.description;
+  if (!text || typeof text !== 'object' || Array.isArray(text)) return null;
+  if (typeof text.en !== 'string' || !text.en || typeof text.zh !== 'string' || !text.zh) return null;
+  return text;
 }
 
 function allValidCards(state, heroIds) {

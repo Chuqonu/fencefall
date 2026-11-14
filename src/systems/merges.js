@@ -112,7 +112,9 @@ function placeholder(type, rank, kind) {
   return { id: PREVIEW_UNIT_ID, kind, type, rank, upgrades: {}, cooldown: 0, kills: 0 };
 }
 
-// The first sentence names the result and its rank. The explanation follows.
+// The first sentence names the result and its rank. The battle HUD prints the whole line.
+const PREVIEW_LIMIT = 160;
+
 function resultLead(name, rank) {
   return {
     en: `${name.en} at rank ${rank}.`,
@@ -120,24 +122,27 @@ function resultLead(name, rank) {
   };
 }
 
+function hudLine(lead, enDetail, zhDetail) {
+  const en = `${lead.en} ${enDetail}`;
+  const zh = `${lead.zh}${zhDetail}`;
+  return {
+    en: en.length <= PREVIEW_LIMIT ? en : lead.en,
+    zh: zh.length <= PREVIEW_LIMIT ? zh : lead.zh,
+  };
+}
+
 function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
   const lead = resultLead(name, next);
-  return {
-    en: `${lead.en} Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
-    zh: `${lead.zh}两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
-  };
+  return hudLine(lead, `Two rank ${rank} ${name.en} units become one.`, `两个 ${rank} 阶${name.zh}合为一个。`);
 }
 
 function hybridDescription(entry, rank, fromType, toType) {
   const left = displayName(fromType);
   const right = displayName(toType);
   const lead = resultLead(entry.name, rank);
-  return {
-    en: `${lead.en} ${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
-    zh: `${lead.zh}${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
-  };
+  return hudLine(lead, `${left.en} + ${right.en} keep rank ${rank}.`, `${left.zh}＋${right.zh}仍是 ${rank} 阶。`);
 }
 
 function planMerge(state, fromIndex, toIndex) {

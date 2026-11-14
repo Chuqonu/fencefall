@@ -115,6 +115,7 @@ const ALIAS = Object.freeze({
   button: 'ui',
   boss_spawn: 'boss',
   boss_enter: 'boss',
+  boss_enrage: 'boss',
 });
 
 const CRIT_TYPES = new Set(['crit', 'critical', 'critical_hit']);
