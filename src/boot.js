@@ -486,7 +486,8 @@ export async function createController(options = {}) {
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
     else if (action === 'dragDrop' && outcome.description) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
-      ui.message = leadSentence(outcome.description, lang);
+      const text = outcome.description[lang] || outcome.description.en;
+      ui.message = typeof text === 'string' ? text.trim() : '';
     }
     else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
@@ -522,13 +523,6 @@ export async function createController(options = {}) {
     integration:() => ({engine:integrationInfo(), modules:Object.fromEntries(Object.entries(MODULES).map(([key, value]) => [key, !!value]))}),
   };
   return api;
-}
-
-function leadSentence(description, lang) {
-  const text = description && (description[lang] || description.en);
-  if (typeof text !== 'string') return '';
-  const sentence = text.split(/(?<=[。！？.!?])\s*/)[0] || text;
-  return sentence.trim();
 }
 
 function copyValue(value) {

@@ -81,4 +81,5 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   assert.equal(state.slots[4].unit.rank, 2);
   assert.equal(state.slots.filter(slot => slot.unit && slot.unit.kind === 'hero').length, 1);
   assert.match(api.getUI().message, /rank 2/);
+  assert.match(api.getUI().message, /become one/);
 });

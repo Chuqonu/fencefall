@@ -414,7 +414,21 @@ export function getWaveInfo(state) {
     finalSpawn: SCHEDULE_END,
     bossAlive,
     hasBoss: readHasBoss(state, director),
+    progress: campaignProgress(director, time),
   };
+}
+
+function campaignProgress(director, time) {
+  const index = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
+  if (index <= 0 || WAVES.length === 0) return 0;
+  const current = WAVES[Math.min(index, WAVES.length) - 1];
+  if (!current || !Number.isFinite(current.start)) return 0;
+  const next = index < WAVES.length ? WAVES[index] : null;
+  const end = next && Number.isFinite(next.start) ? next.start : current.start + 30;
+  const span = Math.max(1e-6, end - current.start);
+  const raw = (time - current.start) / span;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(1, raw));
 }
 
 function buildWaves(phases) {

@@ -1875,7 +1875,8 @@ async function createController(options = {}) {
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
     else if (action === 'dragDrop' && outcome.description) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
-      ui.message = leadSentence(outcome.description, lang);
+      const text = outcome.description[lang] || outcome.description.en;
+      ui.message = typeof text === 'string' ? text.trim() : '';
     }
     else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
@@ -1911,13 +1912,6 @@ async function createController(options = {}) {
     integration:() => ({engine:integrationInfo(), modules:Object.fromEntries(Object.entries(MODULES).map(([key, value]) => [key, !!value]))}),
   };
   return api;
-}
-
-function leadSentence(description, lang) {
-  const text = description && (description[lang] || description.en);
-  if (typeof text !== 'string') return '';
-  const sentence = text.split(/(?<=[。！？.!?])\s*/)[0] || text;
-  return sentence.trim();
 }
 
 function copyValue(value) {
@@ -15944,7 +15938,21 @@ function getWaveInfo(state) {
     finalSpawn: SCHEDULE_END,
     bossAlive,
     hasBoss: readHasBoss(state, director),
+    progress: campaignProgress(director, time),
   };
+}
+
+function campaignProgress(director, time) {
+  const index = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
+  if (index <= 0 || WAVES.length === 0) return 0;
+  const current = WAVES[Math.min(index, WAVES.length) - 1];
+  if (!current || !Number.isFinite(current.start)) return 0;
+  const next = index < WAVES.length ? WAVES[index] : null;
+  const end = next && Number.isFinite(next.start) ? next.start : current.start + 30;
+  const span = Math.max(1e-6, end - current.start);
+  const raw = (time - current.start) / span;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(1, raw));
 }
 
 function buildWaves(phases) {
