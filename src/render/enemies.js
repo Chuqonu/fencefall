@@ -7,6 +7,7 @@
  * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
  * spitter 22×26, swarm 12×14, boss 48×52.
  * A light rim (palette k) is the outer pixel so the shape reads on #122128.
+ * enemy.enraged on a boss repaints the crown and core hotter inside that box.
  */
 const PALETTES = {
   shambler: {k: '#efe6d2', '#': '#2a241c', o: '#8c8374', h: '#d9d0c0', e: '#f4e27a', s: '#1a1612'},
@@ -15,7 +16,7 @@ const PALETTES = {
   armored: {k: '#f4f7fb', '#': '#1c2430', o: '#8a96a4', h: '#ffffff', e: '#9fd0ea', s: '#10141a'},
   spitter: {k: '#d8f0b0', '#': '#142818', o: '#3f7a48', h: '#c6ee78', e: '#e8f58a', s: '#0c140c'},
   swarm: {k: '#f4e2b4', '#': '#3a2810', o: '#c4a05a', h: '#fff0c0', e: '#fff6d0', s: '#1a1208'},
-  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c'}
+  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'}
 };
 
 function makeGrid(width, height) {
@@ -425,7 +426,12 @@ function claw(grid, side, y, ink) {
   ], ink);
 }
 
-function boss(step, attack) {
+function boss(step, attack, enraged = false) {
+  const horn = enraged ? 'f' : '#';
+  const crown = enraged ? 'c' : 'h';
+  const coreShell = enraged ? 'f' : '#';
+  const coreInk = enraged ? 'w' : 'r';
+  const glint = enraged ? 'c' : 'h';
   return sprite(48, 52, (grid) => {
     fillPoly(grid, [
       [18, 20], [12, 28], [14, 34], [11, 42],
@@ -436,14 +442,14 @@ function boss(step, attack) {
     fillPoly(grid, [
       [16, 20], [12, 14], [9, 8], [7, 3], [8, 0],
       [12, 2], [13, 8], [16, 14], [19, 18]
-    ], '#');
+    ], horn);
     fillPoly(grid, [
       [31, 20], [35, 14], [38, 8], [40, 3], [39, 0],
       [35, 2], [34, 8], [31, 14], [28, 18]
-    ], '#');
-    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], 'h');
-    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], 'h');
-    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], 'h');
+    ], horn);
+    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], crown);
+    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], crown);
+    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], crown);
     seam(grid, 19, 15, 10);
     eye(grid, 19, 17);
     eye(grid, 26, 17);
@@ -456,10 +462,10 @@ function boss(step, attack) {
       seam(grid, 22, 21, 4);
     }
     const core = attack ? 6 : 4;
-    fillEllipse(grid, 24, 31, core + 2, core + 3, '#');
-    fillEllipse(grid, 24, 31, core, core + 1, 'r');
-    grid.put(22, 30, 'h');
-    grid.put(23, 29, 'h');
+    fillEllipse(grid, 24, 31, core + 2, core + 3, coreShell);
+    fillEllipse(grid, 24, 31, core, core + 1, coreInk);
+    grid.put(22, 30, glint);
+    grid.put(23, 29, glint);
     const clawY = attack ? 24 : 30;
     limb(grid, 14, 28, 8, clawY, 2, 2, 'o');
     limb(grid, 34, 28, 39, 30, 2, 2, 'o');
@@ -486,9 +492,11 @@ const SPRITES = {
   boss: [boss(0, false), boss(1, false), boss(0, true)]
 };
 
+const BOSS_ENRAGED = [boss(0, false, true), boss(1, false, true), boss(0, true, true)];
+
 function rowsFor(enemy, time) {
   const kind = SPRITES[enemy?.kind] ? enemy.kind : 'shambler';
-  const frames = SPRITES[kind];
+  const frames = kind === 'boss' && enemy?.enraged === true ? BOSS_ENRAGED : SPRITES[kind];
   const last = frames.length - 1;
   const attacking = enemy?.attacking === true;
   const frame = attacking || last === 0

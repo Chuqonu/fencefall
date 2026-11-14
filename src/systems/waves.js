@@ -15,6 +15,11 @@
 // copied from that wave in the existing schedule and does not change counts,
 // timings, kinds, or difficulty multipliers. Endless play keeps the same flag
 // for the endless wave that is current.
+// director.playerHint is the current wave's bilingual hint {en, zh} when that
+// hint exists. Each update copies it from the existing schedule. The copy does
+// not change counts, timings, kinds, or difficulty multipliers. Endless play
+// keeps the hint of the endless wave that is current. A wave with no hint
+// leaves playerHint unchanged.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
@@ -328,6 +333,7 @@ export function updateWaves(state, dt = 0) {
   }
 
   syncBossFlag(state, director, sys);
+  syncPlayerHint(state, director, sys);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -700,6 +706,24 @@ function syncBossFlag(state, director, sys) {
     return;
   }
   director.hasBoss = waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
+// Same current-wave choice as the boss flag. Campaign waves read the schedule.
+// Endless waves read the snapshot, which carries that wave's hint.
+function syncPlayerHint(state, director, sys) {
+  const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  const source = endlessRunning
+    ? sys?.current?.hint
+    : (started > 0 && WAVES.length > 0 ? WAVES[Math.min(started, WAVES.length) - 1]?.hint : null);
+  const hint = copyHint(source);
+  if (hint) director.playerHint = hint;
+}
+
+function copyHint(hint) {
+  if (!hint || typeof hint !== 'object') return null;
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return null;
+  return {en: hint.en, zh: hint.zh};
 }
 
 function readHasBoss(state, director) {

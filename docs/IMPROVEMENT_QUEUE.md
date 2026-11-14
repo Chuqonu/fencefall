@@ -71,4 +71,5 @@ Baseline `a65515b`. Manifest `work/fencefall/orchestrator/batch-cycle3.json`. 21
 
 - Cycle 1 delivered the playable campaign, compact drafts, resume, phone drawer, readable enemy boxes, and the live-save fix.
 - Cycle 2 ran 22 isolated Fast/xhigh workers. All 22 returned. Integrated art, audio, copy, boss-wave flag, paid-run memory, and two new test files. 66 tests passed. Held back `src/systems/combat.js`: chain jumps would re-roll crits and change seeded fights. Hero, movement, drafts, status, and the meta panel were already correct and stayed as they were.
-- Cycle 3 launched at 2026-11-14 13:41 Asia/Shanghai from `a65515b`: 21 workers, all running, manifest `batch-cycle3.json`. Chain crit is now an explicit owned task because the recipes already promise it.
+- Cycle 3 launched at 2026-11-14 13:41 Asia/Shanghai from `a65515b`: 21 workers, manifest `batch-cycle3.json`. Chain crit is an explicit owned task because the recipes already promise it.
+- First cycle 3 slice integrated while 10 workers were still running: wave hint, merge lead sentence, hybrid and tower fantasy lines, draft badge strings, boss enrage colors, rank chevrons, and four new tests. 81 tests passed. Enemy boxes unchanged. Combat, drafts, world, renderer, effects, build panel, meta, shell, audio, and the fence-contact test were still in flight and were not copied.

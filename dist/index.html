@@ -2379,63 +2379,63 @@ function recipe(id, parents, name, description, fields) {
 const RAW_RECIPES = [
   recipe('cinderbolt', ['bolt', 'fire'],
     { en: 'Cinderbolt', zh: '烬矢' },
-    { en: 'Unlike Rivet, it drops the crit and pierces 2 extra enemies instead of 1, and every pierced enemy burns. Unlike Cinder, it has no splash: the burn travels in a line at 5 damage per second for 2.4s instead of bursting in a circle at 4 damage per second for 2.6s.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并且每个被贯穿的敌人都会燃烧。和烬火不同，它没有溅射：燃烧沿直线传递，每秒 5 点、持续 2.4 秒，而不是在圆形范围内以每秒 4 点燃烧 2.6 秒。' },
+    { en: 'Cut a burning line through a file of enemies. Unlike Rivet, it drops the crit and pierces 2 extra enemies instead of 1, and every pierced enemy burns. Unlike Cinder, it has no splash: the burn travels in a line at 5 damage per second for 2.4s instead of bursting in a circle at 4 damage per second for 2.6s.', zh: '用一条燃烧直线切开一列敌人。和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并且每个被贯穿的敌人都会燃烧。和烬火不同，它没有溅射：燃烧沿直线传递，每秒 5 点、持续 2.4 秒，而不是在圆形范围内以每秒 4 点燃烧 2.6 秒。' },
     { damage: 14, interval: 0.72, range: 260, projectileSpeed: 480, pierce: 2, burn: { dps: 5, duration: 2.4 }, mechanics: ['pierce', 'burn'] }),
   recipe('hailspike', ['bolt', 'frost'],
     { en: 'Hailspike', zh: '雹针' },
-    { en: 'Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and slows each of them to 58% speed. Unlike Rime, the slow hits every enemy in the line instead of one target, and 58% speed is slower than Rime at 64% for the same 2.2s.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并让每个命中的敌人移速变为 58%。和霜结不同，减速打在直线上的每个敌人，而不是单个目标，而且同样持续 2.2 秒时，58% 移速比霜结的 64% 更慢。' },
+    { en: 'Drive a slowing line through the enemies in front. Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and slows each of them to 58% speed. Unlike Rime, the slow hits every enemy in the line instead of one target, and 58% speed is slower than Rime at 64% for the same 2.2s.', zh: '用一条减速直线钉住前方的敌人。和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，并让每个命中的敌人移速变为 58%。和霜结不同，减速打在直线上的每个敌人，而不是单个目标，而且同样持续 2.2 秒时，58% 移速比霜结的 64% 更慢。' },
     { damage: 12, interval: 0.8, range: 255, projectileSpeed: 440, pierce: 2, slow: { factor: 0.58, duration: 2.2 }, mechanics: ['pierce', 'slow'] }),
   recipe('arcbolt', ['bolt', 'lightning'],
     { en: 'Arcbolt', zh: '弧矢' },
-    { en: 'Unlike Rivet, it drops pierce and chains to 2 extra enemies, and its crit rises from 15% at 1.85× to 24% at 2×. Unlike Arc, each hit, including each jump, rolls that crit, and jumps reach 88 instead of 80; Arc does not crit.', zh: '和穿钉不同，它去掉贯穿，改为连锁额外 2 名敌人，暴击从 15%、1.85 倍提高到 24%、2 倍。和弧雷不同，每一次命中（包括每一次跳跃）都单独判定这次暴击，跳跃距离是 88 而不是 80；弧雷本身不会暴击。' },
+    { en: 'Snap a chain that can crit between clustered enemies. Unlike Rivet, it drops pierce and chains to 2 extra enemies, and its crit rises from 15% at 1.85× to 24% at 2×. Unlike Arc, each hit, including each jump, rolls that crit, and jumps reach 88 instead of 80; Arc does not crit.', zh: '让会暴击的连锁在聚拢的敌人之间跳开。和穿钉不同，它去掉贯穿，改为连锁额外 2 名敌人，暴击从 15%、1.85 倍提高到 24%、2 倍。和弧雷不同，每一次命中（包括每一次跳跃）都单独判定这次暴击，跳跃距离是 88 而不是 80；弧雷本身不会暴击。' },
     { damage: 13, interval: 0.86, range: 265, projectileSpeed: 520, chain: 2, chainRange: 88, critChance: 0.24, critMultiplier: 2, mechanics: ['chain', 'crit'] }),
   recipe('venomspine', ['bolt', 'poison'],
     { en: 'Venomspine', zh: '毒脊' },
-    { en: 'Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and each hit adds one poison stack. Unlike the poison tower Blight, the poison is not single-target, but each stack deals 2 damage per second instead of 2.4, still for 4s and up to 3 stacks.', zh: '和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，每次命中叠加一层毒素。和瘴毒不同，毒素不再只打单体，但每层每秒伤害是 2 而不是 2.4，持续时间仍是 4 秒，最多 3 层。' },
+    { en: 'Thread a poisoning line through a packed file. Unlike Rivet, it drops the crit, pierces 2 extra enemies instead of 1, and each hit adds one poison stack. Unlike the poison tower Blight, the poison is not single-target, but each stack deals 2 damage per second instead of 2.4, still for 4s and up to 3 stacks.', zh: '用一条毒线贯穿挤在一起的一列敌人。和穿钉不同，它去掉暴击，额外贯穿 2 名敌人而不是 1 名，每次命中叠加一层毒素。和瘴毒不同，毒素不再只打单体，但每层每秒伤害是 2 而不是 2.4，持续时间仍是 4 秒，最多 3 层。' },
     { damage: 9, interval: 0.68, range: 250, projectileSpeed: 460, pierce: 2, poison: { dps: 2, duration: 4, maxStacks: 3 }, mechanics: ['pierce', 'poison'] }),
   recipe('watchpost', ['bolt', 'support'],
     { en: 'Watchpost', zh: '哨卫' },
-    { en: 'Unlike Rivet, it drops pierce, extends range from 260 to 275, raises crit from 15% at 1.85× to 28% at 2×, and grants nearby defenders an aura. Unlike Banner, that aura reaches 130 instead of 116 but gives only +10% damage and +6% haste, not +12% damage and +8% haste, and the shot can crit.', zh: '和穿钉不同，它去掉贯穿，射程从 260 增至 275，暴击从 15%、1.85 倍提高到 28%、2 倍，并给附近防守单位加上光环。和旌旗不同，这道光环范围是 130 而不是 116，但只提供 10% 伤害和 6% 急速，而不是 12% 伤害和 8% 急速，而且射击可以暴击。' },
+    { en: 'Pick off a distant target with a crit while the aura buffs nearby towers. Unlike Rivet, it drops pierce, extends range from 260 to 275, raises crit from 15% at 1.85× to 28% at 2×, and grants nearby defenders an aura. Unlike Banner, that aura reaches 130 instead of 116 but gives only +10% damage and +6% haste, not +12% damage and +8% haste, and the shot can crit.', zh: '用暴击点掉远处的目标，同时以光环抬高附近的塔。和穿钉不同，它去掉贯穿，射程从 260 增至 275，暴击从 15%、1.85 倍提高到 28%、2 倍，并给附近防守单位加上光环。和旌旗不同，这道光环范围是 130 而不是 116，但只提供 10% 伤害和 6% 急速，而不是 12% 伤害和 8% 急速，而且射击可以暴击。' },
     { damage: 11, interval: 0.78, range: 275, projectileSpeed: 470, critChance: 0.28, critMultiplier: 2, aura: { range: 130, damage: 0.1, haste: 0.06 }, mechanics: ['aura', 'crit'] }),
   recipe('scald', ['fire', 'frost'],
     { en: 'Scald', zh: '蒸灼' },
-    { en: 'Unlike Cinder, the splash grows from 36 to 46 and every enemy in it is also slowed to 50% speed; the burn stays 4 damage per second for 2.6s. Unlike Rime, the slow is no longer one target at 64% speed: the whole splash shares a stronger 50% slow for the same 2.2s and also burns.', zh: '和烬火不同，溅射从 36 扩大到 46，范围内的每个敌人还会被减速到 50% 移速；燃烧仍是每秒 4 点、持续 2.6 秒。和霜结不同，减速不再是 64% 移速的单体：整片溅射共享更强的 50% 减速，持续时间同为 2.2 秒，并同时燃烧。' },
+    { en: 'Drop a burning, slowing splash on a packed cluster. Unlike Cinder, the splash grows from 36 to 46 and every enemy in it is also slowed to 50% speed; the burn stays 4 damage per second for 2.6s. Unlike Rime, the slow is no longer one target at 64% speed: the whole splash shares a stronger 50% slow for the same 2.2s and also burns.', zh: '向挤成一团的敌人泼下一片燃烧并减速的溅射。和烬火不同，溅射从 36 扩大到 46，范围内的每个敌人还会被减速到 50% 移速；燃烧仍是每秒 4 点、持续 2.6 秒。和霜结不同，减速不再是 64% 移速的单体：整片溅射共享更强的 50% 减速，持续时间同为 2.2 秒，并同时燃烧。' },
     { damage: 8, interval: 1.2, range: 240, projectileSpeed: 300, splash: 46, burn: { dps: 4, duration: 2.6 }, slow: { factor: 0.5, duration: 2.2 }, mechanics: ['splash', 'burn', 'slow'] }),
   recipe('wildfire', ['fire', 'lightning'],
     { en: 'Wildfire', zh: '野火' },
-    { en: 'Unlike Cinder, the splash grows from 36 to 40, the burn rises from 4 damage per second for 2.6s to 6 for 2.8s, and the hit also jumps once. Unlike Arc, it chains to only 1 extra enemy within 78 instead of 2 within 80, but both the splash and that jump burn.', zh: '和烬火不同，溅射从 36 扩大到 40，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 6 点、持续 2.8 秒，并且命中后再跳跃一次。和弧雷不同，它只连锁 1 名额外敌人、距离 78，而不是 2 名、距离 80，但溅射和这一跳都会燃烧。' },
+    { en: 'Burst a burning splash, then let that flame jump to a neighbor. Unlike Cinder, the splash grows from 36 to 40, the burn rises from 4 damage per second for 2.6s to 6 for 2.8s, and the hit also jumps once. Unlike Arc, it chains to only 1 extra enemy within 78 instead of 2 within 80, but both the splash and that jump burn.', zh: '炸开一片燃烧溅射，再让火焰跳到旁边的敌人。和烬火不同，溅射从 36 扩大到 40，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 6 点、持续 2.8 秒，并且命中后再跳跃一次。和弧雷不同，它只连锁 1 名额外敌人、距离 78，而不是 2 名、距离 80，但溅射和这一跳都会燃烧。' },
     { damage: 10, interval: 1.15, range: 245, projectileSpeed: 340, splash: 40, chain: 1, chainRange: 78, burn: { dps: 6, duration: 2.8 }, mechanics: ['splash', 'chain', 'burn'] }),
   recipe('blight', ['fire', 'poison'],
     { en: 'Blight', zh: '疫焚' },
-    { en: 'Unlike Cinder, the splash grows from 36 to 50 and also stacks poison, while the burn falls from 4 damage per second for 2.6s to 3 for 3s and the hit drops from 8 to 6. Unlike the poison tower Blight, poison is no longer single-target: everyone in the splash takes 2 damage per second for 4.5s instead of 2.4 for 4s, still up to 3 stacks, and they burn as well.', zh: '和烬火不同，溅射从 36 扩大到 50，并会叠加毒素；燃烧从每秒 4 点、持续 2.6 秒降为每秒 3 点、持续 3 秒，直接伤害从 8 降到 6。和瘴毒不同，毒素不再是单体：溅射内的每个敌人受到每秒 2 点毒素、持续 4.5 秒，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层，并且同时燃烧。' },
+    { en: 'Wash a crowd in a burning splash that also stacks poison. Unlike Cinder, the splash grows from 36 to 50 and also stacks poison, while the burn falls from 4 damage per second for 2.6s to 3 for 3s and the hit drops from 8 to 6. Unlike the poison tower Blight, poison is no longer single-target: everyone in the splash takes 2 damage per second for 4.5s instead of 2.4 for 4s, still up to 3 stacks, and they burn as well.', zh: '用会叠加毒素的燃烧溅射洗过一群敌人。和烬火不同，溅射从 36 扩大到 50，并会叠加毒素；燃烧从每秒 4 点、持续 2.6 秒降为每秒 3 点、持续 3 秒，直接伤害从 8 降到 6。和瘴毒不同，毒素不再是单体：溅射内的每个敌人受到每秒 2 点毒素、持续 4.5 秒，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层，并且同时燃烧。' },
     { damage: 6, interval: 1.28, range: 240, projectileSpeed: 280, splash: 50, burn: { dps: 3, duration: 3 }, poison: { dps: 2, duration: 4.5, maxStacks: 3 }, mechanics: ['splash', 'burn', 'poison'] }),
   recipe('pyre', ['fire', 'support'],
     { en: 'Pyre', zh: '烽坛' },
-    { en: 'Unlike Cinder, the splash grows from 36 to 38 and the burn rises from 4 damage per second for 2.6s to 5 for 3s, and it adds an aura that buffs defenders and does not hurt enemies. Unlike Banner, that aura reaches 140 instead of 116 and gives +15% damage but only +4% haste, not +12% damage and +8% haste, and the attack is a burning splash instead of a single light bolt.', zh: '和烬火不同，溅射从 36 扩大到 38，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 5 点、持续 3 秒，并加上只强化防守单位、不伤害敌人的光环。和旌旗不同，光环范围是 140 而不是 116，提供 15% 伤害但只有 4% 急速，而不是 12% 伤害和 8% 急速，攻击也从单体轻射变成燃烧溅射。' },
+    { en: 'Plant a burning splash that also buffs the defenders around it. Unlike Cinder, the splash grows from 36 to 38 and the burn rises from 4 damage per second for 2.6s to 5 for 3s, and it adds an aura that buffs defenders and does not hurt enemies. Unlike Banner, that aura reaches 140 instead of 116 and gives +15% damage but only +4% haste, not +12% damage and +8% haste, and the attack is a burning splash instead of a single light bolt.', zh: '立下一片燃烧溅射，并让周围的防守者一起变强。和烬火不同，溅射从 36 扩大到 38，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 5 点、持续 3 秒，并加上只强化防守单位、不伤害敌人的光环。和旌旗不同，光环范围是 140 而不是 116，提供 15% 伤害但只有 4% 急速，而不是 12% 伤害和 8% 急速，攻击也从单体轻射变成燃烧溅射。' },
     { damage: 8, interval: 1.25, range: 240, projectileSpeed: 290, splash: 38, burn: { dps: 5, duration: 3 }, aura: { range: 140, damage: 0.15, haste: 0.04 }, mechanics: ['aura', 'splash', 'burn'] }),
   recipe('shatter', ['frost', 'lightning'],
     { en: 'Shatter', zh: '霜裂' },
-    { en: 'Unlike Rime, the slow is no longer single-target: it chains to 3 extra enemies, slows each to 60% speed for 1.8s instead of 64% for 2.2s, and can crit at 20% for 2.1×. Unlike Arc, the chain grows from 2 jumps within 80 to 3 within 96, and each jump slows and can crit; Arc does neither.', zh: '和霜结不同，减速不再是单体：它连锁额外 3 名敌人，每人移速变为 60%、持续 1.8 秒，而不是 64%、持续 2.2 秒，并有 20% 几率造成 2.1 倍暴击。和弧雷不同，连锁从 80 距离内的 2 跳增至 96 距离内的 3 跳，每一跳都会减速并可能暴击；弧雷两者都没有。' },
+    { en: 'Crack a slowing chain that can crit across a spread crowd. Unlike Rime, the slow is no longer single-target: it chains to 3 extra enemies, slows each to 60% speed for 1.8s instead of 64% for 2.2s, and can crit at 20% for 2.1×. Unlike Arc, the chain grows from 2 jumps within 80 to 3 within 96, and each jump slows and can crit; Arc does neither.', zh: '劈开一条会减速也会暴击的连锁，打过散开的人群。和霜结不同，减速不再是单体：它连锁额外 3 名敌人，每人移速变为 60%、持续 1.8 秒，而不是 64%、持续 2.2 秒，并有 20% 几率造成 2.1 倍暴击。和弧雷不同，连锁从 80 距离内的 2 跳增至 96 距离内的 3 跳，每一跳都会减速并可能暴击；弧雷两者都没有。' },
     { damage: 11, interval: 1.05, range: 260, projectileSpeed: 500, chain: 3, chainRange: 96, critChance: 0.2, critMultiplier: 2.1, slow: { factor: 0.6, duration: 1.8 }, mechanics: ['chain', 'slow', 'crit'] }),
   recipe('miasma', ['frost', 'poison'],
     { en: 'Miasma', zh: '瘴雾' },
-    { en: 'Unlike Rime, the slow is a splash of 62 rather than one enemy, holding targets at 58% speed for 2.8s instead of 64% for 2.2s, and it also stacks poison. Unlike the poison tower Blight, that poison spreads through the cloud at 2 damage per second instead of 2.4 on one target, for the same 4s and 3 stacks, and everyone inside is slowed.', zh: '和霜结不同，减速变成半径 62 的溅射，而不是只打一名敌人，移速变为 58%、持续 2.8 秒，而不是 64%、持续 2.2 秒，并且会叠加毒素。和瘴毒不同，毒素随这片云雾扩散，每秒 2 点而不是单体的每秒 2.4 点，持续时间仍是 4 秒、最多 3 层，云内每个敌人都会被减速。' },
+    { en: 'Lay a slowing, poisoning splash over a chokepoint. Unlike Rime, the slow is a splash of 62 rather than one enemy, holding targets at 58% speed for 2.8s instead of 64% for 2.2s, and it also stacks poison. Unlike the poison tower Blight, that poison spreads through the cloud at 2 damage per second instead of 2.4 on one target, for the same 4s and 3 stacks, and everyone inside is slowed.', zh: '在隘口铺下一片减速并中毒的溅射。和霜结不同，减速变成半径 62 的溅射，而不是只打一名敌人，移速变为 58%、持续 2.8 秒，而不是 64%、持续 2.2 秒，并且会叠加毒素。和瘴毒不同，毒素随这片云雾扩散，每秒 2 点而不是单体的每秒 2.4 点，持续时间仍是 4 秒、最多 3 层，云内每个敌人都会被减速。' },
     { damage: 5, interval: 1.32, range: 240, projectileSpeed: 250, splash: 62, slow: { factor: 0.58, duration: 2.8 }, poison: { dps: 2, duration: 4, maxStacks: 3 }, mechanics: ['splash', 'slow', 'poison'] }),
   recipe('glacierward', ['frost', 'support'],
     { en: 'Glacierward', zh: '霜垣' },
-    { en: 'Unlike Rime, it stays a single-target shot but slows to 48% speed for 2.5s instead of 64% for 2.2s, and it adds an aura for nearby defenders. Unlike Banner, that aura reaches 150 instead of 116 and gives +12% haste but only +8% damage, not +8% haste and +12% damage, and the shot slows instead of firing a plain bolt.', zh: '和霜结不同，它仍是单体射击，但减速变为 48% 移速、持续 2.5 秒，而不是 64%、持续 2.2 秒，并为附近防守单位提供光环。和旌旗不同，光环范围是 150 而不是 116，提供 12% 急速但只有 8% 伤害，而不是 8% 急速和 12% 伤害，射击会减速，而不是普通轻射。' },
+    { en: 'Pin one runner with a hard slow while the aura hastes nearby towers. Unlike Rime, it stays a single-target shot but slows to 48% speed for 2.5s instead of 64% for 2.2s, and it adds an aura for nearby defenders. Unlike Banner, that aura reaches 150 instead of 116 and gives +12% haste but only +8% damage, not +8% haste and +12% damage, and the shot slows instead of firing a plain bolt.', zh: '用强减速钉住一个前冲的敌人，同时以光环加快附近的塔。和霜结不同，它仍是单体射击，但减速变为 48% 移速、持续 2.5 秒，而不是 64%、持续 2.2 秒，并为附近防守单位提供光环。和旌旗不同，光环范围是 150 而不是 116，提供 12% 急速但只有 8% 伤害，而不是 8% 急速和 12% 伤害，射击会减速，而不是普通轻射。' },
     { damage: 7, interval: 1.12, range: 245, projectileSpeed: 320, slow: { factor: 0.48, duration: 2.5 }, aura: { range: 150, damage: 0.08, haste: 0.12 }, mechanics: ['aura', 'slow'] }),
   recipe('catalyst', ['lightning', 'poison'],
     { en: 'Catalyst', zh: '触媒' },
-    { en: 'Unlike Arc, each of the 2 chain jumps also poisons, and jumps reach 100 instead of 80, while the hit falls from 10 to 8. Unlike the poison tower Blight, poison is not single-target: every jumped enemy gains a stack at 2 damage per second for 3.6s instead of 2.4 for 4s, still up to 3 stacks.', zh: '和弧雷不同，2 次连锁跳跃都会使目标中毒，跳跃距离是 100 而不是 80，直接伤害从 10 降到 8。和瘴毒不同，毒素不再是单体：每个被跳到的敌人获得一层每秒 2 点、持续 3.6 秒的毒素，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层。' },
+    { en: 'Leap a poisoning chain through enemies that have spread out. Unlike Arc, each of the 2 chain jumps also poisons, and jumps reach 100 instead of 80, while the hit falls from 10 to 8. Unlike the poison tower Blight, poison is not single-target: every jumped enemy gains a stack at 2 damage per second for 3.6s instead of 2.4 for 4s, still up to 3 stacks.', zh: '让中毒的连锁在已经散开的敌人之间跳跃。和弧雷不同，2 次连锁跳跃都会使目标中毒，跳跃距离是 100 而不是 80，直接伤害从 10 降到 8。和瘴毒不同，毒素不再是单体：每个被跳到的敌人获得一层每秒 2 点、持续 3.6 秒的毒素，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层。' },
     { damage: 8, interval: 1.02, range: 250, projectileSpeed: 490, chain: 2, chainRange: 100, poison: { dps: 2, duration: 3.6, maxStacks: 3 }, mechanics: ['chain', 'poison'] }),
   recipe('relay', ['lightning', 'support'],
     { en: 'Relay', zh: '继电' },
-    { en: 'Unlike Arc, it keeps a chain of 2 but each jump reaches 84 instead of 80, and it adds an aura, while its own hit falls from 10 to 9. Unlike Banner, that aura reaches 145 instead of 116 and gives +16% haste but only +5% damage, not +8% haste and +12% damage, and the attack chains instead of a single light bolt.', zh: '和弧雷不同，它保留 2 次连锁，但每次跳跃距离是 84 而不是 80，并加上光环；自身直接伤害从 10 降到 9。和旌旗不同，光环范围是 145 而不是 116，提供 16% 急速但只有 5% 伤害，而不是 8% 急速和 12% 伤害，攻击会连锁，而不是单体轻射。' },
+    { en: 'Arc a chain across the fight while the aura hastes nearby towers. Unlike Arc, it keeps a chain of 2 but each jump reaches 84 instead of 80, and it adds an aura, while its own hit falls from 10 to 9. Unlike Banner, that aura reaches 145 instead of 116 and gives +16% haste but only +5% damage, not +8% haste and +12% damage, and the attack chains instead of a single light bolt.', zh: '让连锁横扫战场，同时以光环加快附近的塔。和弧雷不同，它保留 2 次连锁，但每次跳跃距离是 84 而不是 80，并加上光环；自身直接伤害从 10 降到 9。和旌旗不同，光环范围是 145 而不是 116，提供 16% 急速但只有 5% 伤害，而不是 8% 急速和 12% 伤害，攻击会连锁，而不是单体轻射。' },
     { damage: 9, interval: 0.98, range: 245, projectileSpeed: 470, chain: 2, chainRange: 84, aura: { range: 145, damage: 0.05, haste: 0.16 }, mechanics: ['aura', 'chain'] }),
   recipe('cultivator', ['poison', 'support'],
     { en: 'Cultivator', zh: '培育' },
-    { en: 'Unlike the poison tower Blight, each poison stack deals 3 damage per second for 5s and can reach 4 stacks, instead of 2.4 for 4s and 3 stacks, and nearby defenders gain an aura. Unlike Banner, that aura reaches 128 instead of 116, keeps +12% damage, and cuts haste from +8% to +5%, while the shot stacks that deeper poison instead of a plain bolt. It still has no splash and no pierce.', zh: '和瘴毒不同，每层毒素每秒造成 3 点伤害、持续 5 秒、最多 4 层，而不是每秒 2.4 点、持续 4 秒、最多 3 层，附近防守单位还会获得光环。和旌旗不同，光环范围是 128 而不是 116，伤害加成仍是 12%，急速则从 8% 降到 5%，射击会叠加这种更深的毒素，而不是普通轻射。它仍然没有溅射，也没有贯穿。' },
+    { en: 'Stack a deep poison on one tough enemy while the aura lifts neighbors. Unlike the poison tower Blight, each poison stack deals 3 damage per second for 5s and can reach 4 stacks, instead of 2.4 for 4s and 3 stacks, and nearby defenders gain an aura. Unlike Banner, that aura reaches 128 instead of 116, keeps +12% damage, and cuts haste from +8% to +5%, while the shot stacks that deeper poison instead of a plain bolt. It still has no splash and no pierce.', zh: '把深层毒素叠在一个厚血敌人身上，同时以光环抬高邻近的塔。和瘴毒不同，每层毒素每秒造成 3 点伤害、持续 5 秒、最多 4 层，而不是每秒 2.4 点、持续 4 秒、最多 3 层，附近防守单位还会获得光环。和旌旗不同，光环范围是 128 而不是 116，伤害加成仍是 12%，急速则从 8% 降到 5%，射击会叠加这种更深的毒素，而不是普通轻射。它仍然没有溅射，也没有贯穿。' },
     { damage: 5, interval: 1.08, range: 240, projectileSpeed: 310, poison: { dps: 3, duration: 5, maxStacks: 4 }, aura: { range: 128, damage: 0.12, haste: 0.05 }, mechanics: ['aura', 'poison'] }),
 ];
 
@@ -2965,8 +2965,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Projectile', zh: '投射'}),
     name: Object.freeze({en: 'Rivet', zh: '穿钉'}),
     description: Object.freeze({
-      en: `Fires a fast rivet from its slot center at any enemy within attack range ${boltStats.range}. There are no lanes. At rank 1 it deals ${boltStats.damage} damage every ${boltStats.interval}s, pierces ${boltStats.pierce} extra enemy, and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
-      zh: `从槽位中心攻击射程 ${boltStats.range} 内的任意敌人，不按列锁定。1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
+      en: `Projectile shots pierce one extra enemy and can crit. Rank 1 deals ${boltStats.damage} damage every ${boltStats.interval}s. Attack range is ${boltStats.range}. It fires a fast rivet from its slot center at any enemy in that range. There are no lanes. It pierces ${boltStats.pierce} extra enemy and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
+      zh: `投射会贯穿额外一名敌人，并且可以暴击。1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，攻击射程 ${boltStats.range}。从槽位中心攻击该射程内的任意敌人，不按列锁定。可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
     }),
     stats: Object.freeze(boltStats)
   }),
@@ -2975,8 +2975,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Fire', zh: '火焰'}),
     name: Object.freeze({en: 'Cinder', zh: '烬火'}),
     description: Object.freeze({
-      en: `Lobs a cinder that deals ${fireStats.damage} damage every ${fireStats.interval}s. Attack range is ${fireStats.range}. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within splash radius ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
-      zh: `投出烬火。1 阶伤害 ${fireStats.damage}，攻击间隔 ${fireStats.interval} 秒，攻击射程 ${fireStats.range}。目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标溅射半径 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
+      en: `Fire shots burn the target and splash that same hit onto nearby enemies. Rank 1 deals ${fireStats.damage} damage every ${fireStats.interval}s. Attack range is ${fireStats.range}. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within splash radius ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
+      zh: `火焰会让目标燃烧，并把同样的一击溅射到附近敌人。1 阶伤害 ${fireStats.damage}，攻击间隔 ${fireStats.interval} 秒，攻击射程 ${fireStats.range}。目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标溅射半径 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
     }),
     stats: Object.freeze(fireStats)
   }),
@@ -2985,8 +2985,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Frost', zh: '冰霜'}),
     name: Object.freeze({en: 'Rime', zh: '霜结'}),
     description: Object.freeze({
-      en: `A single-target shot with attack range ${frostStats.range} that deals ${frostStats.damage} damage every ${frostStats.interval}s and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
-      zh: `单体射击。1 阶伤害 ${frostStats.damage}，攻击间隔 ${frostStats.interval} 秒，攻击射程 ${frostStats.range}，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
+      en: `Frost shots slow one enemy. Rank 1 deals ${frostStats.damage} damage every ${frostStats.interval}s. Attack range is ${frostStats.range}. The shot is single-target and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
+      zh: `冰霜会减速单个敌人。1 阶伤害 ${frostStats.damage}，攻击间隔 ${frostStats.interval} 秒，攻击射程 ${frostStats.range}。这是单体射击，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
     }),
     stats: Object.freeze(frostStats)
   }),
@@ -2995,8 +2995,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Lightning', zh: '闪电'}),
     name: Object.freeze({en: 'Arc', zh: '弧雷'}),
     description: Object.freeze({
-      en: `The longest base attack range, ${lightningStats.range}. It deals ${lightningStats.damage} damage every ${lightningStats.interval}s, then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy and ignores columns. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
-      zh: `基础塔里攻击射程最长，为 ${lightningStats.range}。1 阶伤害 ${lightningStats.damage}，攻击间隔 ${lightningStats.interval} 秒，然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}，不按列限制。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
+      en: `Lightning chains to extra enemies and ignores columns. Rank 1 deals ${lightningStats.damage} damage every ${lightningStats.interval}s. Attack range is ${lightningStats.range}, the longest of the base towers. It then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
+      zh: `闪电会连锁到额外敌人，不按列限制。1 阶伤害 ${lightningStats.damage}，攻击间隔 ${lightningStats.interval} 秒，攻击射程 ${lightningStats.range}，是基础塔里最长的。然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
     }),
     stats: Object.freeze(lightningStats)
   }),
@@ -3005,8 +3005,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Poison', zh: '毒素'}),
     name: Object.freeze({en: 'Blight', zh: '瘴毒'}),
     description: Object.freeze({
-      en: `A weak hit for ${poisonStats.damage} damage every ${poisonStats.interval}s. Attack range is ${poisonStats.range}. Each hit adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}. It is meant for one tough enemy.`,
-      zh: `1 阶直接伤害只有 ${poisonStats.damage}，攻击间隔 ${poisonStats.interval} 秒，攻击射程 ${poisonStats.range}，命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。适合对付单个厚血敌人。`
+      en: `Poison stacks on one tough enemy. Rank 1 deals ${poisonStats.damage} damage every ${poisonStats.interval}s. Attack range is ${poisonStats.range}. Each hit adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}.`,
+      zh: `毒素会叠在单个厚血敌人身上。1 阶直接伤害 ${poisonStats.damage}，攻击间隔 ${poisonStats.interval} 秒，攻击射程 ${poisonStats.range}。命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。`
     }),
     stats: Object.freeze(poisonStats)
   }),
@@ -3015,8 +3015,8 @@ const TOWERS = Object.freeze({
     role: Object.freeze({en: 'Support', zh: '辅助'}),
     name: Object.freeze({en: 'Banner', zh: '旌旗'}),
     description: Object.freeze({
-      en: `Shoots a light bolt by the same rule as the other towers: any enemy within attack range ${supportStats.range} of this slot's center, across columns. Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
-      zh: `射击规则与其他塔相同：攻击距离槽位中心 ${supportStats.range} 以内的任意敌人，可以跨列。1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
+      en: `Support buffs nearby defenders, including itself, and this banner still fires. Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. Attack range is ${supportStats.range}. It shoots a light bolt at any enemy within that range of this slot's center, across columns, by the same rule as the other towers. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
+      zh: `辅助会强化附近的防御者（包括自身），同时这面旌旗仍然射击。1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。射击规则与其他塔相同：攻击距离槽位中心该射程以内的任意敌人，可以跨列。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
     }),
     stats: Object.freeze(supportStats)
   })
@@ -3069,6 +3069,9 @@ function assertCatalog() {
   for (const id of ids) {
     const tower = TOWERS[id];
     if (!tower.name?.en || !tower.name?.zh || !tower.description?.en || !tower.description?.zh) throw new Error(`missing bilingual text: ${id}`);
+    if (!tower.description.en.startsWith(tower.role.en) || !tower.description.zh.startsWith(tower.role.zh)) {
+      throw new Error(`${id} blurb does not lead with its role`);
+    }
     for (const field of ['damage', 'interval', 'range']) {
       const token = String(tower.stats[field]);
       if (!tower.description.en.includes(token) || !tower.description.zh.includes(token)) {
@@ -3493,6 +3496,8 @@ const ROWS = [
   ['draft', 'Draft', '整备'],
   ['draftTitle', 'Draft', '整备'],
   ['chooseOneOfThree', 'Choose one of three', '三选一'],
+  ['draftOnField', 'Already on the field', '场上已有'],
+  ['draftNewType', 'Not on the field yet', '场上还没有'],
   ['chooseUpgrade', 'Choose an upgrade', '选择升级'],
   ['chooseSlot', 'Choose a slot', '选择格子'],
   ['chooseTower', 'Add {name}', '加入{name}'],
@@ -4048,6 +4053,7 @@ const RECIPES = __ff_m1["RECIPES"];
  * Parents come from RECIPES (id + parents), then unit.parents / ingredients /
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
+ * Rank 1–4 is a row of chevrons on the plinth, one mark per rank.
  * Nothing here reads or writes gameplay RNG or run state.
  */
 
@@ -4113,7 +4119,6 @@ const PALETTE = {
 };
 
 const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
-const RANK_COLOR = [null, 'E', 'Q', 'L', 'H'];
 const BASE_SET = new Set(BASE_TYPES);
 
 const ALIASES = {
@@ -4621,16 +4626,20 @@ function drawPlinth(p, rank) {
 }
 
 function drawRankGems(p, rank) {
-  const color = RANK_COLOR[rank] || 'E';
-  const gem = 3;
+  // One chevron per rank, centered on a black plaque. The count is the rank.
+  // The plaque keeps rank 1 from reading as a stone chip and rank 4 off the gold trim.
+  const mark = 3;
   const gap = 2;
-  const total = rank * gem + (rank - 1) * gap;
+  const total = rank * mark + (rank - 1) * gap;
   let x = Math.floor((W - total) / 2);
+  p.fill(x - 1, 34, total + 2, 3, 'K');
   for (let i = 0; i < rank; i++) {
-    p.fill(x, 34, gem, 3, color);
-    p.px(x, 34, 'W');
-    p.px(x + 1, 35, rank >= 4 ? 'h' : color);
-    x += gem + gap;
+    p.px(x + 1, 34, 'W');
+    p.px(x, 35, 'H');
+    p.px(x + 1, 35, 'h');
+    p.px(x + 2, 35, 'H');
+    p.px(x + 1, 36, 'b');
+    x += mark + gap;
   }
 }
 
@@ -6490,6 +6499,7 @@ __ff_exports["drawEnemy"] = drawEnemy;
  * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
  * spitter 22×26, swarm 12×14, boss 48×52.
  * A light rim (palette k) is the outer pixel so the shape reads on #122128.
+ * enemy.enraged on a boss repaints the crown and core hotter inside that box.
  */
 const PALETTES = {
   shambler: {k: '#efe6d2', '#': '#2a241c', o: '#8c8374', h: '#d9d0c0', e: '#f4e27a', s: '#1a1612'},
@@ -6498,7 +6508,7 @@ const PALETTES = {
   armored: {k: '#f4f7fb', '#': '#1c2430', o: '#8a96a4', h: '#ffffff', e: '#9fd0ea', s: '#10141a'},
   spitter: {k: '#d8f0b0', '#': '#142818', o: '#3f7a48', h: '#c6ee78', e: '#e8f58a', s: '#0c140c'},
   swarm: {k: '#f4e2b4', '#': '#3a2810', o: '#c4a05a', h: '#fff0c0', e: '#fff6d0', s: '#1a1208'},
-  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c'}
+  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'}
 };
 
 function makeGrid(width, height) {
@@ -6908,7 +6918,12 @@ function claw(grid, side, y, ink) {
   ], ink);
 }
 
-function boss(step, attack) {
+function boss(step, attack, enraged = false) {
+  const horn = enraged ? 'f' : '#';
+  const crown = enraged ? 'c' : 'h';
+  const coreShell = enraged ? 'f' : '#';
+  const coreInk = enraged ? 'w' : 'r';
+  const glint = enraged ? 'c' : 'h';
   return sprite(48, 52, (grid) => {
     fillPoly(grid, [
       [18, 20], [12, 28], [14, 34], [11, 42],
@@ -6919,14 +6934,14 @@ function boss(step, attack) {
     fillPoly(grid, [
       [16, 20], [12, 14], [9, 8], [7, 3], [8, 0],
       [12, 2], [13, 8], [16, 14], [19, 18]
-    ], '#');
+    ], horn);
     fillPoly(grid, [
       [31, 20], [35, 14], [38, 8], [40, 3], [39, 0],
       [35, 2], [34, 8], [31, 14], [28, 18]
-    ], '#');
-    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], 'h');
-    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], 'h');
-    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], 'h');
+    ], horn);
+    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], crown);
+    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], crown);
+    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], crown);
     seam(grid, 19, 15, 10);
     eye(grid, 19, 17);
     eye(grid, 26, 17);
@@ -6939,10 +6954,10 @@ function boss(step, attack) {
       seam(grid, 22, 21, 4);
     }
     const core = attack ? 6 : 4;
-    fillEllipse(grid, 24, 31, core + 2, core + 3, '#');
-    fillEllipse(grid, 24, 31, core, core + 1, 'r');
-    grid.put(22, 30, 'h');
-    grid.put(23, 29, 'h');
+    fillEllipse(grid, 24, 31, core + 2, core + 3, coreShell);
+    fillEllipse(grid, 24, 31, core, core + 1, coreInk);
+    grid.put(22, 30, glint);
+    grid.put(23, 29, glint);
     const clawY = attack ? 24 : 30;
     limb(grid, 14, 28, 8, clawY, 2, 2, 'o');
     limb(grid, 34, 28, 39, 30, 2, 2, 'o');
@@ -6969,9 +6984,11 @@ const SPRITES = {
   boss: [boss(0, false), boss(1, false), boss(0, true)]
 };
 
+const BOSS_ENRAGED = [boss(0, false, true), boss(1, false, true), boss(0, true, true)];
+
 function rowsFor(enemy, time) {
   const kind = SPRITES[enemy?.kind] ? enemy.kind : 'shambler';
-  const frames = SPRITES[kind];
+  const frames = kind === 'boss' && enemy?.enraged === true ? BOSS_ENRAGED : SPRITES[kind];
   const last = frames.length - 1;
   const attacking = enemy?.attacking === true;
   const frame = attacking || last === 0
@@ -12559,21 +12576,31 @@ function placeholder(type, rank, kind) {
   return { id: PREVIEW_UNIT_ID, kind, type, rank, upgrades: {}, cooldown: 0, kills: 0 };
 }
 
+// The first sentence names the result and its rank. The explanation follows.
+function resultLead(name, rank) {
+  return {
+    en: `${name.en} at rank ${rank}.`,
+    zh: `${name.zh}，${rank} 阶。`,
+  };
+}
+
 function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
+  const lead = resultLead(name, next);
   return {
-    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
-    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
+    en: `${lead.en} Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
+    zh: `${lead.zh}两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
   };
 }
 
 function hybridDescription(entry, rank, fromType, toType) {
   const left = displayName(fromType);
   const right = displayName(toType);
+  const lead = resultLead(entry.name, rank);
   return {
-    en: `${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
-    zh: `${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
+    en: `${lead.en} ${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
+    zh: `${lead.zh}${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
   };
 }
 
@@ -14132,6 +14159,11 @@ const spawnEnemy = __ff_m2["spawnEnemy"];
 // copied from that wave in the existing schedule and does not change counts,
 // timings, kinds, or difficulty multipliers. Endless play keeps the same flag
 // for the endless wave that is current.
+// director.playerHint is the current wave's bilingual hint {en, zh} when that
+// hint exists. Each update copies it from the existing schedule. The copy does
+// not change counts, timings, kinds, or difficulty multipliers. Endless play
+// keeps the hint of the endless wave that is current. A wave with no hint
+// leaves playerHint unchanged.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
@@ -14447,6 +14479,7 @@ function updateWaves(state, dt = 0) {
   }
 
   syncBossFlag(state, director, sys);
+  syncPlayerHint(state, director, sys);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -14819,6 +14852,24 @@ function syncBossFlag(state, director, sys) {
     return;
   }
   director.hasBoss = waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
+// Same current-wave choice as the boss flag. Campaign waves read the schedule.
+// Endless waves read the snapshot, which carries that wave's hint.
+function syncPlayerHint(state, director, sys) {
+  const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  const source = endlessRunning
+    ? sys?.current?.hint
+    : (started > 0 && WAVES.length > 0 ? WAVES[Math.min(started, WAVES.length) - 1]?.hint : null);
+  const hint = copyHint(source);
+  if (hint) director.playerHint = hint;
+}
+
+function copyHint(hint) {
+  if (!hint || typeof hint !== 'object') return null;
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return null;
+  return {en: hint.en, zh: hint.zh};
 }
 
 function readHasBoss(state, director) {

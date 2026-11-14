@@ -163,6 +163,8 @@ const ROWS = [
   ['draft', 'Draft', '整备'],
   ['draftTitle', 'Draft', '整备'],
   ['chooseOneOfThree', 'Choose one of three', '三选一'],
+  ['draftOnField', 'Already on the field', '场上已有'],
+  ['draftNewType', 'Not on the field yet', '场上还没有'],
   ['chooseUpgrade', 'Choose an upgrade', '选择升级'],
   ['chooseSlot', 'Choose a slot', '选择格子'],
   ['chooseTower', 'Add {name}', '加入{name}'],

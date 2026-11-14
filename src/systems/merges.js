@@ -64,21 +64,31 @@ function placeholder(type, rank, kind) {
   return { id: PREVIEW_UNIT_ID, kind, type, rank, upgrades: {}, cooldown: 0, kills: 0 };
 }
 
+// The first sentence names the result and its rank. The explanation follows.
+function resultLead(name, rank) {
+  return {
+    en: `${name.en} at rank ${rank}.`,
+    zh: `${name.zh}，${rank} 阶。`,
+  };
+}
+
 function sameTypeDescription(type, rank) {
   const name = displayName(type);
   const next = rank + 1;
+  const lead = resultLead(name, next);
   return {
-    en: `Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
-    zh: `两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
+    en: `${lead.en} Two rank ${rank} ${name.en} units become one rank ${next} ${name.en}. Same-type merges raise rank by one and stop at rank ${HYBRID_RANK_MAX}. The result is placed on the target slot and the source slot is cleared.`,
+    zh: `${lead.zh}两个 ${rank} 阶${name.zh}合成为一个 ${next} 阶${name.zh}。同型合成升 1 阶，到 ${HYBRID_RANK_MAX} 阶为止。结果放在目标槽，来源槽清空。`,
   };
 }
 
 function hybridDescription(entry, rank, fromType, toType) {
   const left = displayName(fromType);
   const right = displayName(toType);
+  const lead = resultLead(entry.name, rank);
   return {
-    en: `${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
-    zh: `${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
+    en: `${lead.en} ${left.en} + ${right.en} → ${entry.name.en} (rank ${rank}). ${entry.description.en} The hybrid keeps rank ${rank}; it does not gain a free rank. Both towers are consumed and the result is placed on the target slot.`,
+    zh: `${lead.zh}${left.zh}＋${right.zh} → ${entry.name.zh}（${rank} 阶）。${entry.description.zh}杂交单位保持 ${rank} 阶，不会额外升阶。两座塔都会被消耗，结果放在目标槽。`,
   };
 }
 

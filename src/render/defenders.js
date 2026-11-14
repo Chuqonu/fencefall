@@ -11,6 +11,7 @@
  * Parents come from RECIPES (id + parents), then unit.parents / ingredients /
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
+ * Rank 1–4 is a row of chevrons on the plinth, one mark per rank.
  * Nothing here reads or writes gameplay RNG or run state.
  */
 import {BASE_TYPES, clamp} from '../shared.js';
@@ -76,7 +77,6 @@ const PALETTE = {
 };
 
 const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
-const RANK_COLOR = [null, 'E', 'Q', 'L', 'H'];
 const BASE_SET = new Set(BASE_TYPES);
 
 const ALIASES = {
@@ -584,16 +584,20 @@ function drawPlinth(p, rank) {
 }
 
 function drawRankGems(p, rank) {
-  const color = RANK_COLOR[rank] || 'E';
-  const gem = 3;
+  // One chevron per rank, centered on a black plaque. The count is the rank.
+  // The plaque keeps rank 1 from reading as a stone chip and rank 4 off the gold trim.
+  const mark = 3;
   const gap = 2;
-  const total = rank * gem + (rank - 1) * gap;
+  const total = rank * mark + (rank - 1) * gap;
   let x = Math.floor((W - total) / 2);
+  p.fill(x - 1, 34, total + 2, 3, 'K');
   for (let i = 0; i < rank; i++) {
-    p.fill(x, 34, gem, 3, color);
-    p.px(x, 34, 'W');
-    p.px(x + 1, 35, rank >= 4 ? 'h' : color);
-    x += gem + gap;
+    p.px(x + 1, 34, 'W');
+    p.px(x, 35, 'H');
+    p.px(x + 1, 35, 'h');
+    p.px(x + 2, 35, 'H');
+    p.px(x + 1, 36, 'b');
+    x += mark + gap;
   }
 }
 

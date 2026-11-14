@@ -41,8 +41,8 @@
     "css": "dist/static/assets/app.css"
   },
   "bytes": {
-    "standalone": 750713,
-    "script": 738229,
+    "standalone": 755643,
+    "script": 743159,
     "css": 12075
   }
 }
