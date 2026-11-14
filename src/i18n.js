@@ -319,6 +319,7 @@ const ROWS = [
   ['buy', 'Buy', '购买'],
   ['equip', 'Equip', '装备'],
   ['equipped', 'Equipped', '已装备'],
+  ['equippedBonus', 'Equipped bonus', '已装备加成'],
   ['owned', 'Owned', '已拥有'],
   ['upgrade', 'Upgrade', '升级'],
   ['upgraded', 'Upgraded', '已升级'],
