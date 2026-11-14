@@ -1272,7 +1272,8 @@ export function createRenderer(canvas) {
     }
 
     isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
-    drawFieldHint(ctx, state, ui);
+    // The HUD shows playerHint. Drawing it here covered enemies entering from the top.
+    void drawFieldHint;
   }
 
   function draw(state, ui) {
