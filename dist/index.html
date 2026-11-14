@@ -8191,6 +8191,45 @@ function readStats(unit, state, warned) {
   }
 }
 
+function auraRecipients(state, slots, warned) {
+  const live = [];
+  for (let index = 0; index < slots.length; index++) {
+    const unit = slots[index]?.unit;
+    if (!unit || unit.id == null) continue;
+    const stats = readStats(unit, state, warned);
+    const origin = slotCenter(slots[index], index);
+    live.push({
+      id: unit.id,
+      x: origin.x,
+      y: origin.y,
+      range: Number(stats?.aura?.range),
+      damage: Number(stats?.aura?.damage) || 0,
+      haste: Number(stats?.aura?.haste) || 0,
+    });
+  }
+  const hit = new Set();
+  for (let s = 0; s < live.length; s++) {
+    const source = live[s];
+    if (!(source.range > 0) || (source.damage <= 0 && source.haste <= 0)) continue;
+    const reach = source.range * source.range;
+    for (let t = 0; t < live.length; t++) {
+      const target = live[t];
+      const dx = source.x - target.x;
+      const dy = source.y - target.y;
+      if (dx * dx + dy * dy <= reach) hit.add(target.id);
+    }
+  }
+  return hit;
+}
+
+function drawAuraMark(ctx, anchorX, spriteTop) {
+  const x = Math.round(anchorX);
+  const y = spriteTop - 4;
+  ctx.fillStyle = '#c8fff4';
+  ctx.fillRect(x, y - 2, 1, 5);
+  ctx.fillRect(x - 2, y, 5, 1);
+}
+
 function orderedEnemies(state) {
   const source = Array.isArray(state.enemies) ? state.enemies : [];
   const list = [];
@@ -9171,6 +9210,8 @@ function createRenderer(canvas) {
     if (hover >= 0 && hover !== selected) fillSlot(ctx, slotBox(slots[hover], hover), 'rgba(241, 238, 226, 0.08)');
     if (selected >= 0) fillSlot(ctx, slotBox(slots[selected], selected), 'rgba(240, 203, 114, 0.14)');
 
+    const buffed = auraRecipients(state, slots, warned);
+
     const enemies = orderedEnemies(state);
     const anchors = new Array(enemies.length);
     const enemiesById = Object.create(null);
@@ -9199,6 +9240,7 @@ function createRenderer(canvas) {
       const anchorY = Math.round(origin.y + size.height / 2);
       const flash = unitFlash(unit.id, shots, now, flashSpan);
       isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
+      if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
     }
 
     const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
