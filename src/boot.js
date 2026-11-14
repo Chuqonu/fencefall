@@ -80,7 +80,7 @@ export async function createController(options = {}) {
   let storedRun = null;
   let audio = null;
   const settledIds = new Set();
-  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, mergeFrom:-1, mergePreview:null, message:'', exportText:''};
+  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
 
   function storageCall(name, args) {
     const fn = modules.storage && modules.storage[name];
@@ -259,6 +259,8 @@ export async function createController(options = {}) {
     }
     if (action === 'hover') {
       ui.hoverSlot = integerSlot(payload.index) ? payload.index : -1;
+      const intent = payload.intent;
+      ui.hoverIntent = ui.hoverSlot >= 0 && (intent === 'empty' || intent === 'merge' || intent === 'illegal') ? intent : '';
       return {ok:true};
     }
     if (action === 'selectSlot') {
@@ -500,6 +502,7 @@ export async function createController(options = {}) {
       screen:ui.screen,
       selectedSlot:ui.selectedSlot,
       hoverSlot:ui.hoverSlot,
+      hoverIntent:ui.hoverIntent || '',
       mergeFrom:ui.mergeFrom,
       mergePreview:ui.mergePreview ? copyValue(ui.mergePreview) : null,
       message:ui.message,
@@ -848,7 +851,7 @@ async function mount() {
     const state = api.getState();
     const view = api.getUI();
     if (renderer && state) {
-      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
+      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
     } else if (activeCanvas) drawPlaceholder(activeCanvas, state, view);
   };
   const refresh = () => {

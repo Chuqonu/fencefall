@@ -190,8 +190,9 @@ export function mountShell(root, api) {
     if (!unit) return;
     pointer.active = true;
     const hover = indexFromClient(event.clientX, event.clientY);
-    showGhost(event.clientX, event.clientY, unit, hover >= 0 && hover !== start && !dropWouldCommit(state, start, hover));
-    api.act('hover', { index: hover });
+    const kind = dropKind(state, start, hover);
+    showGhost(event.clientX, event.clientY, unit, kind);
+    api.act('hover', { index: hover, intent: kind === 'empty' || kind === 'merge' || kind === 'illegal' ? kind : '' });
   }
 
   function onPointerUp(event) {
@@ -473,9 +474,11 @@ export function mountShell(root, api) {
     const note = messageText(ui?.message, language, ui);
     setText(message, note);
     const hintLine = screen === 'battle' ? playerHintLine(state, language) : '';
+    const nextLine = hintLine ? nextHintLine(state, language) : '';
     setText(waveHint, hintLine);
     waveHint.hidden = !hintLine;
-    if (hintLine) waveHint.title = hintLine;
+    const hintTitle = [hintLine, nextLine].filter(Boolean).join(' · ');
+    if (hintTitle) waveHint.title = hintTitle;
     else waveHint.removeAttribute('title');
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
@@ -572,9 +575,11 @@ export function mountShell(root, api) {
     api.act('mergeConfirm', { from, to });
   }
 
-  function showGhost(x, y, unit, illegal) {
+  function showGhost(x, y, unit, kind) {
     ghost.hidden = false;
-    ghost.classList.toggle('is-illegal', Boolean(illegal));
+    ghost.classList.toggle('is-illegal', kind === 'illegal');
+    ghost.classList.toggle('is-empty', kind === 'empty');
+    ghost.classList.toggle('is-merge', kind === 'merge');
     const label = unit?.kind === 'hero' || unit?.type === 'hero'
       ? 'H'
       : String(unit?.type || unit?.kind || '').slice(0, 4);
@@ -586,7 +591,7 @@ export function mountShell(root, api) {
   function hideGhost() {
     snapToken += 1;
     ghost.hidden = true;
-    ghost.classList.remove('is-illegal', 'is-snapping');
+    ghost.classList.remove('is-illegal', 'is-empty', 'is-merge', 'is-snapping');
     setText(ghost, '');
   }
 
@@ -615,14 +620,15 @@ export function mountShell(root, api) {
     };
   }
 
-  function dropWouldCommit(state, from, to) {
-    if (!state || !canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return false;
+  function dropKind(state, from, to) {
+    if (!state || !validSlot(from, state) || !validSlot(to, state) || from === to) return 'same';
+    if (!canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return 'illegal';
     const origin = state.slots[from]?.unit;
     const target = state.slots[to]?.unit;
-    if (!origin) return false;
-    if (!target) return true;
-    try { return previewMerge(state, from, to).ok === true; }
-    catch { return false; }
+    if (!origin) return 'illegal';
+    if (!target) return 'empty';
+    try { return previewMerge(state, from, to).ok === true ? 'merge' : 'illegal'; }
+    catch { return 'illegal'; }
   }
 
   function finishDrag(from, to) {
@@ -731,13 +737,20 @@ export function mountShell(root, api) {
   }
 }
 
-function playerHintLine(state, language) {
-  const hint = state?.director?.playerHint;
+function hintLineFrom(hint, language) {
   if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
   if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
   if (!hint.en.trim() || !hint.zh.trim()) return '';
   const line = contentText(hint, language);
   return typeof line === 'string' ? line.trim() : '';
+}
+
+function playerHintLine(state, language) {
+  return hintLineFrom(state?.director?.playerHint, language);
+}
+
+function nextHintLine(state, language) {
+  return hintLineFrom(state?.director?.nextHint, language);
 }
 
 function controlButton(testid, action) {
@@ -831,6 +844,7 @@ function structuralKey(state, profile, ui) {
     message,
     state?.wave ?? '',
     playerHintKey(state?.director?.playerHint),
+    playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',
     state?.nextDraftXp ?? '',
     state?.difficulty ?? '',

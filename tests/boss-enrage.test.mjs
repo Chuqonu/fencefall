@@ -29,6 +29,13 @@ function assertThreshold(label) {
   assert.ok(threshold > 0 && threshold < 1, `${label}: waves.js boss enrage threshold ${threshold} is outside (0, 1)`);
 }
 
+test('boss copy says enrage is half of max HP and the threshold stays 0.5', () => {
+  assert.equal(ENEMIES.boss.hp, 3000);
+  assert.equal(threshold, 0.5);
+  assert.match(ENEMIES.boss.description.en, /half \(0\.5\)/);
+  assert.match(ENEMIES.boss.description.zh, /一半（0\.5）/);
+});
+
 test(`boss above the waves.js enrage threshold ${threshold} stays calm`, () => {
   assertThreshold('calm');
   const maxHp = 1000;

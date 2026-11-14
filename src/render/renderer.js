@@ -1254,7 +1254,17 @@ export function createRenderer(canvas) {
       const pulse = slotPulse(index, slotCues, now);
       if (pulse > 0 && index !== selected) strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse})`, 2);
     }
-    if (hover >= 0 && hover !== selected) strokeSlot(ctx, slotBox(slots[hover], hover), 'rgba(198, 214, 210, 0.9)', 1);
+    if (hover >= 0 && hover !== selected) {
+      const intent = ui.hoverIntent;
+      const dropColor = intent === 'empty'
+        ? '#7ecea0'
+        : intent === 'merge'
+          ? '#f0cb72'
+          : intent === 'illegal'
+            ? '#e7a08a'
+            : 'rgba(198, 214, 210, 0.9)';
+      strokeSlot(ctx, slotBox(slots[hover], hover), dropColor, intent ? 3 : 1);
+    }
     if (selected >= 0) {
       strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
       const selectedUnit = slots[selected]?.unit;

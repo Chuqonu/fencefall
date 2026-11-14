@@ -539,6 +539,8 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .drag-ghost[hidden] { display: none; }
 .drag-ghost.is-illegal { border-color: #e7a08a; }
+.drag-ghost.is-empty { border-color: #7ecea0; }
+.drag-ghost.is-merge { border-color: #f0cb72; }
 .drag-ghost.is-snapping { transition: left 140ms ease, top 140ms ease; }
 
 /* Placing stays a top banner so the defender slots (bottom of the field) still receive taps.

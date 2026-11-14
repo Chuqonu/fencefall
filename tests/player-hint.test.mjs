@@ -68,3 +68,19 @@ test('director.playerHint has non-empty en and zh after a campaign wave starts',
     assertPlayerHint(state.director.playerHint, `wave ${state.wave} t=${state.time.toFixed(2)}`);
   }
 });
+
+test('the current wave hint and the next wave hint stay different', () => {
+  const state = fresh('hint-split');
+  state.nextDraftXp = 1e12;
+  let checked = 0;
+  for (let i = 0; i < 8000 && state.phase === 'playing' && state.time < 40; i += 1) {
+    simulate(state, FRAME);
+    const current = state.director?.playerHint;
+    const upcoming = state.director?.nextHint;
+    if (!current?.en || !upcoming?.en) continue;
+    assert.notEqual(current.en.trim(), upcoming.en.trim());
+    assert.notEqual(current.zh.trim(), upcoming.zh.trim());
+    checked += 1;
+  }
+  assert.ok(checked > 10, `compared ${checked} current/next pairs`);
+});

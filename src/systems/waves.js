@@ -734,12 +734,25 @@ function copyHint(hint) {
 
 // Next campaign wave is WAVES[nextWave] until that index leaves the schedule.
 // Same copy as playerHint. No spawn, timing, kind, or difficulty change.
+function distinctHint(next, current, wave) {
+  if (!current) return next;
+  const sameEn = next.en.trim() === current.en.trim();
+  const sameZh = next.zh.trim() === current.zh.trim();
+  if (!sameEn && !sameZh) return next;
+  const nameEn = wave?.name?.en || wave?.id || 'Next';
+  const nameZh = wave?.name?.zh || wave?.id || '下一波';
+  return {
+    en: sameEn ? `${next.en} (${nameEn})` : next.en,
+    zh: sameZh ? `${next.zh}（${nameZh}）` : next.zh,
+  };
+}
+
 function syncNextHint(director) {
   const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
   if (index >= 0 && index < WAVES.length) {
     const hint = copyHint(WAVES[index]?.hint);
     if (hint) {
-      director.nextHint = hint;
+      director.nextHint = distinctHint(hint, director.playerHint, WAVES[index]);
       return;
     }
   }

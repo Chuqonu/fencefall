@@ -781,7 +781,7 @@ async function createController(options = {}) {
   let storedRun = null;
   let audio = null;
   const settledIds = new Set();
-  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, mergeFrom:-1, mergePreview:null, message:'', exportText:''};
+  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
 
   function storageCall(name, args) {
     const fn = modules.storage && modules.storage[name];
@@ -960,6 +960,8 @@ async function createController(options = {}) {
     }
     if (action === 'hover') {
       ui.hoverSlot = integerSlot(payload.index) ? payload.index : -1;
+      const intent = payload.intent;
+      ui.hoverIntent = ui.hoverSlot >= 0 && (intent === 'empty' || intent === 'merge' || intent === 'illegal') ? intent : '';
       return {ok:true};
     }
     if (action === 'selectSlot') {
@@ -1201,6 +1203,7 @@ async function createController(options = {}) {
       screen:ui.screen,
       selectedSlot:ui.selectedSlot,
       hoverSlot:ui.hoverSlot,
+      hoverIntent:ui.hoverIntent || '',
       mergeFrom:ui.mergeFrom,
       mergePreview:ui.mergePreview ? copyValue(ui.mergePreview) : null,
       message:ui.message,
@@ -1549,7 +1552,7 @@ async function mount() {
     const state = api.getState();
     const view = api.getUI();
     if (renderer && state) {
-      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
+      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
     } else if (activeCanvas) drawPlaceholder(activeCanvas, state, view);
   };
   const refresh = () => {
@@ -6795,12 +6798,13 @@ function runner(step, attack) {
     } else {
       over(grid, 8, 7, '#');
     }
-    const leftY = attack ? 6 : (step ? 7 : 10);
-    const rightY = attack ? 12 : (step ? 11 : 8);
-    limb(grid, 8, 9, 2, leftY, 1, 0, 'o');
-    limb(grid, 10, 9, 15, rightY, 1, 0, 'o');
-    fillEllipse(grid, 1, leftY, 1, 1, 'o');
-    fillEllipse(grid, 16, rightY, 1, 1, 'o');
+    const leftY = attack ? 6 : (step ? 5 : 11);
+    const rightY = attack ? 13 : (step ? 12 : 6);
+    limb(grid, 8, 9, 0, leftY, 0, 0, 'o');
+    limb(grid, 10, 9, 17, rightY, 0, 0, 'o');
+    fillEllipse(grid, 0, leftY, 1, 1, 'h');
+    fillEllipse(grid, 17, rightY, 1, 1, 'h');
+    seam(grid, 8, 11, 3);
     const knee = step ? 2 : -2;
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
     limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
@@ -6814,9 +6818,9 @@ function runner(step, attack) {
 
 function brute(step, attack) {
   return sprite(32, 34, (grid) => {
-    fillEllipse(grid, 16, 4, 4, 5, 'o');
-    fillEllipse(grid, 16, 16, 7, 6, 'o');
-    fillEllipse(grid, 16, 23, 6, 4, 'o');
+    fillEllipse(grid, 16, 4, 5, 5, 'o');
+    fillEllipse(grid, 16, 15, 9, 6, 'o');
+    fillEllipse(grid, 16, 23, 7, 4, 'o');
     glaze(grid, 14, 3, 2, 1, 'h');
     seam(grid, 13, 3, 6);
     eye(grid, 13, 5);
@@ -8393,7 +8397,17 @@ function createRenderer(canvas) {
       const pulse = slotPulse(index, slotCues, now);
       if (pulse > 0 && index !== selected) strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse})`, 2);
     }
-    if (hover >= 0 && hover !== selected) strokeSlot(ctx, slotBox(slots[hover], hover), 'rgba(198, 214, 210, 0.9)', 1);
+    if (hover >= 0 && hover !== selected) {
+      const intent = ui.hoverIntent;
+      const dropColor = intent === 'empty'
+        ? '#7ecea0'
+        : intent === 'merge'
+          ? '#f0cb72'
+          : intent === 'illegal'
+            ? '#e7a08a'
+            : 'rgba(198, 214, 210, 0.9)';
+      strokeSlot(ctx, slotBox(slots[hover], hover), dropColor, intent ? 3 : 1);
+    }
     if (selected >= 0) {
       strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
       const selectedUnit = slots[selected]?.unit;
@@ -15456,12 +15470,25 @@ function copyHint(hint) {
 
 // Next campaign wave is WAVES[nextWave] until that index leaves the schedule.
 // Same copy as playerHint. No spawn, timing, kind, or difficulty change.
+function distinctHint(next, current, wave) {
+  if (!current) return next;
+  const sameEn = next.en.trim() === current.en.trim();
+  const sameZh = next.zh.trim() === current.zh.trim();
+  if (!sameEn && !sameZh) return next;
+  const nameEn = wave?.name?.en || wave?.id || 'Next';
+  const nameZh = wave?.name?.zh || wave?.id || '下一波';
+  return {
+    en: sameEn ? `${next.en} (${nameEn})` : next.en,
+    zh: sameZh ? `${next.zh}（${nameZh}）` : next.zh,
+  };
+}
+
 function syncNextHint(director) {
   const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
   if (index >= 0 && index < WAVES.length) {
     const hint = copyHint(WAVES[index]?.hint);
     if (hint) {
-      director.nextHint = hint;
+      director.nextHint = distinctHint(hint, director.playerHint, WAVES[index]);
       return;
     }
   }
@@ -15613,7 +15640,8 @@ const CSS = `
 .ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
 .ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;min-height:44px;text-align:left;cursor:pointer}
 .ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
-.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:grid;place-items:center;border:1px solid currentColor;font-size:20px;line-height:1}
+.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:1px solid currentColor;font-size:16px;line-height:1}
+.ff-build.is-draft .ff-mark small{font-size:9px;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
@@ -17368,11 +17396,27 @@ const DRAFT_MARKS = {
   support: ['✚', '#8fd0c6'],
 };
 
-function draftMark(option) {
-  if (option?.kind === 'hero_upgrade') return { glyph: '★', color: '#f0cb72' };
+function heroStatCue(option, lang, tr) {
+  const id = resolveUpgradeId(option);
+  const record = upgradeRecord(id);
+  const effect = record?.effect || {};
+  const line = heroEffectLine(record, lang, tr);
+  const label = line ? line.split(/[+＋]/)[0].trim().slice(0, 8) : '';
+  if (effect.damageAdd) return { glyph: '＋', color: '#f0d56a', label };
+  if (effect.haste) return { glyph: '»', color: '#f0cb72', label };
+  if (effect.range) return { glyph: '→', color: '#9fd7e8', label };
+  if (effect.critChance) return { glyph: '✦', color: '#f0cb72', label };
+  if (effect.critMultiplier) return { glyph: '×', color: '#e7a08a', label };
+  if (Number(effect.pierce) > 0) return { glyph: '│', color: '#d7e4ea', label };
+  if (effect.poison) return { glyph: '●', color: '#7dce6a', label };
+  return { glyph: '★', color: '#f0cb72', label };
+}
+
+function draftMark(option, lang, tr) {
+  if (option?.kind === 'hero_upgrade') return heroStatCue(option, lang, tr);
   const pair = DRAFT_MARKS[option?.type];
-  if (pair) return { glyph: pair[0], color: pair[1] };
-  return { glyph: '◆', color: '#d7e4ea' };
+  if (pair) return { glyph: pair[0], color: pair[1], label: '' };
+  return { glyph: '◆', color: '#d7e4ea', label: '' };
 }
 
 function renderDraft(state, lang, tr, idSuffix) {
@@ -17394,7 +17438,7 @@ function renderDraft(state, lang, tr, idSuffix) {
     const field = draftFieldLabel(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
     const statText = offer.stats.join(' · ');
-    const mark = draftMark(option);
+    const mark = draftMark(option, lang, tr);
     const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
     const spoken = field ? `${name}. ${field.text}. ${described}` : `${name}. ${described}`;
     const card = button({
@@ -17410,13 +17454,16 @@ function renderDraft(state, lang, tr, idSuffix) {
       'aria-describedby': effectId,
       'aria-label': spoken,
     });
-    card.append(el('span', {
+    const markNode = el('span', {
       class: 'ff-mark',
       'data-testid': `draft-choice-${index}-mark`,
+      'data-stat': mark.label || '',
       style: `color:${mark.color}`,
       'aria-hidden': 'true',
-      text: mark.glyph,
-    }));
+    });
+    markNode.append(el('b', { text: mark.glyph }));
+    if (mark.label) markNode.append(el('small', { text: mark.label }));
+    card.append(markNode);
     const copy = el('span', { class: 'ff-choice-copy' });
     copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     if (field) {
@@ -19796,8 +19843,9 @@ function mountShell(root, api) {
     if (!unit) return;
     pointer.active = true;
     const hover = indexFromClient(event.clientX, event.clientY);
-    showGhost(event.clientX, event.clientY, unit, hover >= 0 && hover !== start && !dropWouldCommit(state, start, hover));
-    api.act('hover', { index: hover });
+    const kind = dropKind(state, start, hover);
+    showGhost(event.clientX, event.clientY, unit, kind);
+    api.act('hover', { index: hover, intent: kind === 'empty' || kind === 'merge' || kind === 'illegal' ? kind : '' });
   }
 
   function onPointerUp(event) {
@@ -20079,9 +20127,11 @@ function mountShell(root, api) {
     const note = messageText(ui?.message, language, ui);
     setText(message, note);
     const hintLine = screen === 'battle' ? playerHintLine(state, language) : '';
+    const nextLine = hintLine ? nextHintLine(state, language) : '';
     setText(waveHint, hintLine);
     waveHint.hidden = !hintLine;
-    if (hintLine) waveHint.title = hintLine;
+    const hintTitle = [hintLine, nextLine].filter(Boolean).join(' · ');
+    if (hintTitle) waveHint.title = hintTitle;
     else waveHint.removeAttribute('title');
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
@@ -20178,9 +20228,11 @@ function mountShell(root, api) {
     api.act('mergeConfirm', { from, to });
   }
 
-  function showGhost(x, y, unit, illegal) {
+  function showGhost(x, y, unit, kind) {
     ghost.hidden = false;
-    ghost.classList.toggle('is-illegal', Boolean(illegal));
+    ghost.classList.toggle('is-illegal', kind === 'illegal');
+    ghost.classList.toggle('is-empty', kind === 'empty');
+    ghost.classList.toggle('is-merge', kind === 'merge');
     const label = unit?.kind === 'hero' || unit?.type === 'hero'
       ? 'H'
       : String(unit?.type || unit?.kind || '').slice(0, 4);
@@ -20192,7 +20244,7 @@ function mountShell(root, api) {
   function hideGhost() {
     snapToken += 1;
     ghost.hidden = true;
-    ghost.classList.remove('is-illegal', 'is-snapping');
+    ghost.classList.remove('is-illegal', 'is-empty', 'is-merge', 'is-snapping');
     setText(ghost, '');
   }
 
@@ -20221,14 +20273,15 @@ function mountShell(root, api) {
     };
   }
 
-  function dropWouldCommit(state, from, to) {
-    if (!state || !canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return false;
+  function dropKind(state, from, to) {
+    if (!state || !validSlot(from, state) || !validSlot(to, state) || from === to) return 'same';
+    if (!canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return 'illegal';
     const origin = state.slots[from]?.unit;
     const target = state.slots[to]?.unit;
-    if (!origin) return false;
-    if (!target) return true;
-    try { return previewMerge(state, from, to).ok === true; }
-    catch { return false; }
+    if (!origin) return 'illegal';
+    if (!target) return 'empty';
+    try { return previewMerge(state, from, to).ok === true ? 'merge' : 'illegal'; }
+    catch { return 'illegal'; }
   }
 
   function finishDrag(from, to) {
@@ -20337,13 +20390,20 @@ function mountShell(root, api) {
   }
 }
 
-function playerHintLine(state, language) {
-  const hint = state?.director?.playerHint;
+function hintLineFrom(hint, language) {
   if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
   if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
   if (!hint.en.trim() || !hint.zh.trim()) return '';
   const line = contentText(hint, language);
   return typeof line === 'string' ? line.trim() : '';
+}
+
+function playerHintLine(state, language) {
+  return hintLineFrom(state?.director?.playerHint, language);
+}
+
+function nextHintLine(state, language) {
+  return hintLineFrom(state?.director?.nextHint, language);
 }
 
 function controlButton(testid, action) {
@@ -20437,6 +20497,7 @@ function structuralKey(state, profile, ui) {
     message,
     state?.wave ?? '',
     playerHintKey(state?.director?.playerHint),
+    playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',
     state?.nextDraftXp ?? '',
     state?.difficulty ?? '',

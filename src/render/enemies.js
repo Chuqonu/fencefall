@@ -264,12 +264,13 @@ function runner(step, attack) {
     } else {
       over(grid, 8, 7, '#');
     }
-    const leftY = attack ? 6 : (step ? 7 : 10);
-    const rightY = attack ? 12 : (step ? 11 : 8);
-    limb(grid, 8, 9, 2, leftY, 1, 0, 'o');
-    limb(grid, 10, 9, 15, rightY, 1, 0, 'o');
-    fillEllipse(grid, 1, leftY, 1, 1, 'o');
-    fillEllipse(grid, 16, rightY, 1, 1, 'o');
+    const leftY = attack ? 6 : (step ? 5 : 11);
+    const rightY = attack ? 13 : (step ? 12 : 6);
+    limb(grid, 8, 9, 0, leftY, 0, 0, 'o');
+    limb(grid, 10, 9, 17, rightY, 0, 0, 'o');
+    fillEllipse(grid, 0, leftY, 1, 1, 'h');
+    fillEllipse(grid, 17, rightY, 1, 1, 'h');
+    seam(grid, 8, 11, 3);
     const knee = step ? 2 : -2;
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
     limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
@@ -283,9 +284,9 @@ function runner(step, attack) {
 
 function brute(step, attack) {
   return sprite(32, 34, (grid) => {
-    fillEllipse(grid, 16, 4, 4, 5, 'o');
-    fillEllipse(grid, 16, 16, 7, 6, 'o');
-    fillEllipse(grid, 16, 23, 6, 4, 'o');
+    fillEllipse(grid, 16, 4, 5, 5, 'o');
+    fillEllipse(grid, 16, 15, 9, 6, 'o');
+    fillEllipse(grid, 16, 23, 7, 4, 'o');
     glaze(grid, 14, 3, 2, 1, 'h');
     seam(grid, 13, 3, 6);
     eye(grid, 13, 5);
