@@ -578,7 +578,14 @@ img, svg, video { max-width: 100%; height: auto; }
     width: min(100cqw, 340px, calc(100cqh * 360 / 640));
     max-width: min(100cqw, 340px);
   }
-  .hud { gap: 4px; padding-block: 4px; }
+  .hud { gap: 2px; padding-block: 2px; }
+  .hud-stats {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px 8px;
+  }
+  .stat { min-height: 0; }
+  .topbar { padding-block: 2px; }
   .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
   .meter { min-width: 0; }
   .meter-value {
