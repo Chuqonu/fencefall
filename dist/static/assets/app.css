@@ -176,6 +176,7 @@ button.card, .card[role="button"] {
 }
 
 .badge.muted { color: var(--muted); }
+.badge.is-boss { color: #f0cb72; border: 1px solid #e7a08a; }
 
 [hidden] { display: none !important; }
 

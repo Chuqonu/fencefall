@@ -6857,13 +6857,15 @@ function runner(step, attack) {
     fillEllipse(grid, 0, leftY, 1, 1, 'h');
     fillEllipse(grid, 17, rightY, 1, 1, 'h');
     seam(grid, 8, 11, 3);
-    const knee = step ? 2 : -2;
+    // Walk frames open and close the stride. Attack keeps the shorter plant.
+    const knee = attack ? -2 : (step ? 2 : -4);
+    const plant = attack ? 0 : (step ? -1 : 1);
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
+    limb(grid, 6 + knee, 18, 6 - plant, 22, 1, 0, 'o');
     limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12, 22, 1, 0, 'o');
-    fillEllipse(grid, 6, 22, 1, 1, 'o');
-    fillEllipse(grid, 12, 22, 1, 1, 'o');
+    limb(grid, 12 - knee, 18, 12 + plant, 22, 1, 0, 'o');
+    fillEllipse(grid, 6 - plant, 22, 1, 1, 'o');
+    fillEllipse(grid, 12 + plant, 22, 1, 1, 'o');
     eraseEllipse(grid, 9, 20, 1, 3);
   });
 }
@@ -14812,6 +14814,7 @@ __ff_factories["src/systems/waves.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["updateWaves"] = updateWaves;
 __ff_exports["getWaveInfo"] = getWaveInfo;
+__ff_exports["bossApproaching"] = bossApproaching;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/data/enemies.js");
 const __ff_m2 = __ff_load("src/systems/movement.js");
@@ -15590,6 +15593,30 @@ function readHasBoss(state, director) {
   const started = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
   if (started <= 0 || WAVES.length === 0) return false;
   return waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+}
+
+const BOSS_APPROACH_SECONDS = 12;
+
+function bossAlive(state) {
+  const enemies = state?.enemies;
+  if (!Array.isArray(enemies)) return false;
+  return enemies.some(enemy => enemy && enemy.kind === 'boss' && enemy.dead !== true && Number(enemy.hp) > 0);
+}
+
+/** True while a boss is due within 12s, or already queued, and has not entered. */
+function bossApproaching(state) {
+  if (!state || state.phase !== 'playing' || state.paused || state.hiddenPaused) return false;
+  if (bossAlive(state)) return false;
+  const queue = state.director?.queue;
+  if (Array.isArray(queue) && queue.some(item => item && item.kind === 'boss')) return true;
+  if (state.endless) return false;
+  const index = Number.isFinite(state.director?.nextWave) ? state.director.nextWave : 0;
+  if (index < 0 || index >= WAVES.length) return false;
+  const wave = WAVES[index];
+  if (!waveContainsBoss(wave)) return false;
+  const time = Number.isFinite(state.time) ? state.time : 0;
+  const wait = Number(wave.start) - time;
+  return wait >= 0 && wait <= BOSS_APPROACH_SECONDS;
 }
 
 function snapshotWave(wave) {
@@ -19865,15 +19892,18 @@ __ff_factories["src/ui/shell.js"] = function(__ff_exports, __ff_load) {
 __ff_exports["mountShell"] = mountShell;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/systems/merges.js");
-const __ff_m2 = __ff_load("src/i18n.js");
+const __ff_m2 = __ff_load("src/systems/waves.js");
+const __ff_m3 = __ff_load("src/i18n.js");
 const ARENA = __ff_m0["ARENA"];
 const DIFFICULTIES = __ff_m0["DIFFICULTIES"];
 const canPlan = __ff_m0["canPlan"];
 const hitSlot = __ff_m0["hitSlot"];
 const slotGeometry = __ff_m0["slotGeometry"];
 const previewMerge = __ff_m1["previewMerge"];
-const formatNumber = __ff_m2["formatNumber"];
-const localize = __ff_m2["localize"];
+const bossApproaching = __ff_m2["bossApproaching"];
+const formatNumber = __ff_m3["formatNumber"];
+const localize = __ff_m3["localize"];
+
 
 
 
@@ -20343,6 +20373,7 @@ function mountShell(root, api) {
     const phaseText = phaseBadge(state, planning);
     setText(phase, phaseText);
     phase.hidden = !phaseText;
+    phase.classList.toggle('is-boss', !!phaseText && phaseText === text('bossWarning'));
 
     if (screen !== 'battle') shell.classList.remove('is-details-open');
     const detailsOpen = shell.classList.contains('is-details-open');
@@ -20619,6 +20650,7 @@ function mountShell(root, api) {
     if (state.phase === 'draft') return text('chooseOneOfThree');
     if (state.phase === 'placing') return text('chooseSlot');
     if (state.paused && state.phase === 'playing') return text('paused');
+    if (bossApproaching(state)) return text('bossWarning');
     if (planning) return text('planning');
     return '';
   }
