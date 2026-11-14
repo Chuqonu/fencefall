@@ -9,7 +9,7 @@
  * from ingestEvents; this module never reads or drains state.events.
  * Changing runId clears leftover VFX, then replays events ingested since the
  * previous draw so a restart frame does not drop its own feedback.
- * A live burn, poison, or slow tints that sprite warm, green, or cold.
+ * A live stun, burn, poison, or slow tints that sprite. Stun wins, then burn, then poison, then slow.
  * A bilingual director or wave hint is drawn in the top margin.
  * The selected defender shows its rank just above the sprite.
  */
@@ -56,7 +56,7 @@ const ELEMENT_ALIAS = {
 };
 
 const STATUS_RANK = {stun: 0, burn: 1, poison: 2, slow: 3, brittle: 4};
-const STATUS_TINT = {burn: '#e25a2a', poison: '#6aaa3a', slow: '#9ed8ea'};
+const STATUS_TINT = {stun: '#f0d35a', burn: '#e25a2a', poison: '#6aaa3a', slow: '#9ed8ea'};
 const TINT_ALPHA = 0.55;
 const HINT_BAND = 42;
 const HINT_MAX_LINES = 3;
@@ -678,12 +678,30 @@ function statusLive(enemy, type) {
   return false;
 }
 
-// One hue on the body. Burn wins, then poison, then slow. Pips still list the rest.
+// One hue on the body. Stun wins, then burn, then poison, then slow. Pips still list the rest.
 function statusTintColor(enemy) {
+  if (statusLive(enemy, 'stun')) return STATUS_TINT.stun;
   if (statusLive(enemy, 'burn')) return STATUS_TINT.burn;
   if (statusLive(enemy, 'poison')) return STATUS_TINT.poison;
   if (statusLive(enemy, 'slow')) return STATUS_TINT.slow;
   return null;
+}
+
+function drawStunFrame(ctx, anchor) {
+  const width = anchor.size.width;
+  const height = anchor.size.height;
+  if (!(width > 0) || !(height > 0)) return;
+  const left = Math.round(anchor.x - width / 2);
+  const top = Math.round(anchor.y - height);
+  ctx.fillStyle = '#f0d35a';
+  ctx.fillRect(left - 1, top - 1, width + 2, 1);
+  ctx.fillRect(left - 1, top + height, width + 2, 1);
+  ctx.fillRect(left - 1, top, 1, height);
+  ctx.fillRect(left + width, top, 1, height);
+  ctx.fillStyle = '#fff6c8';
+  const cx = Math.round(anchor.x);
+  ctx.fillRect(cx - 4, top - 3, 1, 1);
+  ctx.fillRect(cx + 3, top - 3, 1, 1);
 }
 
 function alphaCanvas(width, height) {
@@ -1213,6 +1231,7 @@ export function createRenderer(canvas) {
       if (!enemy.dead && flash <= 0.4) {
         const tint = statusTintColor(enemy);
         if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
+        if (statusLive(enemy, 'stun')) isolate(ctx, () => drawStunFrame(ctx, anchor));
       }
     }
 
