@@ -116,8 +116,10 @@ export function mountShell(root, api) {
   });
   const speedRow = el('div', { class: 'speed-row', role: 'group' });
   speedRow.append(...speedButtons);
+  const detailsButton = controlButton('btn-details', 'details');
+  detailsButton.setAttribute('aria-expanded', 'false');
   const controls = el('div', { class: 'hud-controls' });
-  controls.append(pauseButton, speedRow);
+  controls.append(pauseButton, speedRow, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
@@ -199,6 +201,12 @@ export function mountShell(root, api) {
     }
     if (action === 'screen') {
       api.act('screen', { name: button.dataset.name });
+      return;
+    }
+    if (action === 'details') {
+      const open = shell.classList.toggle('is-details-open');
+      detailsButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setText(detailsButton, text(open ? 'hideDetails' : 'details'));
       return;
     }
     if (action === 'pause' || action === 'sound') api.act(action);
@@ -415,7 +423,12 @@ export function mountShell(root, api) {
     setText(phase, phaseText);
     phase.hidden = !phaseText;
 
-    const note = messageText(ui?.message, language);
+    if (screen !== 'battle') shell.classList.remove('is-details-open');
+    const detailsOpen = shell.classList.contains('is-details-open');
+    detailsButton.hidden = screen !== 'battle';
+    detailsButton.setAttribute('aria-expanded', detailsOpen ? 'true' : 'false');
+    setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
+    const note = messageText(ui?.message, language, ui);
     setText(message, note);
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
@@ -579,9 +592,20 @@ export function mountShell(root, api) {
     return '';
   }
 
-  function messageText(value, language) {
-    if (value == null || value === false) return '';
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+  function messageText(value, language, ui) {
+    const preview = ui?.mergePreview;
+    if (preview && typeof preview === 'object') {
+      const described = preview.description;
+      const line = described && (described[language] || described.en);
+      if (typeof line === 'string' && line) return line;
+      if (preview.ok === false) return text(String(preview.reason || 'invalidMerge').replaceAll('_', ''));
+    }
+    if (value == null || value === false || value === 'mergePreview') return '';
+    if (typeof value === 'string' || typeof value === 'number') {
+      const raw = String(value);
+      const translated = text(raw);
+      return translated && translated !== raw ? translated : raw;
+    }
     if (typeof value === 'object') {
       if (typeof value.key === 'string') return text(value.key, value.vars || {});
       if (typeof value.text === 'string') return value.text;

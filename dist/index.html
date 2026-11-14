@@ -258,7 +258,7 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .nav-scroll > .btn, .speed-row > .btn { flex: 0 0 auto; }
 
-.nav-scroll { flex: 1 1 100%; }
+.nav-scroll { flex: 1 1 12rem; }
 
 .top-tools { flex: 0 1 auto; }
 .hud-controls { flex-wrap: wrap; }
@@ -324,6 +324,38 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 
 .panel-wrap:has([data-ui="panel"]:empty) { display: none; }
+
+@media (max-width: 899px) {
+  .brand-sub { display: none; }
+  .brand-title { font-size: 1rem; }
+  .topbar {
+    gap: 6px;
+    max-height: none;
+    padding-block: 4px;
+  }
+  .shell-body { grid-template-rows: minmax(0, 1fr); }
+  .panel-wrap {
+    display: none;
+    position: absolute;
+    z-index: 28;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-height: min(42vh, 280px);
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(14, 23, 28, 0.97);
+    box-shadow: var(--shadow);
+  }
+  .shell.is-details-open .panel-wrap:not(:has([data-ui="panel"]:empty)) {
+    display: block;
+  }
+  .hud { gap: 4px; padding-block: 6px; max-height: none; }
+  .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .meter-track { height: 8px; }
+  .field-frame { width: min(100%, 340px, calc(100cqh * 360 / 640)); }
+}
 
 .hud {
   display: flex;
@@ -481,7 +513,33 @@ img, svg, video { max-width: 100%; height: auto; }
 @media (max-width: 360px) {
   .topbar, .hud, .panel-wrap { padding-inline: 6px; }
   .brand-sub { display: none; }
-  .hud-meters { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 899px) {
+  .brand { flex: 1 1 0; }
+  .brand-title {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar { gap: 4px; padding-block: 4px; }
+  .top-tools { gap: 4px; }
+  .field-frame {
+    width: min(100cqw, 340px, calc(100cqh * 360 / 640));
+    max-width: min(100cqw, 340px);
+  }
+  .hud { gap: 4px; padding-block: 4px; }
+  .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .meter { min-width: 0; }
+  .meter-value {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meter-track { height: 8px; }
+  .hud-stats { gap: 2px 8px; }
 }
 
 @media (max-height: 520px) {
@@ -1578,7 +1636,11 @@ async function createController(options = {}) {
       outcome = {ok:false, reason:'error'};
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
-    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) ui.message = 'mergePreview';
+    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
+      const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
+      const described = ui.mergePreview?.description;
+      ui.message = (described && (described[lang] || described.en)) || '';
+    }
     else ui.message = '';
     return outcome;
   }
@@ -3419,6 +3481,8 @@ const ROWS = [
   ['fullBoardHint', 'Upgrade the hero, or replace a tower.', '可以升级英雄，或替换一座塔。'],
   ['emptySlot', 'Empty slot', '空位'],
   ['select', 'Select', '选择'],
+  ['details', 'Details', '详情'],
+  ['hideDetails', 'Hide details', '收起详情'],
   ['selected', 'Selected', '已选中'],
   ['selectedUnit', 'Selected unit', '当前单位'],
   ['selectToInspect', 'Select a defender to see its stats', '选中防守者以查看能力'],
@@ -3430,7 +3494,6 @@ const ROWS = [
   ['swap', 'Swap', '对调'],
   ['moved', 'Moved', '已移动'],
   ['swapped', 'Swapped', '已对调'],
-  ['details', 'Details', '详情'],
   ['frontRow', 'Front row', '前排'],
   ['rearRow', 'Rear row', '后排'],
   ['slotNumber', 'Slot {index}', '格子 {index}'],
@@ -3633,6 +3696,19 @@ const ROWS = [
   ['exportSave', 'Export save', '导出存档'],
   ['importSave', 'Import save', '导入存档'],
   ['importError', 'That save could not be imported', '无法导入这份存档'],
+  ['invalid_json', 'That text is not valid save data. The current save was kept.', '这段文字不是有效的存档。当前存档已保留。'],
+  ['invalid_format', 'That file is not a Fencefall save. The current save was kept.', '这不是最后一道防线的存档。当前存档已保留。'],
+  ['invalid_version', 'That save is from another version. The current save was kept.', '这份存档的版本不同。当前存档已保留。'],
+  ['invalid_profile', 'The profile in that save is not valid. The current save was kept.', '存档里的档案无效。当前存档已保留。'],
+  ['invalid_run', 'The battle in that save is not valid. The current save was kept.', '存档里的对局无效。当前存档已保留。'],
+  ['invalid_bounds', 'That save has a number outside the allowed range. The current save was kept.', '存档里有超出允许范围的数字。当前存档已保留。'],
+  ['invalid_enum', 'That save has an unknown setting. The current save was kept.', '存档里有无法识别的设置。当前存档已保留。'],
+  ['invalid_hero', 'That save does not contain exactly one hero. The current save was kept.', '存档里不是恰好一名英雄。当前存档已保留。'],
+  ['invalid_slots', 'That save does not have the ten defender slots. The current save was kept.', '存档里没有十个防守格。当前存档已保留。'],
+  ['invalid_settlement', 'That save has an invalid result. The current save was kept.', '存档里的结算无效。当前存档已保留。'],
+  ['storage_unavailable', 'Storage is not available. The current save was kept.', '无法使用本地存储。当前存档已保留。'],
+  ['too_large', 'That save is too large. The current save was kept.', '这份存档太大。当前存档已保留。'],
+  ['quota', 'Storage is full. The current save was kept.', '存储空间已满。当前存档已保留。'],
   ['importSuccess', 'Save imported', '存档已导入'],
   ['noSave', 'No saved run', '没有已保存的对局'],
   ['saveFailed', 'Could not save', '保存失败'],
@@ -17584,8 +17660,10 @@ function mountShell(root, api) {
   });
   const speedRow = el('div', { class: 'speed-row', role: 'group' });
   speedRow.append(...speedButtons);
+  const detailsButton = controlButton('btn-details', 'details');
+  detailsButton.setAttribute('aria-expanded', 'false');
   const controls = el('div', { class: 'hud-controls' });
-  controls.append(pauseButton, speedRow);
+  controls.append(pauseButton, speedRow, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
@@ -17667,6 +17745,12 @@ function mountShell(root, api) {
     }
     if (action === 'screen') {
       api.act('screen', { name: button.dataset.name });
+      return;
+    }
+    if (action === 'details') {
+      const open = shell.classList.toggle('is-details-open');
+      detailsButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setText(detailsButton, text(open ? 'hideDetails' : 'details'));
       return;
     }
     if (action === 'pause' || action === 'sound') api.act(action);
@@ -17883,7 +17967,12 @@ function mountShell(root, api) {
     setText(phase, phaseText);
     phase.hidden = !phaseText;
 
-    const note = messageText(ui?.message, language);
+    if (screen !== 'battle') shell.classList.remove('is-details-open');
+    const detailsOpen = shell.classList.contains('is-details-open');
+    detailsButton.hidden = screen !== 'battle';
+    detailsButton.setAttribute('aria-expanded', detailsOpen ? 'true' : 'false');
+    setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
+    const note = messageText(ui?.message, language, ui);
     setText(message, note);
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
@@ -18047,9 +18136,20 @@ function mountShell(root, api) {
     return '';
   }
 
-  function messageText(value, language) {
-    if (value == null || value === false) return '';
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+  function messageText(value, language, ui) {
+    const preview = ui?.mergePreview;
+    if (preview && typeof preview === 'object') {
+      const described = preview.description;
+      const line = described && (described[language] || described.en);
+      if (typeof line === 'string' && line) return line;
+      if (preview.ok === false) return text(String(preview.reason || 'invalidMerge').replaceAll('_', ''));
+    }
+    if (value == null || value === false || value === 'mergePreview') return '';
+    if (typeof value === 'string' || typeof value === 'number') {
+      const raw = String(value);
+      const translated = text(raw);
+      return translated && translated !== raw ? translated : raw;
+    }
     if (typeof value === 'object') {
       if (typeof value.key === 'string') return text(value.key, value.vars || {});
       if (typeof value.text === 'string') return value.text;

@@ -1053,7 +1053,11 @@ async function createController(options = {}) {
       outcome = {ok:false, reason:'error'};
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
-    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) ui.message = 'mergePreview';
+    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
+      const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
+      const described = ui.mergePreview?.description;
+      ui.message = (described && (described[lang] || described.en)) || '';
+    }
     else ui.message = '';
     return outcome;
   }
@@ -2894,6 +2898,8 @@ const ROWS = [
   ['fullBoardHint', 'Upgrade the hero, or replace a tower.', '可以升级英雄，或替换一座塔。'],
   ['emptySlot', 'Empty slot', '空位'],
   ['select', 'Select', '选择'],
+  ['details', 'Details', '详情'],
+  ['hideDetails', 'Hide details', '收起详情'],
   ['selected', 'Selected', '已选中'],
   ['selectedUnit', 'Selected unit', '当前单位'],
   ['selectToInspect', 'Select a defender to see its stats', '选中防守者以查看能力'],
@@ -2905,7 +2911,6 @@ const ROWS = [
   ['swap', 'Swap', '对调'],
   ['moved', 'Moved', '已移动'],
   ['swapped', 'Swapped', '已对调'],
-  ['details', 'Details', '详情'],
   ['frontRow', 'Front row', '前排'],
   ['rearRow', 'Rear row', '后排'],
   ['slotNumber', 'Slot {index}', '格子 {index}'],
@@ -3108,6 +3113,19 @@ const ROWS = [
   ['exportSave', 'Export save', '导出存档'],
   ['importSave', 'Import save', '导入存档'],
   ['importError', 'That save could not be imported', '无法导入这份存档'],
+  ['invalid_json', 'That text is not valid save data. The current save was kept.', '这段文字不是有效的存档。当前存档已保留。'],
+  ['invalid_format', 'That file is not a Fencefall save. The current save was kept.', '这不是最后一道防线的存档。当前存档已保留。'],
+  ['invalid_version', 'That save is from another version. The current save was kept.', '这份存档的版本不同。当前存档已保留。'],
+  ['invalid_profile', 'The profile in that save is not valid. The current save was kept.', '存档里的档案无效。当前存档已保留。'],
+  ['invalid_run', 'The battle in that save is not valid. The current save was kept.', '存档里的对局无效。当前存档已保留。'],
+  ['invalid_bounds', 'That save has a number outside the allowed range. The current save was kept.', '存档里有超出允许范围的数字。当前存档已保留。'],
+  ['invalid_enum', 'That save has an unknown setting. The current save was kept.', '存档里有无法识别的设置。当前存档已保留。'],
+  ['invalid_hero', 'That save does not contain exactly one hero. The current save was kept.', '存档里不是恰好一名英雄。当前存档已保留。'],
+  ['invalid_slots', 'That save does not have the ten defender slots. The current save was kept.', '存档里没有十个防守格。当前存档已保留。'],
+  ['invalid_settlement', 'That save has an invalid result. The current save was kept.', '存档里的结算无效。当前存档已保留。'],
+  ['storage_unavailable', 'Storage is not available. The current save was kept.', '无法使用本地存储。当前存档已保留。'],
+  ['too_large', 'That save is too large. The current save was kept.', '这份存档太大。当前存档已保留。'],
+  ['quota', 'Storage is full. The current save was kept.', '存储空间已满。当前存档已保留。'],
   ['importSuccess', 'Save imported', '存档已导入'],
   ['noSave', 'No saved run', '没有已保存的对局'],
   ['saveFailed', 'Could not save', '保存失败'],
@@ -17059,8 +17077,10 @@ function mountShell(root, api) {
   });
   const speedRow = el('div', { class: 'speed-row', role: 'group' });
   speedRow.append(...speedButtons);
+  const detailsButton = controlButton('btn-details', 'details');
+  detailsButton.setAttribute('aria-expanded', 'false');
   const controls = el('div', { class: 'hud-controls' });
-  controls.append(pauseButton, speedRow);
+  controls.append(pauseButton, speedRow, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
@@ -17142,6 +17162,12 @@ function mountShell(root, api) {
     }
     if (action === 'screen') {
       api.act('screen', { name: button.dataset.name });
+      return;
+    }
+    if (action === 'details') {
+      const open = shell.classList.toggle('is-details-open');
+      detailsButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setText(detailsButton, text(open ? 'hideDetails' : 'details'));
       return;
     }
     if (action === 'pause' || action === 'sound') api.act(action);
@@ -17358,7 +17384,12 @@ function mountShell(root, api) {
     setText(phase, phaseText);
     phase.hidden = !phaseText;
 
-    const note = messageText(ui?.message, language);
+    if (screen !== 'battle') shell.classList.remove('is-details-open');
+    const detailsOpen = shell.classList.contains('is-details-open');
+    detailsButton.hidden = screen !== 'battle';
+    detailsButton.setAttribute('aria-expanded', detailsOpen ? 'true' : 'false');
+    setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
+    const note = messageText(ui?.message, language, ui);
     setText(message, note);
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
@@ -17522,9 +17553,20 @@ function mountShell(root, api) {
     return '';
   }
 
-  function messageText(value, language) {
-    if (value == null || value === false) return '';
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+  function messageText(value, language, ui) {
+    const preview = ui?.mergePreview;
+    if (preview && typeof preview === 'object') {
+      const described = preview.description;
+      const line = described && (described[language] || described.en);
+      if (typeof line === 'string' && line) return line;
+      if (preview.ok === false) return text(String(preview.reason || 'invalidMerge').replaceAll('_', ''));
+    }
+    if (value == null || value === false || value === 'mergePreview') return '';
+    if (typeof value === 'string' || typeof value === 'number') {
+      const raw = String(value);
+      const translated = text(raw);
+      return translated && translated !== raw ? translated : raw;
+    }
     if (typeof value === 'object') {
       if (typeof value.key === 'string') return text(value.key, value.vars || {});
       if (typeof value.text === 'string') return value.text;

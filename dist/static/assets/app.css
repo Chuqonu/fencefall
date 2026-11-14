@@ -256,7 +256,7 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .nav-scroll > .btn, .speed-row > .btn { flex: 0 0 auto; }
 
-.nav-scroll { flex: 1 1 100%; }
+.nav-scroll { flex: 1 1 12rem; }
 
 .top-tools { flex: 0 1 auto; }
 .hud-controls { flex-wrap: wrap; }
@@ -322,6 +322,38 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 
 .panel-wrap:has([data-ui="panel"]:empty) { display: none; }
+
+@media (max-width: 899px) {
+  .brand-sub { display: none; }
+  .brand-title { font-size: 1rem; }
+  .topbar {
+    gap: 6px;
+    max-height: none;
+    padding-block: 4px;
+  }
+  .shell-body { grid-template-rows: minmax(0, 1fr); }
+  .panel-wrap {
+    display: none;
+    position: absolute;
+    z-index: 28;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-height: min(42vh, 280px);
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(14, 23, 28, 0.97);
+    box-shadow: var(--shadow);
+  }
+  .shell.is-details-open .panel-wrap:not(:has([data-ui="panel"]:empty)) {
+    display: block;
+  }
+  .hud { gap: 4px; padding-block: 6px; max-height: none; }
+  .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .meter-track { height: 8px; }
+  .field-frame { width: min(100%, 340px, calc(100cqh * 360 / 640)); }
+}
 
 .hud {
   display: flex;
@@ -479,7 +511,33 @@ img, svg, video { max-width: 100%; height: auto; }
 @media (max-width: 360px) {
   .topbar, .hud, .panel-wrap { padding-inline: 6px; }
   .brand-sub { display: none; }
-  .hud-meters { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 899px) {
+  .brand { flex: 1 1 0; }
+  .brand-title {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar { gap: 4px; padding-block: 4px; }
+  .top-tools { gap: 4px; }
+  .field-frame {
+    width: min(100cqw, 340px, calc(100cqh * 360 / 640));
+    max-width: min(100cqw, 340px);
+  }
+  .hud { gap: 4px; padding-block: 4px; }
+  .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .meter { min-width: 0; }
+  .meter-value {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meter-track { height: 8px; }
+  .hud-stats { gap: 2px 8px; }
 }
 
 @media (max-height: 520px) {

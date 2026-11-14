@@ -455,7 +455,11 @@ export async function createController(options = {}) {
       outcome = {ok:false, reason:'error'};
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
-    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) ui.message = 'mergePreview';
+    else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
+      const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
+      const described = ui.mergePreview?.description;
+      ui.message = (described && (described[lang] || described.en)) || '';
+    }
     else ui.message = '';
     return outcome;
   }
