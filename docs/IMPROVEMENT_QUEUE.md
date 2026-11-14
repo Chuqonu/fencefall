@@ -39,7 +39,36 @@ Workers may not change `src/engine.js`, `src/boot.js`, `src/state.js`, `src/shar
 
 Art and copy can land together. Combat, waves, drafts, hero, and progression land only after `npm test` on the integrated tree. Do not retune to force wins. Phone drawer behavior is already verified and is not in this cycle.
 
+## Cycle 3 ownership
+
+Baseline `a65515b`. Manifest `work/fencefall/orchestrator/batch-cycle3.json`. 21 isolated workers, model `grok-4.7-build-fast`, effort `xhigh`. Lead keeps `src/engine.js`, `src/boot.js`, `src/state.js`, and `src/shared.js`.
+
+| Id | Outcome | Paths |
+| --- | --- | --- |
+| c3-01 | Chain jumps roll their own crit | `src/systems/combat.js`, `tests/hybrid-chain.test.mjs` |
+| c3-02 | A draft offers a type that is not on the board | `src/systems/drafts.js`, `tests/draft-variety.test.mjs` |
+| c3-03 | Fence art changes as HP falls | `src/render/world.js` |
+| c3-04 | Status tint and the current wave hint | `src/render/renderer.js` |
+| c3-05 | Pierce, splash, and chain look different | `src/render/effects.js` |
+| c3-06 | Rank marks on defenders | `src/render/defenders.js` |
+| c3-07 | Enraged boss reads on the sprite | `src/render/enemies.js` |
+| c3-08 | Draft cards say whether the type is new | `src/ui/build-panel.js` |
+| c3-09 | How to play in four beats | `src/ui/meta-panel.js` |
+| c3-10 | Draft badge strings | `src/i18n.js` |
+| c3-11 | Long HUD text does not shrink the field | `src/ui/shell.js`, `src/styles.css` |
+| c3-12 | Paying more than 64 runs does not pay twice | `tests/settlement-memory.test.mjs` |
+| c3-13 | Every hero upgrade changes its stat | `tests/hero-effects.test.mjs` |
+| c3-14 | Spawn stays center-weighted | `tests/spawn-shape.test.mjs` |
+| c3-15 | Merge text leads with the result | `src/systems/merges.js` |
+| c3-16 | Hybrid text leads with the fantasy | `src/data/recipes.js` |
+| c3-17 | Fence hits cut through shot noise | `src/audio.js` |
+| c3-18 | Current wave hint is on the director | `src/systems/waves.js` |
+| c3-19 | Poison and burn together stay saveable | `src/systems/status.js`, `tests/dual-status.test.mjs` |
+| c3-20 | Tower text leads with the role | `src/data/towers.js` |
+| c3-21 | Fence contact stays the only enemy damage | `tests/fence-contact.test.mjs` |
+
 ## Log
 
 - Cycle 1 delivered the playable campaign, compact drafts, resume, phone drawer, readable enemy boxes, and the live-save fix.
 - Cycle 2 ran 22 isolated Fast/xhigh workers. All 22 returned. Integrated art, audio, copy, boss-wave flag, paid-run memory, and two new test files. 66 tests passed. Held back `src/systems/combat.js`: chain jumps would re-roll crits and change seeded fights. Hero, movement, drafts, status, and the meta panel were already correct and stayed as they were.
+- Cycle 3 launched at 2026-11-14 13:41 Asia/Shanghai from `a65515b`: 21 workers, all running, manifest `batch-cycle3.json`. Chain crit is now an explicit owned task because the recipes already promise it.
