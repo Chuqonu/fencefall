@@ -9560,10 +9560,8 @@ function validateProjectile(projectile, ids, mark) {
   noteUid(projectile.id, mark);
   if (!isId(projectile.sourceId, 64)) return fail('invalid_run');
   if (!(projectile.targetId === null || isId(projectile.targetId, 64))) return fail('invalid_run');
-  // Match the live projectile culling bounds in combat, including piercing
-  // shots that briefly travel beyond the visible field.
-  if (!isNum(projectile.x, -100, ARENA.width + 100)) return fail('invalid_bounds');
-  if (!isNum(projectile.y, -120, ARENA.height + 80)) return fail('invalid_bounds');
+  if (!isNum(projectile.x, -80, ARENA.width + 80)) return fail('invalid_bounds');
+  if (!isNum(projectile.y, -120, ARENA.height + 40)) return fail('invalid_bounds');
   if (!isNum(projectile.speed, 1e-6, 20000)) return fail('invalid_bounds');
   if (!isNum(projectile.damage, 0, 1e9)) return fail('invalid_bounds');
   if (!isBool(projectile.crit)) return fail('invalid_run');
@@ -13192,9 +13190,7 @@ function payDot(state, enemy, status, dps, damageCallback) {
   const tick = STATUS_LIMITS.dotTick;
   let guard = 0;
   while (status.tickTimer >= tick - 1e-8 && !isDead(enemy) && guard++ < 160) {
-    // The cadence tolerance may pay a tick a fraction before the boundary.
-    // Keep the remainder non-negative so every live frame is saveable.
-    status.tickTimer = Math.max(0, status.tickTimer - tick);
+    status.tickTimer -= tick;
     damageCallback(state, enemy, dps * tick, damageOptions(status));
   }
   // Leftover below one tick is paid only when the effect ends, so totals match
