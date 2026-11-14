@@ -514,8 +514,35 @@ img, svg, video { max-width: 100%; height: auto; }
 [data-ui="menu"].is-open { display: block; }
 
 .shell.is-draft [data-ui="overlay"] {
-  padding: 8px 8px 10px;
+  padding: 8px;
+  background: transparent;
+  pointer-events: none;
+  bottom: auto;
+  max-height: min(42vh, 280px);
+  overflow: auto;
 }
+
+.shell.is-draft [data-ui="overlay"] > * { pointer-events: auto; }
+
+.drag-ghost {
+  position: fixed;
+  z-index: 36;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  border: 2px solid #f0cb72;
+  background: rgba(18, 33, 40, 0.94);
+  color: #f1eee2;
+  font: 700 11px/1.1 sans-serif;
+  transform: translate(-50%, -50%);
+}
+
+.drag-ghost[hidden] { display: none; }
+.drag-ghost.is-illegal { border-color: #e7a08a; }
+.drag-ghost.is-snapping { transition: left 140ms ease, top 140ms ease; }
 
 /* Placing stays a top banner so the defender slots (bottom of the field) still receive taps.
    Direct children keep clicks; empty overlay space does not block the canvas. */
@@ -1290,7 +1317,7 @@ const rendererMod = __ff_m15;
 
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
+const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
 __ff_exports["ACTIONS"] = ACTIONS;
 
 
@@ -1553,6 +1580,7 @@ async function createController(options = {}) {
       return {ok:true, index:ui.selectedSlot};
     }
     if (action === 'move') return moveUnits(payload.from, payload.to);
+    if (action === 'dragDrop') return dragDrop(payload.from, payload.to);
     if (action === 'chooseDraft') return chooseDraft(payload.index);
     if (action === 'place') return placePending(payload.index, payload.replace === true);
     if (action === 'cancelPlacement') return cancelPlacement();
@@ -1589,6 +1617,32 @@ async function createController(options = {}) {
     ui.mergeFrom = -1;
     saveRun();
     return {ok:true};
+  }
+
+  function dragDrop(from, to) {
+    if (!run) return {ok:false, reason:'no-run'};
+    if (!integerSlot(from) || !integerSlot(to)) return {ok:false, reason:'bad-slot', snapped:true};
+    if (from === to) return {ok:true, snapped:true};
+    if (run.phase === 'victory' || run.phase === 'defeat' || !canPlan(run)) return {ok:false, reason:'not-planning', snapped:true};
+    const origin = run.slots[from]?.unit;
+    const target = run.slots[to]?.unit;
+    if (!origin) return {ok:false, reason:'emptySlot', snapped:true};
+    if (!target) return moveUnits(from, to);
+    if (origin.kind === 'hero' || target.kind === 'hero' || origin.type === 'hero' || target.type === 'hero') {
+      return {ok:false, reason:'heroProtected', snapped:true};
+    }
+    if (typeof modules.merges?.previewMerge !== 'function' || typeof modules.merges?.mergeUnits !== 'function') {
+      return {ok:false, reason:'unavailable', snapped:true};
+    }
+    const preview = resultOf(modules.merges.previewMerge(run, from, to));
+    if (!preview.ok) return {...preview, snapped:true};
+    const merged = resultOf(modules.merges.mergeUnits(run, from, to));
+    if (!merged.ok) return {...merged, snapped:true};
+    ui.mergePreview = null;
+    ui.mergeFrom = -1;
+    ui.selectedSlot = to;
+    saveRun();
+    return merged;
   }
 
   function chooseDraft(index) {
@@ -3932,13 +3986,13 @@ const ROWS = [
   ['howto', 'How to play', '怎么玩'],
   ['howtoLead', 'You decide what is built. The fight plays itself.', '建造由你决定，战斗自动进行。'],
   ['helpOverview', 'Enemies enter from the top and move toward one shared fence. You plan, draft, and merge. The hero and towers attack on their own.', '敌人从上方进入，朝同一道栅栏前进。你负责布阵、整备和合成。英雄与防御塔会自动攻击。'],
-  ['helpPlacement', 'Tap a defender, then tap the slot you want. You can move units only while paused or while a draft is open. Empty slots can take a unit. Moving the hero only changes its place.', '点一名防守者，再点目标格子。只有在暂停或整备期间才能移动。空位可以放入单位。移动英雄只改变位置。'],
+  ['helpPlacement', 'Drag a defender to an empty slot to move it, or onto a compatible tower to merge. This works while paused or while a draft is open. An illegal drop snaps back. Moving the hero only changes its place.', '把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。只有在暂停或整备期间才能这样做。非法放置会弹回。移动英雄只改变位置。'],
   ['helpMerge', 'While planning, choose two different occupied slots and preview the result. The same type and rank rise by one rank, up to rank 4. Different base types of equal rank become that recipe\'s hybrid. A hybrid merges only with the same hybrid. The hero never merges. Cancel, or an invalid pair, keeps both units.', '布阵时选择两个不同的已占用格子，并先预览结果。同种同阶会升 1 阶，最高 4 阶。不同的基础塔在同阶时会变成配方对应的混合单位。混合单位只能与相同的混合单位合成。英雄永不合成。取消或组合无效时，双方都会保留。'],
-  ['helpDraft', 'Kills grant XP. At the threshold the fight pauses and you get exactly three choices: a new tower or a hero upgrade. A tower is placed with a second tap. On a full board you can still upgrade the hero or replace a tower. Canceling placement keeps those same three choices. Nothing is granted twice.', '击杀会获得经验。达到阈值时战斗暂停并进入整备，给出三选一：新的防御塔，或英雄升级。选塔之后，再点一个格子即可放置。格子占满时，仍可升级英雄或替换一座防御塔。取消放置会保留原来的三选一，不会因此多得一次。'],
+  ['helpDraft', 'Kills grant XP. At the threshold the fight pauses and three cards appear over the field. Tap a card to take it. There is no confirm button. A tower is placed with a second tap. On a full board you can still upgrade the hero or replace a tower. Canceling placement keeps those same three choices. Nothing is granted twice.', '击杀会获得经验。达到阈值时战斗暂停，三张卡叠在战场上。点一张卡即可选定，没有确认按钮。选塔之后，再点一个格子即可放置。格子占满时，仍可升级英雄或替换一座防御塔。取消放置会保留原来的三选一，不会因此多得一次。'],
   ['helpFence', 'Enemies attack only the shared fence. Defenders have no health. If fence HP reaches zero, the run is lost.', '敌人只攻击共用栅栏。防守者没有生命值。栅栏生命归零，本局失败。'],
   ['helpRange', 'A defender fires at any enemy inside its circle, including enemies outside its column. Select a unit to see that circle. Rear-row ranges reach the field in front of the fence.', '防守者会攻击圆圈内的任意敌人，包括其他列的敌人。选中单位即可看到这个圆。后排的射程能够打到栅栏前方。'],
   ['helpSpeed', 'Speeds are 1×, 1.5×, and 3×. They share one simulation clock, so attacks, status timers, and rewards are not sped past that clock or skipped. Pause stops the fight. Hiding the page stops it too. If you paused yourself, that pause remains when you return.', '速度有 1×、1.5× 和 3×。它们共用一个模拟时钟，攻击、状态时间和报酬不会超出这个时钟，也不会被跳过。暂停会停止战斗。隐藏页面也会停止。如果你亲手暂停，回到页面后暂停仍然保留。'],
-  ['helpHero', 'The run starts with one hero in the rear center, and no other towers. The hero fights automatically, never merges, and cannot be sold or replaced.', '每局开始时，后排中央只有一名英雄，没有其他防御塔。英雄自动战斗，不能合成、出售或替换。'],
+  ['helpHero', 'The run starts with one hero in the front center, and no other towers. The hero fights automatically, never merges, and cannot be sold or replaced.', '每局开始时，前排中央只有一名英雄，没有其他防御塔。英雄自动战斗，不能合成、出售或替换。'],
   ['helpRewards', 'Victory and defeat pay currency once. Abandoning a fresh run before 30 seconds and 3 kills pays nothing. Higher difficulties multiply the reward. Reloading does not pay again.', '胜利和失败都会发放一次货币。不足 30 秒且击杀少于 3 就放弃，没有报酬。难度越高，报酬倍率越高。重新加载不会再次发放。'],
   ['helpEquipment', 'Currency buys equipment and permanent hero upgrades. Bonuses are bounded and give a head start. Normal is playable without them. Purchases apply to later runs. This fight keeps the bonuses it started with.', '货币可以购买装备和英雄的永久升级。加成有上限，只提供开局优势。不买它们也能游玩标准难度。购买从之后的对局生效。这一局仍使用开局时的加成。'],
   ['helpLanguage', 'Use 中 / EN at any time. Switching language keeps the current run, board, and rewards.', '可以随时使用中 / EN。切换语言会保留当前对局、棋盘和报酬。'],
@@ -3982,8 +4036,8 @@ const ROWS = [
   ['difficultyRewards', 'Higher difficulties increase enemy pressure and the reward multiplier.', '更高的难度会提高敌人压力和报酬倍率。'],
   ['helpRole', 'You plan, build, and decide. Towers and the hero attack on their own. There are no active combat abilities and no direct hero control.', '你负责布阵、建造和抉择。防御塔与英雄会自动攻击。没有主动战斗技能，也不能直接操纵英雄作战。'],
   ['helpAura', 'A support aura boosts nearby defenders. Its damage and haste bonuses are fractional and combat caps them.', '支援光环强化附近的防守者。其中的伤害和攻速是比例加成，战斗中会限制上限。'],
-  ['helpBoard', 'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the rear center.', '敌人向下接近栅栏。栅栏后是两行，每行五个格子。英雄从后排正中开始。'],
-  ['helpRows', 'Front row, then rear row. The marked slot is the hero’s starting slot.', '上方是前排，下方是后排。标出的格子是英雄的起始位置。'],
+  ['helpBoard', 'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the front center.', '敌人向下接近栅栏。栅栏后是两行，每行五个格子。英雄从前排正中开始。'],
+  ['helpRows', 'Front row, then rear row. The marked slot is the hero’s starting slot, the middle of the front row.', '上方是前排，下方是后排。标出的格子是英雄的起始位置，位于前排正中。'],
   ['enemyApproach', 'Enemies approach from above.', '敌人从上方接近。'],
   ['enemyFenceOnly', 'This enemy attacks the fence only.', '这种敌人只攻击栅栏。'],
   ['fenceDamage', 'Fence damage', '栅栏承受伤害'],
@@ -10763,7 +10817,7 @@ function createRun({seed=123456,difficulty='normal',profile=createProfile(),runI
  const id=runId||`run-${Date.now()}-${globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)}`;
  const hp=DIFFICULTIES[difficulty].fence;
  const state={version:CONTRACT_VERSION,runId:id,seed:seed>>>0,rng:seed>>>0,nextId:1,time:0,tick:0,accumulator:0,phase:'playing',paused:false,hiddenPaused:false,speed:1,difficulty,wave:0,waveTime:0,director:{nextWave:0,queue:[],done:false},kills:0,xp:0,nextDraftXp:8,draftLevel:0,fence:{hp,maxHp:hp},slots:Array.from({length:10},(_,i)=>({...slotGeometry(i),unit:null})),enemies:[],projectiles:[],clouds:[],events:[],draft:null,pendingUnit:null,profileSnapshot:clone(profile),settlement:null,stats:{damage:0,fenceDamage:0,merges:0,crits:0},initialized:false,endless:false,systems:{}};
- state.slots[7].unit=createUnit(state,'hero');
+ state.slots[2].unit=createUnit(state,'hero');
  return state;
 }
 
@@ -13218,9 +13272,10 @@ const getProfileBonuses = __ff_m1["getProfileBonuses"];
 // Passive run upgrades for the single hero. Does not spend draft XP, change phase,
 // roll RNG, or modify any other unit. Drafts call applyHeroUpgrade, then return to playing.
 //
-// Rear-center slot 7 is (180, 592); the fence is y=450. Baseline range 340 reaches
-// enemies stopped on that fence across x=14..346 (including a large radius) and
-// still covers roughly 180px of approach, so the opener can fight unaided.
+// Front-center slot 2 is (180, 508); the fence is y=450. Baseline range 340 reaches
+// enemies stopped on that fence from the front row and still covers the rear row,
+// so the opener can fight unaided. New runs start on slot 2. A saved run keeps
+// whatever slot the hero already occupies.
 //
 // getProfileBonuses(profileSnapshot): damage and haste are fractions, range is pixels,
 // critChance is an absolute fraction. Fence HP and reward are not applied here.
@@ -16058,11 +16113,11 @@ const formatNumber = __ff_m5["formatNumber"];
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
  * while playing. A draft overlay keeps three short choice cards and does not
- * include the 10-slot rearrange grid. A tower card says whether that base type
- * is already on the board. Merge preview stays available there as a
- * short pair list, then the confirm step. That confirm step shows the result
- * name and rank, then at most two more lines. It does not paste the catalog essay.
- * Confirm and cancel stay 44px buttons.
+ * include the 10-slot rearrange grid. Each card is the choice: tap the card,
+ * there is no confirm or cancel under it. A mark shows the power. A tower card
+ * says whether that base type is already on the board. Merge confirmation, when
+ * a preview is open, shows the result name and rank, then at most two more lines.
+ * It does not paste the catalog essay. Confirm and cancel stay 44px buttons.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
  * Clicks on its own controls stop at this panel so a parent bubble listener
@@ -16098,14 +16153,15 @@ const CSS = `
 .ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
 .ff-build .ff-effect{white-space:pre-line}
-.ff-build.is-draft{gap:6px}
+.ff-build.is-draft{gap:6px;background:rgba(12,22,28,.94);border:1px solid #3e5960;padding:8px}
 .ff-build.is-draft .ff-title{font-size:18px}
 .ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
-.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;min-height:44px;text-align:left;cursor:pointer}
+.ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:grid;place-items:center;border:1px solid currentColor;font-size:20px;line-height:1}
 .ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
-.ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
 .ff-build.is-draft .ff-field{align-self:flex-start;font-size:12px;line-height:1.2;padding:1px 6px}
 .ff-build .ff-field.is-new{border-color:#e0c17a;color:#e0c17a}
 .ff-build .ff-field.is-owned{color:#a5b8be}
@@ -17804,7 +17860,23 @@ function draftFieldLabel(state, option, lang, tr) {
   return { onField, type, text };
 }
 
-function renderDraft(state, lang, tr, idSuffix, ui) {
+const DRAFT_MARKS = {
+  bolt: ['➤', '#f0d56a'],
+  fire: ['▲', '#e25b2a'],
+  frost: ['❄', '#9fd7e8'],
+  lightning: ['↯', '#f4e27a'],
+  poison: ['●', '#7dce6a'],
+  support: ['✚', '#8fd0c6'],
+};
+
+function draftMark(option) {
+  if (option?.kind === 'hero_upgrade') return { glyph: '★', color: '#f0cb72' };
+  const pair = DRAFT_MARKS[option?.type];
+  if (pair) return { glyph: pair[0], color: pair[1] };
+  return { glyph: '◆', color: '#d7e4ea' };
+}
+
+function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
@@ -17823,26 +17895,11 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
     const field = draftFieldLabel(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
     const statText = offer.stats.join(' · ');
-    const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
-    card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
-    if (field) {
-      card.append(el('p', {
-        class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
-        'data-testid': `draft-choice-${index}-field`,
-        'data-on-field': field.onField ? 'true' : 'false',
-        'data-type': field.type,
-        text: field.text,
-      }));
-    }
-    card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
-    if (statText) {
-      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
-    }
-    const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
+    const mark = draftMark(option);
     const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
-    const spoken = field ? `${name}. ${field.text}. ${described}. ${actionLabel}` : `${name}. ${described}. ${actionLabel}`;
-    card.append(button({
-      primary: true,
+    const spoken = field ? `${name}. ${field.text}. ${described}` : `${name}. ${described}`;
+    const card = button({
+      class: 'card ff-choice',
       'data-action': 'chooseDraft',
       'data-index': String(index),
       'data-kind': option?.kind || '',
@@ -17853,13 +17910,33 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
       'aria-label': spoken,
-      text: actionLabel,
+    });
+    card.append(el('span', {
+      class: 'ff-mark',
+      'data-testid': `draft-choice-${index}-mark`,
+      style: `color:${mark.color}`,
+      'aria-hidden': 'true',
+      text: mark.glyph,
     }));
-    list.append(el('li', {}, card));
+    const copy = el('span', { class: 'ff-choice-copy' });
+    copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
+    if (field) {
+      copy.append(el('p', {
+        class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
+        'data-testid': `draft-choice-${index}-field`,
+        'data-on-field': field.onField ? 'true' : 'false',
+        'data-type': field.type,
+        text: field.text,
+      }));
+    }
+    copy.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
+    if (statText) {
+      copy.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
+    }
+    card.append(copy);
+    list.append(el('li', { 'data-testid': `draft-card-${index}` }, card));
   });
   section.append(list);
-  const merge = renderDraftMerge(state, lang, tr, ui);
-  if (merge) section.append(merge);
   return section;
 }
 
@@ -18697,8 +18774,8 @@ function renderHowto(ctx, root) {
       'Enemies enter from the top and attack only the shared fence. Defenders have no health. The run ends when fence HP reaches zero.',
       '敌人从上方进入，并且只攻击共享的栅栏。防御单位没有生命值。栅栏生命降到零时，本局结束。'],
     ['help-placement', 'place', 'helpPlacement',
-      'Defenders fill two rows of five slots. The run starts with one hero in the rear center. That hero stays independent and is never merged, replaced, or sold. During a paused planning phase, tap a unit, then tap the destination. Empty slots can take a tower. Moving the hero only changes its slot.',
-      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于后排正中。英雄始终独立，不能被合并、替换或出售。在暂停的规划阶段，先点选单位，再点目标槽位。空槽可以放置防御塔。移动英雄只改变它所在的槽位。'],
+      'Defenders fill two rows of five slots. The run starts with one hero in the front center. That hero stays independent and is never merged, replaced, or sold. While planning, drag a defender to an empty slot to move it, or onto a compatible tower to merge. An illegal drop snaps back. Moving the hero only changes its slot.',
+      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于前排正中。英雄始终独立，不能被合并、替换或出售。布阵时，把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。非法放置会弹回。移动英雄只改变它所在的槽位。'],
     ['help-range', 'range', 'helpRange',
       'A defender attacks any enemy inside a circle centered on its slot, across the whole field. There are no lanes. Rear-row ranges reach threats in front of the fence. Select a defender during battle to see its range.',
       '防御者以自己的槽位为圆心，攻击范围内的任何敌人，覆盖整个战场。战场没有分路。后排的射程能够打到栅栏前的威胁。战斗中点选防御者即可看到范围。'],
@@ -19082,8 +19159,8 @@ function renderHeroCodex(ctx) {
   intro.append(h(doc, 'h3', {text: t(api, 'hero')}));
   intro.append(badge(ctx, t(api, 'heroProtected')));
   intro.append(h(doc, 'p', {text: tx(api, lang, 'helpHero',
-    'The hero starts in the rear center, takes one of the ten slots, and attacks automatically. Drafts can upgrade the hero. Equipment and permanent upgrades from the armory apply a bounded head start on later runs.',
-    '英雄从后排正中开始，占据十个槽位中的一个，并自动攻击。选卡可以升级英雄。军械库的装备和永久升级会在之后的对局提供有限的起步优势。')}));
+    'The hero starts in the front center, takes one of the ten slots, and attacks automatically. Drafts can upgrade the hero. Equipment and permanent upgrades from the armory apply a bounded head start on later runs.',
+    '英雄从前排正中开始，占据十个槽位中的一个，并自动攻击。选卡可以升级英雄。军械库的装备和永久升级会在之后的对局提供有限的起步优势。')}));
   wrap.append(intro);
   const upgrades = catalogEntries(HERO_UPGRADES);
   if (!upgrades.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'chooseUpgrade')}));
@@ -19175,8 +19252,8 @@ function boardDiagram(ctx) {
     'data-testid': 'help-board',
     role: 'img',
     'aria-label': tx(api, lang, 'helpBoard',
-      'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the rear center.',
-      '敌人向下接近栅栏。栅栏后是两行、每行五个槽位。英雄从后排正中开始。')
+      'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the front center.',
+      '敌人向下接近栅栏。栅栏后是两行、每行五个槽位。英雄从前排正中开始。')
   });
   board.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'enemyApproach', 'Enemies approach from above.', '敌人从上方接近。')}));
   board.append(h(doc, 'div', {className: 'meta-fence', text: t(api, 'fence')}));
@@ -19184,7 +19261,7 @@ function boardDiagram(ctx) {
     const rowEl = h(doc, 'div', {className: 'meta-slotrow'});
     for (let col = 0; col < 5; col += 1) {
       const index = row * 5 + col;
-      const hero = index === 7;
+      const hero = index === 2;
       rowEl.append(h(doc, 'div', {
         className: hero ? 'meta-slot meta-slot-hero' : 'meta-slot',
         text: hero ? t(api, 'hero') : ''
@@ -19992,13 +20069,17 @@ __ff_factories["src/ui/shell.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["mountShell"] = mountShell;
 const __ff_m0 = __ff_load("src/shared.js");
-const __ff_m1 = __ff_load("src/i18n.js");
+const __ff_m1 = __ff_load("src/systems/merges.js");
+const __ff_m2 = __ff_load("src/i18n.js");
 const ARENA = __ff_m0["ARENA"];
 const DIFFICULTIES = __ff_m0["DIFFICULTIES"];
 const canPlan = __ff_m0["canPlan"];
 const hitSlot = __ff_m0["hitSlot"];
-const formatNumber = __ff_m1["formatNumber"];
-const localize = __ff_m1["localize"];
+const slotGeometry = __ff_m0["slotGeometry"];
+const previewMerge = __ff_m1["previewMerge"];
+const formatNumber = __ff_m2["formatNumber"];
+const localize = __ff_m2["localize"];
+
 
 
 
@@ -20008,6 +20089,8 @@ const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 
 /**
  * App shell and live HUD.
  * Pointer hits map the canvas CSS box linearly onto the 360×640 arena.
+ * Dragging a defender onto another slot moves it or merges it while planning.
+ * An illegal drop snaps back and leaves the board unchanged.
  * Renderer resize must use that same full-box mapping (no inner letterbox).
  * `pause` is sent with no payload and is a toggle; `resume` stays the continue-run action.
  * Containers marked data-ui are never cleared here — panel modules own their children.
@@ -20148,12 +20231,18 @@ function mountShell(root, api) {
     'data-testid': 'menu-root'
   });
 
-  shell.append(topbar, body, hud, overlayRoot, menuRoot);
+  const ghost = el('div', {
+    class: 'drag-ghost',
+    'data-testid': 'drag-ghost',
+    hidden: true
+  });
+  shell.append(topbar, body, hud, overlayRoot, menuRoot, ghost);
   root.replaceChildren(shell);
 
   let dead = false;
   let pointer = null;
   let suppressClick = false;
+  let snapToken = 0;
   let clickTimer = 0;
   let lastKey = '';
   let lastPaint = 0;
@@ -20163,24 +20252,53 @@ function mountShell(root, api) {
     if (dead || event.button !== 0) return;
     pointer = {
       id: event.pointerId,
-      index: indexFromClient(event.clientX, event.clientY)
+      index: indexFromClient(event.clientX, event.clientY),
+      x: event.clientX,
+      y: event.clientY,
+      active: false
     };
     try { canvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
+  }
+
+  function onPointerMove(event) {
+    if (dead || !pointer || pointer.id !== event.pointerId) return;
+    const dx = event.clientX - pointer.x;
+    const dy = event.clientY - pointer.y;
+    if (!pointer.active && Math.hypot(dx, dy) < 10) return;
+    const state = readState();
+    const start = pointer.index;
+    const unit = state && validSlot(start, state) ? state.slots[start]?.unit : null;
+    if (!unit) return;
+    pointer.active = true;
+    const hover = indexFromClient(event.clientX, event.clientY);
+    showGhost(event.clientX, event.clientY, unit, hover >= 0 && hover !== start && !dropWouldCommit(state, start, hover));
+    api.act('hover', { index: hover });
   }
 
   function onPointerUp(event) {
     if (dead) return;
     if (pointer && pointer.id !== event.pointerId) return;
     const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY);
+    const dragging = Boolean(pointer?.active);
     pointer = null;
     suppressClick = true;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => { suppressClick = false; }, 400);
-    handleGesture(start, indexFromClient(event.clientX, event.clientY));
+    const end = indexFromClient(event.clientX, event.clientY);
+    if (dragging) finishDrag(start, end);
+    else {
+      hideGhost();
+      handleGesture(start, end);
+    }
   }
 
   function onPointerCancel() {
+    const start = pointer?.index;
+    const dragging = Boolean(pointer?.active);
     pointer = null;
+    api.act('hover', { index: -1 });
+    if (dragging && validSlot(start, readState())) snapGhost(start);
+    else hideGhost();
   }
 
   function onClick(event) {
@@ -20294,6 +20412,7 @@ function mountShell(root, api) {
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('click', onClick);
@@ -20534,6 +20653,74 @@ function mountShell(root, api) {
     api.act('mergeConfirm', { from, to });
   }
 
+  function showGhost(x, y, unit, illegal) {
+    ghost.hidden = false;
+    ghost.classList.toggle('is-illegal', Boolean(illegal));
+    const label = unit?.kind === 'hero' || unit?.type === 'hero'
+      ? 'H'
+      : String(unit?.type || unit?.kind || '').slice(0, 4);
+    setText(ghost, label);
+    ghost.style.left = `${x}px`;
+    ghost.style.top = `${y}px`;
+  }
+
+  function hideGhost() {
+    snapToken += 1;
+    ghost.hidden = true;
+    ghost.classList.remove('is-illegal', 'is-snapping');
+    setText(ghost, '');
+  }
+
+  function snapGhost(index) {
+    const center = slotClientCenter(index);
+    if (!center) {
+      hideGhost();
+      return;
+    }
+    ghost.classList.add('is-snapping');
+    ghost.style.left = `${center.x}px`;
+    ghost.style.top = `${center.y}px`;
+    const token = ++snapToken;
+    setTimeout(() => {
+      if (token === snapToken) hideGhost();
+    }, 160);
+  }
+
+  function slotClientCenter(index) {
+    const rect = canvas.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) return null;
+    const slot = slotGeometry(index);
+    return {
+      x: rect.left + (slot.x / ARENA.width) * rect.width,
+      y: rect.top + (slot.y / ARENA.height) * rect.height
+    };
+  }
+
+  function dropWouldCommit(state, from, to) {
+    if (!state || !canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return false;
+    const origin = state.slots[from]?.unit;
+    const target = state.slots[to]?.unit;
+    if (!origin) return false;
+    if (!target) return true;
+    try { return previewMerge(state, from, to).ok === true; }
+    catch { return false; }
+  }
+
+  function finishDrag(from, to) {
+    api.act('hover', { index: -1 });
+    const state = readState();
+    if (!state || !validSlot(from, state) || !state.slots[from]?.unit) {
+      hideGhost();
+      return;
+    }
+    const outcome = api.act('dragDrop', { from, to });
+    if (outcome?.ok && !outcome.snapped) {
+      hideGhost();
+      return;
+    }
+    snapGhost(from);
+  }
+
   function indexFromClient(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return -1;
@@ -20549,6 +20736,7 @@ function mountShell(root, api) {
     clearInterval(timer);
     clearTimeout(clickTimer);
     canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('click', onClick);

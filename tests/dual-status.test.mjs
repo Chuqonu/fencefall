@@ -27,7 +27,7 @@ test('poison and burn on the same enemy both deal damage and stay saveable', () 
     maxHp: startHp,
     armor: 0
   });
-  const sourceId = state.slots[7].unit.id;
+  const sourceId = state.slots[2].unit.id;
   const burn = applyStatus(enemy, {type: 'burn', power: 8, remaining: 4, sourceId, tickTimer: 0});
   const poison = applyStatus(enemy, {type: 'poison', power: 6, remaining: 4, sourceId, stacks: 1, tickTimer: 0});
   assert.equal(burn.ok, true);

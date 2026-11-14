@@ -28,7 +28,7 @@ The scaffold boot is a placeholder rectangle field. `CONTRACT.md` says the place
 | --- | --- | --- | --- |
 | 0–4 | front | y=508, x=36+72·col | top 472, bottom 544 |
 | 5–9 | rear | y=592, x=36+72·col | top 556, bottom 628 |
-| 7 | rear center | (180, 592) | hero spawn slot |
+| 2 | front center | (180, 508) | hero spawn slot |
 
 Probed distances from slot centers to the fence line `y=450`:
 
@@ -163,7 +163,7 @@ Probed `createRun({runId, seed:1})`:
 - `profileSnapshot` is a deep JSON clone. The smoke test locks currency isolation. Settings changes belong on the live profile. Stat bonuses belong on the snapshot taken at `createRun`.
 - `nextDraftXp` is **8** and workers cannot edit `state.js`. The first draft opens when `state.xp >= 8`, not when the clock hits 20 s. Waves must make about 8 XP of kills land in the 20–40 s window. Later thresholds are the drafts worker's growth rule.
 - `createUnit(state, recipeId)` sets `kind: 'tower'` because only `type === 'hero'` becomes a hero. Hybrids have to pass the fourth argument: `createUnit(state, recipeId, rank, 'hybrid')`. `getUnitStats` should also treat a type that matches `RECIPES` as a hybrid if `kind` was left wrong, and return finite stats.
-- Hero identity is "exactly one `kind: 'hero'` anywhere in the ten slots" after the run starts. Only a brand-new run guarantees slot 7. Move can place the hero elsewhere. Systems search slots; they must not hard-wire index 7.
+- Hero identity is "exactly one `kind: 'hero'` anywhere in the ten slots" after the run starts. Only a brand-new run guarantees slot 2. Move can place the hero elsewhere. A saved run keeps its current hero slot. Systems search slots; they must not hard-wire index 2.
 - `best` is `{}`. UI should tolerate missing `best.wave` until `settleRun` defines it.
 - `clouds` is an empty array with no owner and no element schema.
 

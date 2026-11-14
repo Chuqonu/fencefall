@@ -1318,7 +1318,7 @@ function verifyEngineBundle(root) {
   const run = ns.createRun({seed: 1, runId: 'build-check'});
   assert(run.slots.length === 10, 'bundled createRun slot count');
   assert(run.slots.filter(slot => slot.unit).length === 1, 'bundled roster');
-  assert(run.slots[7].unit.kind === 'hero', 'bundled hero slot');
+  assert(run.slots[2].unit.kind === 'hero', 'bundled hero slot');
   assert(run.fence.maxHp === 600, 'bundled normal fence');
   const tick = run.tick;
   ns.advance(run, 1 / 60);

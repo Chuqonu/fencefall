@@ -374,8 +374,8 @@ function renderHowto(ctx, root) {
       'Enemies enter from the top and attack only the shared fence. Defenders have no health. The run ends when fence HP reaches zero.',
       '敌人从上方进入，并且只攻击共享的栅栏。防御单位没有生命值。栅栏生命降到零时，本局结束。'],
     ['help-placement', 'place', 'helpPlacement',
-      'Defenders fill two rows of five slots. The run starts with one hero in the rear center. That hero stays independent and is never merged, replaced, or sold. During a paused planning phase, tap a unit, then tap the destination. Empty slots can take a tower. Moving the hero only changes its slot.',
-      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于后排正中。英雄始终独立，不能被合并、替换或出售。在暂停的规划阶段，先点选单位，再点目标槽位。空槽可以放置防御塔。移动英雄只改变它所在的槽位。'],
+      'Defenders fill two rows of five slots. The run starts with one hero in the front center. That hero stays independent and is never merged, replaced, or sold. While planning, drag a defender to an empty slot to move it, or onto a compatible tower to merge. An illegal drop snaps back. Moving the hero only changes its slot.',
+      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于前排正中。英雄始终独立，不能被合并、替换或出售。布阵时，把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。非法放置会弹回。移动英雄只改变它所在的槽位。'],
     ['help-range', 'range', 'helpRange',
       'A defender attacks any enemy inside a circle centered on its slot, across the whole field. There are no lanes. Rear-row ranges reach threats in front of the fence. Select a defender during battle to see its range.',
       '防御者以自己的槽位为圆心，攻击范围内的任何敌人，覆盖整个战场。战场没有分路。后排的射程能够打到栅栏前的威胁。战斗中点选防御者即可看到范围。'],
@@ -759,8 +759,8 @@ function renderHeroCodex(ctx) {
   intro.append(h(doc, 'h3', {text: t(api, 'hero')}));
   intro.append(badge(ctx, t(api, 'heroProtected')));
   intro.append(h(doc, 'p', {text: tx(api, lang, 'helpHero',
-    'The hero starts in the rear center, takes one of the ten slots, and attacks automatically. Drafts can upgrade the hero. Equipment and permanent upgrades from the armory apply a bounded head start on later runs.',
-    '英雄从后排正中开始，占据十个槽位中的一个，并自动攻击。选卡可以升级英雄。军械库的装备和永久升级会在之后的对局提供有限的起步优势。')}));
+    'The hero starts in the front center, takes one of the ten slots, and attacks automatically. Drafts can upgrade the hero. Equipment and permanent upgrades from the armory apply a bounded head start on later runs.',
+    '英雄从前排正中开始，占据十个槽位中的一个，并自动攻击。选卡可以升级英雄。军械库的装备和永久升级会在之后的对局提供有限的起步优势。')}));
   wrap.append(intro);
   const upgrades = catalogEntries(HERO_UPGRADES);
   if (!upgrades.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'chooseUpgrade')}));
@@ -852,8 +852,8 @@ function boardDiagram(ctx) {
     'data-testid': 'help-board',
     role: 'img',
     'aria-label': tx(api, lang, 'helpBoard',
-      'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the rear center.',
-      '敌人向下接近栅栏。栅栏后是两行、每行五个槽位。英雄从后排正中开始。')
+      'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the front center.',
+      '敌人向下接近栅栏。栅栏后是两行、每行五个槽位。英雄从前排正中开始。')
   });
   board.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'enemyApproach', 'Enemies approach from above.', '敌人从上方接近。')}));
   board.append(h(doc, 'div', {className: 'meta-fence', text: t(api, 'fence')}));
@@ -861,7 +861,7 @@ function boardDiagram(ctx) {
     const rowEl = h(doc, 'div', {className: 'meta-slotrow'});
     for (let col = 0; col < 5; col += 1) {
       const index = row * 5 + col;
-      const hero = index === 7;
+      const hero = index === 2;
       rowEl.append(h(doc, 'div', {
         className: hero ? 'meta-slot meta-slot-hero' : 'meta-slot',
         text: hero ? t(api, 'hero') : ''

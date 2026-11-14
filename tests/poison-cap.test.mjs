@@ -85,7 +85,7 @@ test('applying more poison stacks than maxStacks leaves the count at the cap', (
   for (const item of cases) {
     const state = fresh(`poison-cap-${item.cap}-${item.label}`);
     const enemy = place(state);
-    const sourceId = state.slots[7].unit.id;
+    const sourceId = state.slots[2].unit.id;
     const fields = {
       label: item.label,
       power: 4,
@@ -112,7 +112,7 @@ test('applying more poison stacks than maxStacks leaves the count at the cap', (
 test('tickTimer stays non-negative while further poison applications hold the cap', () => {
   const state = fresh('poison-cap-timer');
   const enemy = place(state);
-  const sourceId = state.slots[7].unit.id;
+  const sourceId = state.slots[2].unit.id;
   const maxStacks = 3;
   const cap = 3;
   const fields = {
@@ -143,7 +143,7 @@ test('tickTimer stays non-negative while further poison applications hold the ca
 test('duplicate poison rows above maxStacks collapse to one capped stack', () => {
   const state = fresh('poison-cap-merge');
   const enemy = place(state);
-  const sourceId = state.slots[7].unit.id;
+  const sourceId = state.slots[2].unit.id;
   enemy.statuses = [
     {type: 'poison', power: 4, remaining: 5, sourceId: 'a', stacks: 7, maxStacks: 3, tickTimer: 0.2},
     {type: 'poison', power: 3, remaining: 4, sourceId: 'b', stacks: 7, maxStacks: 3, tickTimer: 0.05}

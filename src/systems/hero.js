@@ -1,9 +1,10 @@
 // Passive run upgrades for the single hero. Does not spend draft XP, change phase,
 // roll RNG, or modify any other unit. Drafts call applyHeroUpgrade, then return to playing.
 //
-// Rear-center slot 7 is (180, 592); the fence is y=450. Baseline range 340 reaches
-// enemies stopped on that fence across x=14..346 (including a large radius) and
-// still covers roughly 180px of approach, so the opener can fight unaided.
+// Front-center slot 2 is (180, 508); the fence is y=450. Baseline range 340 reaches
+// enemies stopped on that fence from the front row and still covers the rear row,
+// so the opener can fight unaided. New runs start on slot 2. A saved run keeps
+// whatever slot the hero already occupies.
 //
 // getProfileBonuses(profileSnapshot): damage and haste are fractions, range is pixels,
 // critChance is an absolute fraction. Fence HP and reward are not applied here.

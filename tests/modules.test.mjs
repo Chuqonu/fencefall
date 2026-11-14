@@ -23,7 +23,7 @@ test('hybrid recipes are distinct and previewing a merge does not change the boa
   state.paused = true;
   state.slots[0].unit = createUnit(state, 'bolt', 1, 'tower');
   const before = snapshot(state);
-  const hero = previewMerge(state, 7, 0);
+  const hero = previewMerge(state, 2, 0);
   assert.equal(hero.ok, false);
   assert.equal(hero.reason, 'hero_protected');
   assert.equal(snapshot(state), before);

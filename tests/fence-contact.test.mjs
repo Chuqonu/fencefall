@@ -60,7 +60,7 @@ function assertProbe(state, hp, label) {
     assert.equal(unit.maxHp, hp, `${label}: ${unit.kind} maxHp`);
     assert.equal(unit.dead, undefined, label);
   }
-  assert.equal(state.slots[7].unit.kind, 'hero', label);
+  assert.equal(state.slots[2].unit.kind, 'hero', label);
   assert.equal(state.slots[0].unit.kind, 'tower', label);
   assert.equal(state.slots[0].unit.type, 'bolt', label);
 }
@@ -195,7 +195,7 @@ test('a contacting enemy bites the shared fence and defenders still have no HP',
     assert.ok(state.fence.hp > 0, label);
     assert.equal(state.phase, 'playing', label);
     assertNoDefenderHealth(state, label);
-    assert.equal(state.slots[7].unit.kind, 'hero', label);
+    assert.equal(state.slots[2].unit.kind, 'hero', label);
     assert.equal(state.slots[0].unit.id.startsWith('u'), true, label);
 
     stampDefenders(state, PROBE_HP);

@@ -16,7 +16,7 @@ import * as audioMod from './audio.js';
 import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
+export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
 
 const TEXT = {
   en:{
@@ -277,6 +277,7 @@ export async function createController(options = {}) {
       return {ok:true, index:ui.selectedSlot};
     }
     if (action === 'move') return moveUnits(payload.from, payload.to);
+    if (action === 'dragDrop') return dragDrop(payload.from, payload.to);
     if (action === 'chooseDraft') return chooseDraft(payload.index);
     if (action === 'place') return placePending(payload.index, payload.replace === true);
     if (action === 'cancelPlacement') return cancelPlacement();
@@ -313,6 +314,32 @@ export async function createController(options = {}) {
     ui.mergeFrom = -1;
     saveRun();
     return {ok:true};
+  }
+
+  function dragDrop(from, to) {
+    if (!run) return {ok:false, reason:'no-run'};
+    if (!integerSlot(from) || !integerSlot(to)) return {ok:false, reason:'bad-slot', snapped:true};
+    if (from === to) return {ok:true, snapped:true};
+    if (run.phase === 'victory' || run.phase === 'defeat' || !canPlan(run)) return {ok:false, reason:'not-planning', snapped:true};
+    const origin = run.slots[from]?.unit;
+    const target = run.slots[to]?.unit;
+    if (!origin) return {ok:false, reason:'emptySlot', snapped:true};
+    if (!target) return moveUnits(from, to);
+    if (origin.kind === 'hero' || target.kind === 'hero' || origin.type === 'hero' || target.type === 'hero') {
+      return {ok:false, reason:'heroProtected', snapped:true};
+    }
+    if (typeof modules.merges?.previewMerge !== 'function' || typeof modules.merges?.mergeUnits !== 'function') {
+      return {ok:false, reason:'unavailable', snapped:true};
+    }
+    const preview = resultOf(modules.merges.previewMerge(run, from, to));
+    if (!preview.ok) return {...preview, snapped:true};
+    const merged = resultOf(modules.merges.mergeUnits(run, from, to));
+    if (!merged.ok) return {...merged, snapped:true};
+    ui.mergePreview = null;
+    ui.mergeFrom = -1;
+    ui.selectedSlot = to;
+    saveRun();
+    return merged;
   }
 
   function chooseDraft(index) {

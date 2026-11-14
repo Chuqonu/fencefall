@@ -25,7 +25,10 @@ function memoryStorage() {
 test('chain crit chance survives a save', () => {
   const profile = createProfile();
   const state = createRun({seed: 20, difficulty: 'normal', profile, runId: 'chain-save'});
-  state.slots[7].unit.cooldown = 600;
+  const hero = state.slots[2].unit;
+  state.slots[7].unit = hero;
+  state.slots[2].unit = null;
+  hero.cooldown = 600;
   const slot = state.slots[2];
   const unit = createUnit(state, 'arcbolt', 1, 'hybrid');
   slot.unit = unit;

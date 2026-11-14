@@ -5,11 +5,11 @@
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
  * while playing. A draft overlay keeps three short choice cards and does not
- * include the 10-slot rearrange grid. A tower card says whether that base type
- * is already on the board. Merge preview stays available there as a
- * short pair list, then the confirm step. That confirm step shows the result
- * name and rank, then at most two more lines. It does not paste the catalog essay.
- * Confirm and cancel stay 44px buttons.
+ * include the 10-slot rearrange grid. Each card is the choice: tap the card,
+ * there is no confirm or cancel under it. A mark shows the power. A tower card
+ * says whether that base type is already on the board. Merge confirmation, when
+ * a preview is open, shows the result name and rank, then at most two more lines.
+ * It does not paste the catalog essay. Confirm and cancel stay 44px buttons.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
  * Clicks on its own controls stop at this panel so a parent bubble listener
@@ -45,14 +45,15 @@ const CSS = `
 .ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
 .ff-build .ff-effect{white-space:pre-line}
-.ff-build.is-draft{gap:6px}
+.ff-build.is-draft{gap:6px;background:rgba(12,22,28,.94);border:1px solid #3e5960;padding:8px}
 .ff-build.is-draft .ff-title{font-size:18px}
 .ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
-.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;min-height:44px;text-align:left;cursor:pointer}
+.ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:grid;place-items:center;border:1px solid currentColor;font-size:20px;line-height:1}
 .ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
-.ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
 .ff-build.is-draft .ff-field{align-self:flex-start;font-size:12px;line-height:1.2;padding:1px 6px}
 .ff-build .ff-field.is-new{border-color:#e0c17a;color:#e0c17a}
 .ff-build .ff-field.is-owned{color:#a5b8be}
@@ -1751,7 +1752,23 @@ function draftFieldLabel(state, option, lang, tr) {
   return { onField, type, text };
 }
 
-function renderDraft(state, lang, tr, idSuffix, ui) {
+const DRAFT_MARKS = {
+  bolt: ['➤', '#f0d56a'],
+  fire: ['▲', '#e25b2a'],
+  frost: ['❄', '#9fd7e8'],
+  lightning: ['↯', '#f4e27a'],
+  poison: ['●', '#7dce6a'],
+  support: ['✚', '#8fd0c6'],
+};
+
+function draftMark(option) {
+  if (option?.kind === 'hero_upgrade') return { glyph: '★', color: '#f0cb72' };
+  const pair = DRAFT_MARKS[option?.type];
+  if (pair) return { glyph: pair[0], color: pair[1] };
+  return { glyph: '◆', color: '#d7e4ea' };
+}
+
+function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
@@ -1770,26 +1787,11 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
     const field = draftFieldLabel(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
     const statText = offer.stats.join(' · ');
-    const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
-    card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
-    if (field) {
-      card.append(el('p', {
-        class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
-        'data-testid': `draft-choice-${index}-field`,
-        'data-on-field': field.onField ? 'true' : 'false',
-        'data-type': field.type,
-        text: field.text,
-      }));
-    }
-    card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
-    if (statText) {
-      card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
-    }
-    const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
+    const mark = draftMark(option);
     const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
-    const spoken = field ? `${name}. ${field.text}. ${described}. ${actionLabel}` : `${name}. ${described}. ${actionLabel}`;
-    card.append(button({
-      primary: true,
+    const spoken = field ? `${name}. ${field.text}. ${described}` : `${name}. ${described}`;
+    const card = button({
+      class: 'card ff-choice',
       'data-action': 'chooseDraft',
       'data-index': String(index),
       'data-kind': option?.kind || '',
@@ -1800,13 +1802,33 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
       'aria-label': spoken,
-      text: actionLabel,
+    });
+    card.append(el('span', {
+      class: 'ff-mark',
+      'data-testid': `draft-choice-${index}-mark`,
+      style: `color:${mark.color}`,
+      'aria-hidden': 'true',
+      text: mark.glyph,
     }));
-    list.append(el('li', {}, card));
+    const copy = el('span', { class: 'ff-choice-copy' });
+    copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
+    if (field) {
+      copy.append(el('p', {
+        class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
+        'data-testid': `draft-choice-${index}-field`,
+        'data-on-field': field.onField ? 'true' : 'false',
+        'data-type': field.type,
+        text: field.text,
+      }));
+    }
+    copy.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
+    if (statText) {
+      copy.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
+    }
+    card.append(copy);
+    list.append(el('li', { 'data-testid': `draft-card-${index}` }, card));
   });
   section.append(list);
-  const merge = renderDraftMerge(state, lang, tr, ui);
-  if (merge) section.append(merge);
   return section;
 }
 

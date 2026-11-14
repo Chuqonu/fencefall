@@ -59,7 +59,7 @@ function freshShot(name) {
     profile,
     runId: `projectile-cull-${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
   });
-  state.slots[7].unit.cooldown = 600;
+  state.slots[2].unit.cooldown = 600;
   const slot = state.slots[0];
   slot.unit = createUnit(state, 'bolt', 1, 'tower');
   slot.unit.cooldown = 0;

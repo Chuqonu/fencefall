@@ -8,7 +8,7 @@ Open **`dist/index.html`** in a desktop browser, or serve `dist/` from a static 
 
 For a source preview, run `npm run dev` and open `http://127.0.0.1:4173/`.
 
-- Start with one independent hero in the rear center of a 2×5 board.
+- Start with one independent hero in the front center of a 2×5 board.
 - Earn three-choice drafts containing towers or passive hero upgrades.
 - Pause to move defenders or combine equal-rank towers. Identical types gain a rank; compatible different types become hybrids. The hero never merges.
 - Protect the shared fence through a campaign of roughly 14 minutes at 1×. Available speeds: 1×, 1.5×, 3×. Drafts and planning pause the battle.
@@ -40,7 +40,7 @@ See `docs/BROWSER_ACCEPTANCE.md` for executed checks and remaining device limita
 
 打开 **`dist/index.html`** 即可在电脑浏览器游玩。手机可访问托管该文件的静态网页。游戏资源全部内置，无需外部 API。进度保存在当前浏览器；在“设置 → 导出存档”中备份或转移进度。
 
-- 开局只有后排正中的一名独立英雄；英雄不能合成。
+- 开局只有前排正中的一名独立英雄；英雄不能合成。
 - 击败敌人获得经验，每次征召提供三个防御塔或被动英雄升级选项。
 - 暂停后调整站位、预览并确认合成。同种同阶提升等级；不同基础塔按配方成为混合塔。
 - 栅栏生命归零即失败。常规通关约14分钟，可选择1×、1.5×、3×速度。选牌和布阵期间战斗暂停。

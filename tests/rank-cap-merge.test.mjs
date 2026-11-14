@@ -4,7 +4,7 @@ import {BASE_TYPES, createUnit} from '../src/shared.js';
 import {createRun} from '../src/state.js';
 import {previewMerge, mergeUnits} from '../src/systems/merges.js';
 
-const SOURCE = 2;
+const SOURCE = 3;
 const TARGET = 8;
 
 function planningRun(runId, {paused = true, phase = 'playing'} = {}) {
@@ -74,14 +74,14 @@ test('two rank-4 towers of the same type fail to merge and both units remain', (
     const state = planningRun(`rank-cap-${type}`);
     const source = place(state, SOURCE, type);
     const target = place(state, TARGET, type);
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
 
     assertRejected(state, SOURCE, TARGET, type);
     assertRejected(state, TARGET, SOURCE, type);
 
     assert.equal(state.slots[SOURCE].unit, source);
     assert.equal(state.slots[TARGET].unit, target);
-    assert.equal(state.slots[7].unit, hero);
+    assert.equal(state.slots[2].unit, hero);
     assert.equal(hero.kind, 'hero');
     assert.equal(state.stats.merges, 0);
     assert.equal(state.events.length, 0);

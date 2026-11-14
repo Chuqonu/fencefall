@@ -49,7 +49,7 @@ GitHub Actions is optional. The example is `docs/ci.example.yml`: Node 22, `npm 
 Ran locally:
 
 - `node --check scripts/build.mjs`
-- `node scripts/build.mjs --self-test-only` (virtual module graph, cyclic function declarations, static `import()`, and the real `src/engine.js` graph: 10 slots, one hero in slot 7, fence 600, pause, speeds 3 and rejected 2)
+- `node scripts/build.mjs --self-test-only` (virtual module graph, cyclic function declarations, static `import()`, and the real `src/engine.js` graph: 10 slots, one hero in slot 2, fence 600, pause, speeds 3 and rejected 2)
 - `node scripts/build.mjs --exec` (writes `dist/`, `node --check` on `dist/static/assets/app.js`, then runs the scaffold bundle in Node under a DOM stand-in until `innerHTML` is set)
 
 Those original packaging checks did not exercise a browser. Later integration testing is recorded in `BROWSER_ACCEPTANCE.md`. The DOM stand-in is not a browser.

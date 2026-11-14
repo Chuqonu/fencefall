@@ -1,4 +1,5 @@
-import { ARENA, DIFFICULTIES, canPlan, hitSlot } from '../shared.js';
+import { ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry } from '../shared.js';
+import { previewMerge } from '../systems/merges.js';
 import { formatNumber, localize } from '../i18n.js';
 
 const SPEEDS = [1, 1.5, 3];
@@ -7,6 +8,8 @@ const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 
 /**
  * App shell and live HUD.
  * Pointer hits map the canvas CSS box linearly onto the 360×640 arena.
+ * Dragging a defender onto another slot moves it or merges it while planning.
+ * An illegal drop snaps back and leaves the board unchanged.
  * Renderer resize must use that same full-box mapping (no inner letterbox).
  * `pause` is sent with no payload and is a toggle; `resume` stays the continue-run action.
  * Containers marked data-ui are never cleared here — panel modules own their children.
@@ -147,12 +150,18 @@ export function mountShell(root, api) {
     'data-testid': 'menu-root'
   });
 
-  shell.append(topbar, body, hud, overlayRoot, menuRoot);
+  const ghost = el('div', {
+    class: 'drag-ghost',
+    'data-testid': 'drag-ghost',
+    hidden: true
+  });
+  shell.append(topbar, body, hud, overlayRoot, menuRoot, ghost);
   root.replaceChildren(shell);
 
   let dead = false;
   let pointer = null;
   let suppressClick = false;
+  let snapToken = 0;
   let clickTimer = 0;
   let lastKey = '';
   let lastPaint = 0;
@@ -162,24 +171,53 @@ export function mountShell(root, api) {
     if (dead || event.button !== 0) return;
     pointer = {
       id: event.pointerId,
-      index: indexFromClient(event.clientX, event.clientY)
+      index: indexFromClient(event.clientX, event.clientY),
+      x: event.clientX,
+      y: event.clientY,
+      active: false
     };
     try { canvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
+  }
+
+  function onPointerMove(event) {
+    if (dead || !pointer || pointer.id !== event.pointerId) return;
+    const dx = event.clientX - pointer.x;
+    const dy = event.clientY - pointer.y;
+    if (!pointer.active && Math.hypot(dx, dy) < 10) return;
+    const state = readState();
+    const start = pointer.index;
+    const unit = state && validSlot(start, state) ? state.slots[start]?.unit : null;
+    if (!unit) return;
+    pointer.active = true;
+    const hover = indexFromClient(event.clientX, event.clientY);
+    showGhost(event.clientX, event.clientY, unit, hover >= 0 && hover !== start && !dropWouldCommit(state, start, hover));
+    api.act('hover', { index: hover });
   }
 
   function onPointerUp(event) {
     if (dead) return;
     if (pointer && pointer.id !== event.pointerId) return;
     const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY);
+    const dragging = Boolean(pointer?.active);
     pointer = null;
     suppressClick = true;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => { suppressClick = false; }, 400);
-    handleGesture(start, indexFromClient(event.clientX, event.clientY));
+    const end = indexFromClient(event.clientX, event.clientY);
+    if (dragging) finishDrag(start, end);
+    else {
+      hideGhost();
+      handleGesture(start, end);
+    }
   }
 
   function onPointerCancel() {
+    const start = pointer?.index;
+    const dragging = Boolean(pointer?.active);
     pointer = null;
+    api.act('hover', { index: -1 });
+    if (dragging && validSlot(start, readState())) snapGhost(start);
+    else hideGhost();
   }
 
   function onClick(event) {
@@ -293,6 +331,7 @@ export function mountShell(root, api) {
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('click', onClick);
@@ -533,6 +572,74 @@ export function mountShell(root, api) {
     api.act('mergeConfirm', { from, to });
   }
 
+  function showGhost(x, y, unit, illegal) {
+    ghost.hidden = false;
+    ghost.classList.toggle('is-illegal', Boolean(illegal));
+    const label = unit?.kind === 'hero' || unit?.type === 'hero'
+      ? 'H'
+      : String(unit?.type || unit?.kind || '').slice(0, 4);
+    setText(ghost, label);
+    ghost.style.left = `${x}px`;
+    ghost.style.top = `${y}px`;
+  }
+
+  function hideGhost() {
+    snapToken += 1;
+    ghost.hidden = true;
+    ghost.classList.remove('is-illegal', 'is-snapping');
+    setText(ghost, '');
+  }
+
+  function snapGhost(index) {
+    const center = slotClientCenter(index);
+    if (!center) {
+      hideGhost();
+      return;
+    }
+    ghost.classList.add('is-snapping');
+    ghost.style.left = `${center.x}px`;
+    ghost.style.top = `${center.y}px`;
+    const token = ++snapToken;
+    setTimeout(() => {
+      if (token === snapToken) hideGhost();
+    }, 160);
+  }
+
+  function slotClientCenter(index) {
+    const rect = canvas.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) return null;
+    const slot = slotGeometry(index);
+    return {
+      x: rect.left + (slot.x / ARENA.width) * rect.width,
+      y: rect.top + (slot.y / ARENA.height) * rect.height
+    };
+  }
+
+  function dropWouldCommit(state, from, to) {
+    if (!state || !canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return false;
+    const origin = state.slots[from]?.unit;
+    const target = state.slots[to]?.unit;
+    if (!origin) return false;
+    if (!target) return true;
+    try { return previewMerge(state, from, to).ok === true; }
+    catch { return false; }
+  }
+
+  function finishDrag(from, to) {
+    api.act('hover', { index: -1 });
+    const state = readState();
+    if (!state || !validSlot(from, state) || !state.slots[from]?.unit) {
+      hideGhost();
+      return;
+    }
+    const outcome = api.act('dragDrop', { from, to });
+    if (outcome?.ok && !outcome.snapped) {
+      hideGhost();
+      return;
+    }
+    snapGhost(from);
+  }
+
   function indexFromClient(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return -1;
@@ -548,6 +655,7 @@ export function mountShell(root, api) {
     clearInterval(timer);
     clearTimeout(clickTimer);
     canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('click', onClick);

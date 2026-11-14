@@ -17,7 +17,7 @@ test('poison and burning remain saveable at every fixed-step cadence boundary', 
   const state = createRun({seed:12, profile, runId:'live-status-save'});
   const enemy = spawnEnemy(state, 'brute', {x:180, y:300});
   for (const type of ['poison','burn']) {
-    applyStatus(enemy, {type,power:3.6,remaining:4,sourceId:state.slots[7].unit.id,stacks:1,tickTimer:0});
+    applyStatus(enemy, {type,power:3.6,remaining:4,sourceId:state.slots[2].unit.id,stacks:1,tickTimer:0});
   }
   const store = memoryStorage();
   for (let i=0;i<239;i++) {
@@ -31,7 +31,7 @@ test('poison and burning remain saveable at every fixed-step cadence boundary', 
 test('live offscreen piercing shots round-trip until combat removes them', () => {
   const profile = createProfile();
   const state = createRun({seed:17, profile, runId:'live-projectile-save'});
-  state.slots[7].unit.upgrades.pierce = 2;
+  state.slots[2].unit.upgrades.pierce = 2;
   spawnEnemy(state,'brute',{x:14,y:ARENA.fenceY-14});
   const store = memoryStorage();
   let offscreen = null;

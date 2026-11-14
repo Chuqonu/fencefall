@@ -235,11 +235,11 @@ test('illegal merges protect the hero and reject unequal or impossible pairs', (
   const state = board(4, 'illegal');
   put(state, 0, 'bolt', 1);
   put(state, 1, 'bolt', 2);
-  put(state, 2, 'fire', 3);
+  put(state, 6, 'fire', 3);
   rejectMerge(state, 0, 1, 'rank_mismatch');
-  rejectMerge(state, 0, 2, 'rank_mismatch');
-  rejectMerge(state, 0, 7, 'hero_protected');
-  rejectMerge(state, 7, 1, 'hero_protected');
+  rejectMerge(state, 0, 6, 'rank_mismatch');
+  rejectMerge(state, 0, 2, 'hero_protected');
+  rejectMerge(state, 2, 1, 'hero_protected');
   rejectMerge(state, 0, 0, 'same_slot');
   rejectMerge(state, 0, 5, 'empty_slot');
   rejectMerge(state, -1, 0, 'invalid_slot');
@@ -299,8 +299,8 @@ test('identical hybrids rank up and different hybrids stay put', () => {
   assert.equal(merged.unit.kind, 'hybrid');
   assert.equal(state.slots[0].unit, null);
   assert.equal(state.stats.merges, 1);
-  put(state, 2, 'hailspike', 3, 'hybrid');
-  rejectMerge(state, 2, 1, 'hybrid_locked');
+  put(state, 6, 'hailspike', 3, 'hybrid');
+  rejectMerge(state, 6, 1, 'hybrid_locked');
   put(state, 3, 'cinderbolt', 2, 'hybrid');
   rejectMerge(state, 3, 1, 'rank_mismatch');
   put(state, 4, 'cinderbolt', 4, 'hybrid');
@@ -382,7 +382,7 @@ test('a full board with one upgrade left keeps that card and replace cards', () 
   const saved = clone(state.draft.options);
   const towerIndex = state.draft.options.findIndex(card => card.kind === 'tower');
   assert.equal(chooseDraft(state, towerIndex).ok, true);
-  assert.equal(placePending(state, 7, {replace: true}).reason, 'hero_protected');
+  assert.equal(placePending(state, 2, {replace: true}).reason, 'hero_protected');
   assert.equal(state.phase, 'placing');
   assert.deepEqual(slotIds(state), ids);
   assert.equal(cancelPlacement(state).ok, true);
@@ -404,8 +404,8 @@ test('a fully capped board falls back to three replace cards', () => {
   assert.equal(new Set(state.draft.options.map(card => card.type)).size, 3);
   const card = state.draft.options[0];
   assert.equal(chooseDraft(state, 0).ok, true);
-  assert.equal(placePending(state, 7, {replace: true}).reason, 'hero_protected');
-  assert.equal(state.slots[7].unit.id, before[7]);
+  assert.equal(placePending(state, 2, {replace: true}).reason, 'hero_protected');
+  assert.equal(state.slots[2].unit.id, before[2]);
   assert.equal(placePending(state, 0, {replace: false}).reason, 'occupied');
   assert.equal(state.slots[0].unit.id, before[0]);
   assert.equal(placePending(state, 0, {replace: true}).ok, true);
@@ -415,7 +415,7 @@ test('a fully capped board falls back to three replace cards', () => {
   assert.equal(state.slots[0].unit.type, card.type);
   assert.equal(state.slots[0].unit.rank, 1);
   assert.notEqual(state.slots[0].unit.id, before[0]);
-  assert.equal(state.slots[7].unit.kind, 'hero');
+  assert.equal(state.slots[2].unit.kind, 'hero');
   assert.equal(state.slots.filter(slot => slot.unit).length, 10);
 });
 
@@ -435,8 +435,8 @@ test('cancelling placement keeps the offer and does not grant a second tower', (
     assert.equal(chooseDraft(state, towerIndex).ok, true);
     assert.equal(state.phase, 'placing');
     assert.deepEqual(state.draft.options, options);
-    assert.equal(placePending(state, 7).reason, 'hero_protected');
-    assert.equal(state.slots[7].unit.id, heroId);
+    assert.equal(placePending(state, 2).reason, 'hero_protected');
+    assert.equal(state.slots[2].unit.id, heroId);
     assert.equal(state.slots.filter(slot => slot.unit?.kind === 'tower').length, 0);
     assert.equal(chooseDraft(state, (towerIndex + 1) % 3).reason, 'already_placing');
     assert.equal(cancelPlacement(state).ok, true);
@@ -456,7 +456,7 @@ test('cancelling placement keeps the offer and does not grant a second tower', (
   assert.equal(state.slots.filter(item => item.unit?.kind === 'tower').length, 1);
   assert.equal(state.slots[slot].unit.type, options[towerIndex].type);
   assert.equal(state.slots[slot].unit.rank, 1);
-  assert.equal(state.slots[7].unit.id, heroId);
+  assert.equal(state.slots[2].unit.id, heroId);
   assert.equal(state.xp, xp);
   assert.equal(updateDrafts(state).reason, 'not_ready');
   assert.equal(placePending(state, slot).reason, 'not_placing');
@@ -560,7 +560,7 @@ test('equipment and permanent purchases charge catalog prices and apply only whe
     reward: 0
   });
   const geared = createRun({seed: 70, difficulty: 'normal', profile, runId: 'gear-hero'});
-  const stats = getHeroStats(geared.slots[7].unit, geared);
+  const stats = getHeroStats(geared.slots[2].unit, geared);
   assert.equal(stats.damage, 21.2);
   assert.equal(stats.range, 356);
   assert.equal(stats.critChance, 0.12);
@@ -651,10 +651,10 @@ test('a valid profile and run save independently and reload paused', () => {
   const profile = createProfile('en');
   profile.currency = 21;
   const state = createRun({seed: 42, difficulty: 'hard', profile, runId: 'run-live'});
-  state.slots[7].unit.upgrades.strike = 2;
+  state.slots[2].unit.upgrades.strike = 2;
   state.xp = state.nextDraftXp;
   assert.equal(updateDrafts(state).ok, true);
-  assert.equal(state.slots[7].unit.upgrades.strike, 2);
+  assert.equal(state.slots[2].unit.upgrades.strike, 2);
   state.hiddenPaused = true;
   state.accumulator = 0.25;
   state.events.push({type: 'ui', time: 1});
@@ -679,7 +679,7 @@ test('a valid profile and run save independently and reload paused', () => {
   assert.deepEqual(loaded.events, []);
   assert.equal(loaded.draft.options.length, 3);
   assert.deepEqual(loaded.draft.options.map(card => card.id), state.draft.options.map(card => card.id));
-  assert.equal(loaded.slots[7].unit.upgrades.strike, 2);
+  assert.equal(loaded.slots[2].unit.upgrades.strike, 2);
   assert.equal(loaded.slots.filter(slot => slot.unit?.kind === 'hero').length, 1);
   assert.equal(loaded.systems.progression.marked, true);
   assert.equal(loaded.director.queue[0].kind, 'shambler');
@@ -743,7 +743,7 @@ test('invalid imports and rejected writes preserve the bytes already stored', ()
   assert.equal(loadRun(store).slots[0].unit.rank, 2);
 
   const twoHeroes = JSON.parse(rawRun);
-  twoHeroes.slots[0].unit = {...twoHeroes.slots[7].unit, id: 'u9'};
+  twoHeroes.slots[0].unit = {...twoHeroes.slots[2].unit, id: 'u9'};
   const samples = [
     null,
     '',
@@ -765,7 +765,7 @@ test('invalid imports and rejected writes preserve the bytes already stored', ()
   assert.equal(loadRun(store).slots[0].unit.rank, 2);
 
   const broken = createRun({seed: 1, difficulty: 'normal', runId: 'missing-hero'});
-  broken.slots[7].unit = null;
+  broken.slots[2].unit = null;
   assert.equal(saveRun(broken, store).ok, false);
   const brokeProfile = createProfile();
   brokeProfile.settings.language = 'nope';

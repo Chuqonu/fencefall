@@ -24,7 +24,7 @@ MODEL PREFERENCE: The user explicitly requires Extra High reasoning AND Fast thr
 
 ## Concrete design defaults (use these unless a better implementation preserves user requirements)
 
-- Hero occupies one of the 10 slots, initially rear-center; clearly marked non-mergeable. Allow moving units during a paused planning phase using tap-select then tap-target (drag can be optional). Empty slots permit placement. Hero movement is placement only, never active combat control.
+- Hero occupies one of the 10 slots, initially the middle of the front row (slot 2); clearly marked non-mergeable. Allow moving units during a paused planning phase by dragging onto a slot. Empty slots permit placement. A compatible drop merges. An illegal drop snaps back. Hero movement is placement only, never active combat control.
 - The fence is immediately in front of both rows. Use a compact portrait logical coordinate system that scales consistently. Define ranges so rear-row defenders can actually engage threats; do not accidentally make most of their circles unreachable.
 - Seeded PRNG. Sample bounded/truncated Gaussian spawn X by rejection, not hard-clamping a Gaussian and piling enemies on edges. Small time-smoothed lateral drift must never create discrete columns. Render enough enemies to see center weighting and variation.
 - First draft early (roughly 20–40 seconds of meaningful play). Maintain an explicit XP/progress indicator and a predictable route to further drafts. Each draft has exactly three valid options; avoid impossible placements and unusable choices. A full board should still allow sensible hero upgrades, same-type merges or an explicit replacement/merge flow.

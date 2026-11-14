@@ -345,21 +345,21 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(state.stats.damage, 0);
   });
 
-  test('a run starts with one rear-center hero and keeps that hero through contact', () => {
+  test('a run starts with one front-center hero and keeps that hero through contact', () => {
     const state = fresh(5, {runId: 'one-hero'});
     assert.equal(state.slots.length, 10);
     assert.equal(state.slots.filter(slot => slot.unit).length, 1);
     assert.equal(heroCount(state), 1);
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     assert.equal(hero.kind, 'hero');
     assert.equal(hero.type, 'hero');
     assert.equal(hero.rank, 1);
     assert.deepEqual(hero.upgrades, {});
     assert.equal(hero.cooldown, 0);
-    assert.equal(state.slots[7].row, 1);
-    assert.equal(state.slots[7].col, 2);
-    assert.equal(state.slots[7].x, 180);
-    assert.equal(state.slots[7].y, ARENA.backY);
+    assert.equal(state.slots[2].row, 0);
+    assert.equal(state.slots[2].col, 2);
+    assert.equal(state.slots[2].x, 180);
+    assert.equal(state.slots[2].y, ARENA.frontY);
     assert.equal(state.fence.maxHp, DIFFICULTIES.normal.fence);
     hero.hp = 500;
     const heroId = hero.id;
@@ -370,16 +370,16 @@ describe('simulation', {concurrency: 1}, () => {
       updateCombat(state, STEP);
     });
     assert.equal(heroCount(state), 1);
-    assert.equal(state.slots[7].unit.id, heroId);
-    assert.equal(state.slots[7].unit.kind, 'hero');
-    assert.equal(state.slots[7].unit.type, 'hero');
-    assert.equal(state.slots[7].unit.hp ?? 500, 500);
+    assert.equal(state.slots[2].unit.id, heroId);
+    assert.equal(state.slots[2].unit.kind, 'hero');
+    assert.equal(state.slots[2].unit.type, 'hero');
+    assert.equal(state.slots[2].unit.hp ?? 500, 500);
     assert.equal(state.slots.filter(slot => slot.unit && slot.unit.kind !== 'hero').length, 0);
   });
 
   test('hero upgrades stay on the single hero and invalid upgrades do nothing', () => {
     const state = fresh(6, {runId: 'hero-up'});
-    const heroId = state.slots[7].unit.id;
+    const heroId = state.slots[2].unit.id;
     const ids = Object.keys(HERO_UPGRADES);
     assert.ok(ids.length >= 6, `upgrade count ${ids.length}`);
     let applied = null;
@@ -393,21 +393,21 @@ describe('simulation', {concurrency: 1}, () => {
     }
     assert.ok(applied, 'at least one documented hero upgrade should apply');
     assert.equal(heroCount(state), 1);
-    assert.equal(state.slots[7].unit.id, heroId);
-    assert.equal(state.slots[7].unit.kind, 'hero');
+    assert.equal(state.slots[2].unit.id, heroId);
+    assert.equal(state.slots[2].unit.kind, 'hero');
     assert.equal(state.xp, 0);
     assert.equal(state.nextDraftXp, 8);
     assert.equal(state.slots.filter(slot => slot.unit).length, 1);
     const bad = applyHeroUpgrade(state, 'not-a-real-upgrade');
     assert.equal(bad.ok, false);
-    assert.equal(state.slots[7].unit.id, heroId);
+    assert.equal(state.slots[2].unit.id, heroId);
     assert.equal(heroCount(state), 1);
     assert.equal(state.xp, 0);
   });
 
   test('hero and tower ranges reach from the rear row and stats stay finite', () => {
     const state = fresh(7, {runId: 'ranges'});
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     const rng = state.rng;
     const heroStats = getHeroStats(hero, state);
     const viaCatalog = getUnitStats(hero, state);
@@ -598,7 +598,7 @@ describe('simulation', {concurrency: 1}, () => {
     }
 
     const state = fresh(41, {runId: 'kill-once'});
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     const enemy = spawnEnemy(state, 'shambler', {x: 180, y: 30});
     enemy.hp = 40;
     enemy.armor = 0;
@@ -712,7 +712,7 @@ describe('simulation', {concurrency: 1}, () => {
     assert.ok(Number.isFinite(b.hp));
 
     const state = fresh(52, {runId: 'dot-kill'});
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     hero.cooldown = 100;
     const enemy = spawnEnemy(state, 'shambler', {x: 180, y: 15, hp: 8, maxHp: 8});
     enemy.hp = 8;
@@ -887,7 +887,7 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(overkill.state.fence.hp, 0);
 
     const state = fresh(71, {runId: 'fence-hero'});
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     hero.hp = 500;
     hero.cooldown = 100;
     const boss = spawnEnemy(state, 'boss', {x: 200, y: 10});
@@ -900,9 +900,9 @@ describe('simulation', {concurrency: 1}, () => {
     assert.ok(state.fence.hp < before, 'boss at the fence did not attack it');
     assert.equal(state.fence.hp >= 0, true);
     assert.equal(heroCount(state), 1);
-    assert.equal(state.slots[7].unit.id, hero.id);
-    assert.equal(state.slots[7].unit.kind, 'hero');
-    assert.equal(state.slots[7].unit.hp ?? 500, 500);
+    assert.equal(state.slots[2].unit.id, hero.id);
+    assert.equal(state.slots[2].unit.kind, 'hero');
+    assert.equal(state.slots[2].unit.hp ?? 500, 500);
   });
 
   test('projectiles move by speed*dt and still collide when the speed control is 3x', () => {
@@ -1120,7 +1120,7 @@ describe('simulation', {concurrency: 1}, () => {
     dirty.wave = 4;
     dirty.waveTime = 6;
     dirty.director = {nextWave: 4, queue: [{kind: 'boss'}], done: false};
-    dirty.slots[7].unit.cooldown = 2;
+    dirty.slots[2].unit.cooldown = 2;
     dirty.stats.damage = 50;
     moveFor(dirty, 0.2);
 
@@ -1148,8 +1148,8 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(restarted.fence.maxHp, DIFFICULTIES.hard.fence);
     assert.equal(restarted.stats.damage, 0);
     assert.equal(heroCount(restarted), 1);
-    assert.equal(restarted.slots[7].unit.kind, 'hero');
-    assert.equal(restarted.slots[7].unit.cooldown, 0);
+    assert.equal(restarted.slots[2].unit.kind, 'hero');
+    assert.equal(restarted.slots[2].unit.cooldown, 0);
     assert.equal(restarted.slots.filter(slot => slot.unit).length, 1);
     assert.equal(dirty.kills, 3);
     assert.equal(dirty.enemies.length >= 1, true);
@@ -1162,7 +1162,7 @@ describe('simulation', {concurrency: 1}, () => {
     assert.ok(scheduleSize >= 5, `wave schedule size ${scheduleSize}`);
     const state = fresh(120, {difficulty: 'easy', runId: 'waves'});
     state.initialized = true;
-    const hero = state.slots[7].unit;
+    const hero = state.slots[2].unit;
     hero.hp = 500;
     const seen = new Map();
     const steps = Math.round(24 / STEP);
@@ -1178,8 +1178,8 @@ describe('simulation', {concurrency: 1}, () => {
     assert.ok(seen.size > 0, 'no enemies spawned in the first 24s');
     assert.equal(state.director.done, false);
     assert.equal(heroCount(state), 1);
-    assert.equal(state.slots[7].unit.id, hero.id);
-    assert.equal(state.slots[7].unit.hp ?? 500, 500);
+    assert.equal(state.slots[2].unit.id, hero.id);
+    assert.equal(state.slots[2].unit.hp ?? 500, 500);
     const info = getWaveInfo(state);
     assert.ok(info && typeof info === 'object');
     const xs = [...seen.values()];

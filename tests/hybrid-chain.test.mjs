@@ -23,7 +23,10 @@ function memoryStorage() {
 function board(seed, runId) {
   const profile = createProfile();
   const state = createRun({seed, runId, difficulty: 'normal', profile});
-  state.slots[7].unit.cooldown = 600;
+  const hero = state.slots[2].unit;
+  state.slots[7].unit = hero;
+  state.slots[2].unit = null;
+  hero.cooldown = 600;
   return {state, profile};
 }
 

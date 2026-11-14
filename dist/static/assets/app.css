@@ -512,8 +512,35 @@ img, svg, video { max-width: 100%; height: auto; }
 [data-ui="menu"].is-open { display: block; }
 
 .shell.is-draft [data-ui="overlay"] {
-  padding: 8px 8px 10px;
+  padding: 8px;
+  background: transparent;
+  pointer-events: none;
+  bottom: auto;
+  max-height: min(42vh, 280px);
+  overflow: auto;
 }
+
+.shell.is-draft [data-ui="overlay"] > * { pointer-events: auto; }
+
+.drag-ghost {
+  position: fixed;
+  z-index: 36;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  border: 2px solid #f0cb72;
+  background: rgba(18, 33, 40, 0.94);
+  color: #f1eee2;
+  font: 700 11px/1.1 sans-serif;
+  transform: translate(-50%, -50%);
+}
+
+.drag-ghost[hidden] { display: none; }
+.drag-ghost.is-illegal { border-color: #e7a08a; }
+.drag-ghost.is-snapping { transition: left 140ms ease, top 140ms ease; }
 
 /* Placing stays a top banner so the defender slots (bottom of the field) still receive taps.
    Direct children keep clicks; empty overlay space does not block the canvas. */
