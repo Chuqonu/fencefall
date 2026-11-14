@@ -1693,8 +1693,8 @@ const ENEMIES = {
   boss: {
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. Below half health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
-      zh: '首领。生命低于一半时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
+      en: 'Boss. At or below 0.5 of its maximum health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
+      zh: '首领。生命降至最大生命的 0.5 或以下时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,
@@ -3253,6 +3253,8 @@ const ROWS = [
   ['rewardBonusNote', 'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.', '报酬加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。'],
   ['equipReplaces', 'Choosing another item for the same slot replaces the equipped one.', '为同一位置选择另一件装备时，会替换当前装备。'],
   ['codexRankNote', 'Listed tower and recipe numbers are the catalog stats. Rank raises a unit from 1 to 4 without changing its identity.', '列出的防御塔与配方数值来自图鉴。阶数会把单位从 1 阶提升到最高 4 阶，种类保持不变。'],
+  ['codexReady', 'Both parents are on the field', '两种材料都在场上'],
+  ['codexWaiting', 'Build both parents first', '先放好两种材料'],
   ['settingsKeepRun', 'Language, sound, motion, and difficulty choices keep the current run.', '语言、声音、动效和难度的更改都会保留当前对局。'],
   ['difficultyNextRun', 'The highlighted difficulty is used the next time you start a run.', '高亮的难度会在下一局开始时使用。'],
   ['difficultyRewards', 'Higher difficulties increase enemy pressure and the reward multiplier.', '更高的难度会提高敌人压力和报酬倍率。'],
@@ -17883,12 +17885,31 @@ function renderRecipes(ctx) {
   rules.append(badge(ctx, t(api, 'heroProtected')));
   wrap.append(rules);
   const recipes = catalogEntries(RECIPES);
+  const fieldTypes = boardParentTypes(ctx.run);
   if (!recipes.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'recipes')}));
   for (const recipe of recipes) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-recipe-${cssId(recipe.id)}`});
     card.append(h(doc, 'h3', {text: entryName(recipe, lang, recipe.id)}));
     const parents = Array.isArray(recipe.parents) ? recipe.parents : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
     card.append(line(ctx, t(api, 'ingredients'), parents.map(parent => parentName(parent, lang)).join(' + ') || '—'));
+    const ready = parentsReady(parents, fieldTypes);
+    card.setAttribute('data-codex-ready', ready ? 'true' : 'false');
+    const status = ready
+      ? tx(api, lang, 'codexReady', 'Both parents are on the field', '两种材料都在场上')
+      : tx(api, lang, 'codexWaiting', 'Build both parents first', '先放好两种材料');
+    const mark = h(doc, ready ? 'span' : 'p', {
+      className: ready ? 'badge' : 'muted',
+      text: status,
+      'data-testid': `codex-recipe-status-${cssId(recipe.id)}`,
+      'data-state': ready ? 'ready' : 'waiting'
+    });
+    if (ready) {
+      const badges = h(doc, 'div', {className: 'meta-badges'});
+      badges.append(mark);
+      card.append(badges);
+    } else {
+      card.append(mark);
+    }
     const description = entryDesc(recipe, lang);
     if (description) card.append(h(doc, 'p', {text: description}));
     card.append(statBlock(ctx, unitStatsOf(recipe)));
@@ -18630,6 +18651,40 @@ function entryDesc(entry, lang) {
 function parentName(type, lang) {
   if (type && typeof type === 'object') return entryName(type, lang, type.id || '');
   return entryName(TOWERS?.[type], lang, String(type ?? ''));
+}
+
+function parentTypeId(parent) {
+  if (typeof parent === 'string') return parent.trim();
+  if (parent && typeof parent === 'object') {
+    if (typeof parent.type === 'string' && parent.type.trim()) return parent.type.trim();
+    if (typeof parent.id === 'string' && parent.id.trim()) return parent.id.trim();
+  }
+  return '';
+}
+
+/** Base tower types currently placed on the battle board. Hybrids and the hero do not count as parents. */
+function boardParentTypes(run) {
+  const present = new Set();
+  const slots = Array.isArray(run?.slots) ? run.slots : [];
+  for (const slot of slots) {
+    const unit = slot && typeof slot === 'object' ? slot.unit : null;
+    if (!unit || typeof unit !== 'object') continue;
+    if (unit.kind === 'hero' || unit.kind === 'hybrid' || unit.type === 'hero') continue;
+    const type = typeof unit.type === 'string' ? unit.type : '';
+    if (BASE_TYPES.includes(type)) present.add(type);
+  }
+  return present;
+}
+
+function parentsReady(parents, present) {
+  if (!Array.isArray(parents) || parents.length < 2 || !present) return false;
+  const ids = [];
+  for (const parent of parents) {
+    const id = parentTypeId(parent);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  if (ids.length < 2) return false;
+  return ids.every(id => present.has(id));
 }
 
 function unitStatsOf(entry) {

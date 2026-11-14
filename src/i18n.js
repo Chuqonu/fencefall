@@ -481,6 +481,8 @@ const ROWS = [
   ['rewardBonusNote', 'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.', '报酬加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。'],
   ['equipReplaces', 'Choosing another item for the same slot replaces the equipped one.', '为同一位置选择另一件装备时，会替换当前装备。'],
   ['codexRankNote', 'Listed tower and recipe numbers are the catalog stats. Rank raises a unit from 1 to 4 without changing its identity.', '列出的防御塔与配方数值来自图鉴。阶数会把单位从 1 阶提升到最高 4 阶，种类保持不变。'],
+  ['codexReady', 'Both parents are on the field', '两种材料都在场上'],
+  ['codexWaiting', 'Build both parents first', '先放好两种材料'],
   ['settingsKeepRun', 'Language, sound, motion, and difficulty choices keep the current run.', '语言、声音、动效和难度的更改都会保留当前对局。'],
   ['difficultyNextRun', 'The highlighted difficulty is used the next time you start a run.', '高亮的难度会在下一局开始时使用。'],
   ['difficultyRewards', 'Higher difficulties increase enemy pressure and the reward multiplier.', '更高的难度会提高敌人压力和报酬倍率。'],

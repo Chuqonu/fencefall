@@ -687,12 +687,31 @@ function renderRecipes(ctx) {
   rules.append(badge(ctx, t(api, 'heroProtected')));
   wrap.append(rules);
   const recipes = catalogEntries(RECIPES);
+  const fieldTypes = boardParentTypes(ctx.run);
   if (!recipes.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'recipes')}));
   for (const recipe of recipes) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-recipe-${cssId(recipe.id)}`});
     card.append(h(doc, 'h3', {text: entryName(recipe, lang, recipe.id)}));
     const parents = Array.isArray(recipe.parents) ? recipe.parents : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
     card.append(line(ctx, t(api, 'ingredients'), parents.map(parent => parentName(parent, lang)).join(' + ') || '—'));
+    const ready = parentsReady(parents, fieldTypes);
+    card.setAttribute('data-codex-ready', ready ? 'true' : 'false');
+    const status = ready
+      ? tx(api, lang, 'codexReady', 'Both parents are on the field', '两种材料都在场上')
+      : tx(api, lang, 'codexWaiting', 'Build both parents first', '先放好两种材料');
+    const mark = h(doc, ready ? 'span' : 'p', {
+      className: ready ? 'badge' : 'muted',
+      text: status,
+      'data-testid': `codex-recipe-status-${cssId(recipe.id)}`,
+      'data-state': ready ? 'ready' : 'waiting'
+    });
+    if (ready) {
+      const badges = h(doc, 'div', {className: 'meta-badges'});
+      badges.append(mark);
+      card.append(badges);
+    } else {
+      card.append(mark);
+    }
     const description = entryDesc(recipe, lang);
     if (description) card.append(h(doc, 'p', {text: description}));
     card.append(statBlock(ctx, unitStatsOf(recipe)));
@@ -1434,6 +1453,40 @@ function entryDesc(entry, lang) {
 function parentName(type, lang) {
   if (type && typeof type === 'object') return entryName(type, lang, type.id || '');
   return entryName(TOWERS?.[type], lang, String(type ?? ''));
+}
+
+function parentTypeId(parent) {
+  if (typeof parent === 'string') return parent.trim();
+  if (parent && typeof parent === 'object') {
+    if (typeof parent.type === 'string' && parent.type.trim()) return parent.type.trim();
+    if (typeof parent.id === 'string' && parent.id.trim()) return parent.id.trim();
+  }
+  return '';
+}
+
+/** Base tower types currently placed on the battle board. Hybrids and the hero do not count as parents. */
+function boardParentTypes(run) {
+  const present = new Set();
+  const slots = Array.isArray(run?.slots) ? run.slots : [];
+  for (const slot of slots) {
+    const unit = slot && typeof slot === 'object' ? slot.unit : null;
+    if (!unit || typeof unit !== 'object') continue;
+    if (unit.kind === 'hero' || unit.kind === 'hybrid' || unit.type === 'hero') continue;
+    const type = typeof unit.type === 'string' ? unit.type : '';
+    if (BASE_TYPES.includes(type)) present.add(type);
+  }
+  return present;
+}
+
+function parentsReady(parents, present) {
+  if (!Array.isArray(parents) || parents.length < 2 || !present) return false;
+  const ids = [];
+  for (const parent of parents) {
+    const id = parentTypeId(parent);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  if (ids.length < 2) return false;
+  return ids.every(id => present.has(id));
 }
 
 function unitStatsOf(entry) {
