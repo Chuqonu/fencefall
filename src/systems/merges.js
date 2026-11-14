@@ -4,6 +4,7 @@
 import { BASE_TYPES, canPlan, createUnit, emit } from '../shared.js';
 import { HYBRID_RANK_MAX, findRecipe, getRecipe, isRecipeId } from '../data/recipes.js';
 import { TOWERS } from '../data/towers.js';
+import { t } from '../i18n.js';
 
 export const PREVIEW_UNIT_ID = 'preview';
 
@@ -16,18 +17,65 @@ const BASE_LABELS = Object.freeze({
   support: Object.freeze({ en: 'Support', zh: '支援' }),
 });
 
-// Stable reason codes. Preview also returns bilingual description text.
+// Reason codes stay stable. Each catalog key is the player-facing reason.
+// empty_slot uses missingUnit, the line for two occupied slots.
+const REASON_KEYS = Object.freeze({
+  not_planning: 'notPlanning',
+  invalid_slot: 'invalidSlot',
+  same_slot: 'sameSlot',
+  empty_slot: 'missingUnit',
+  hero_protected: 'heroProtected',
+  rank_mismatch: 'rankMismatch',
+  rank_cap: 'maxRank',
+  hybrid_locked: 'hybridMix',
+  no_recipe: 'noRecipe',
+  invalid_merge: 'invalidMerge',
+});
+
+// Sentence after the reason. A failed preview leads with the catalog reason.
+const REASON_DETAIL = Object.freeze({
+  not_planning: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的格子。' }),
+  same_slot: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  empty_slot: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  hero_protected: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  rank_mismatch: Object.freeze({ en: 'Unequal ranks stay as they are.', zh: '不同阶会原样保留。' }),
+  rank_cap: Object.freeze({ en: 'Same-type merges stop at rank 4.', zh: '同型合成到 4 阶为止。' }),
+  hybrid_locked: Object.freeze({ en: 'A different type stays as it is.', zh: '不同的类型会原样保留。' }),
+  no_recipe: Object.freeze({ en: 'Both units stay.', zh: '双方都保留。' }),
+  invalid_merge: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+});
+
+function reasonLead(key) {
+  const en = t('en', key).trim();
+  const zh = t('zh', key).trim();
+  return {
+    en: /[.!?]$/.test(en) ? en : `${en}.`,
+    zh: /[。！？]$/.test(zh) ? zh : `${zh}。`,
+  };
+}
+
+function reasonCopy(code) {
+  const lead = reasonLead(REASON_KEYS[code]);
+  const detail = REASON_DETAIL[code];
+  return Object.freeze({
+    en: `${lead.en} ${detail.en}`,
+    zh: `${lead.zh}${detail.zh}`,
+  });
+}
+
+// Stable reason codes. Preview description leads with that player-facing reason.
 export const MERGE_REASONS = Object.freeze({
-  not_planning: Object.freeze({ en: 'Pause the battle, or wait for a draft, before merging.', zh: '请先暂停战斗，或在选秀期间再合成。' }),
-  invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的槽位。' }),
-  same_slot: Object.freeze({ en: 'Choose two different slots.', zh: '请选择两个不同的槽位。' }),
-  empty_slot: Object.freeze({ en: 'Both slots need a unit. Nothing was changed.', zh: '两个槽位都要有单位。没有改动。' }),
-  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄永不合成，也不能被替换。' }),
-  rank_mismatch: Object.freeze({ en: 'Both units must be the same rank. Unequal ranks stay as they are.', zh: '双方必须同阶。不同阶会原样保留。' }),
-  rank_cap: Object.freeze({ en: 'Rank 4 is the cap. Same-type merges stop there.', zh: '4 阶已是上限，同型不能再合成。' }),
-  hybrid_locked: Object.freeze({ en: 'A hybrid only merges with the same hybrid at the same rank.', zh: '杂交单位只能与同名同阶的杂交单位再合成。' }),
-  no_recipe: Object.freeze({ en: 'These tower types have no recipe. Both units stay.', zh: '这两种塔没有配方，双方都保留。' }),
-  invalid_merge: Object.freeze({ en: 'These units cannot be merged. Nothing was changed.', zh: '这些单位不能合成。没有改动。' }),
+  not_planning: reasonCopy('not_planning'),
+  invalid_slot: reasonCopy('invalid_slot'),
+  same_slot: reasonCopy('same_slot'),
+  empty_slot: reasonCopy('empty_slot'),
+  hero_protected: reasonCopy('hero_protected'),
+  rank_mismatch: reasonCopy('rank_mismatch'),
+  rank_cap: reasonCopy('rank_cap'),
+  hybrid_locked: reasonCopy('hybrid_locked'),
+  no_recipe: reasonCopy('no_recipe'),
+  invalid_merge: reasonCopy('invalid_merge'),
 });
 
 function textOf(entry) {

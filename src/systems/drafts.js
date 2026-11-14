@@ -19,8 +19,10 @@
  * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
  * Empty board slots produce placeable tower cards. When empty slots remain, a
  * base type is still absent from the board, and two placeable tower cards are
- * offered, one of those cards is a missing base type. That swap does not roll
- * RNG again, so the same seed and board stay stable. A full board offers three
+ * offered, one of those cards is a missing base type. When every base type is
+ * already on the board, empty slots remain, and a hero upgrade can still be
+ * offered, one of the three cards is a hero upgrade. Neither swap rolls RNG
+ * again, so the same seed and board stay stable. A full board offers three
  * uncapped hero upgrades, or those upgrades plus `replace: true` tower cards
  * when fewer than three upgrades remain — never a surprise tower. Replacement
  * never targets the hero and `placePending` requires `{replace: true}` for an
@@ -72,7 +74,7 @@ export function generateDraft(state) {
   }
   picked = picked.slice(0, 3);
   if (picked.length !== 3) return picked;
-  return shuffle(state, preferMissingType(state, picked));
+  return shuffle(state, preferHeroWhenCovered(state, preferMissingType(state, picked), heroIds));
 }
 
 export function updateDrafts(state) {
@@ -476,6 +478,40 @@ function preferMissingType(state, picked) {
   if (!type) return picked;
   const next = picked.slice();
   next[towerIndexes[towerIndexes.length - 1]] = towerCard(type, false);
+  return next;
+}
+
+function typesCovered(state) {
+  const present = presentBaseTypes(state);
+  const types = catalogTowerTypes();
+  return types.length > 0 && types.every(type => present.has(type));
+}
+
+// Covered board: keep one hero upgrade in the three cards. No random() call.
+function preferHeroWhenCovered(state, picked, heroIds) {
+  if (!Array.isArray(picked) || picked.length !== 3) return picked;
+  if (countEmpty(state) <= 0) return picked;
+  if (!typesCovered(state)) return picked;
+  if (picked.some(card => card && card.kind === 'hero_upgrade')) return picked;
+  if (!heroIds || heroIds.size === 0) return picked;
+  const used = new Set(picked.map(card => card && card.id));
+  let replacement = null;
+  for (const id of upgradeIds()) {
+    if (!heroIds.has(id) || used.has(`hero_upgrade:${id}`)) continue;
+    const card = heroCard(state, id);
+    if (!cardValid(state, card, heroIds)) continue;
+    replacement = card;
+    break;
+  }
+  if (!replacement) return picked;
+  let index = -1;
+  for (let i = 0; i < picked.length; i += 1) {
+    const card = picked[i];
+    if (card && card.kind === 'tower' && card.replace !== true) index = i;
+  }
+  if (index < 0) index = picked.length - 1;
+  const next = picked.slice();
+  next[index] = replacement;
   return next;
 }
 

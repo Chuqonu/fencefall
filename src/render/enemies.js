@@ -359,12 +359,14 @@ function armored(step, attack) {
 function spitter(step, attack) {
   return sprite(22, 26, (grid) => {
     fillEllipse(grid, 11, 4, 3, 4, 'o');
-    fillEllipse(grid, 11, 12, attack ? 7 : 8, attack ? 5 : 6, 'h');
+    fillEllipse(grid, 11, 12, 8, 6, 'h');
     fillEllipse(grid, 2, 12, 2, 3, 'h');
     fillEllipse(grid, 19, 12, 2, 3, 'h');
-    glaze(grid, 11, attack ? 13 : 11, 3, 2, 'e');
-    seam(grid, 9, 12, 2);
-    seam(grid, 13, 14, 2);
+    if (!attack) {
+      glaze(grid, 11, 11, 3, 2, 'e');
+      seam(grid, 9, 12, 2);
+      seam(grid, 13, 14, 2);
+    }
     eye(grid, 9, 4);
     eye(grid, 12, 4);
     if (attack) {
@@ -382,6 +384,24 @@ function spitter(step, attack) {
     fillEllipse(grid, 7 - spread, 24, 1, 1, 'o');
     fillEllipse(grid, 15 + spread, 24, 1, 1, 'o');
     eraseEllipse(grid, 11, 23, 1, 2);
+    if (attack) {
+      const mark = (x, y, ink) => {
+        if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
+        if (grid.rows[y][x] === '.') return;
+        grid.put(x, y, ink);
+      };
+      // Open sac: dark cavity in the belly, sap in the throat, drip toward the fence.
+      const cavity = [[10, 1], [11, 2], [12, 3], [13, 4], [14, 3], [15, 2], [16, 1]];
+      for (const [y, mid] of cavity) {
+        for (let dx = -mid; dx <= mid; dx += 1) mark(11 + dx, y, '#');
+      }
+      for (let y = 12; y <= 14; y += 1) {
+        mark(10, y, 'e');
+        mark(11, y, 'e');
+        mark(12, y, 'e');
+      }
+      for (let y = 15; y <= 19; y += 1) mark(11, y, 'e');
+    }
   });
 }
 

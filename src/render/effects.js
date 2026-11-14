@@ -16,7 +16,8 @@
  * and drops traveling debris.
  * A plain shot is a short arrow. A pierce shot is a thin needle along the aim.
  * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
- * stay starbursts with a damage number. A fence hit is a red bite in the rail.
+ * stay starbursts with a damage number. A critical hit adds one gold diamond
+ * flash and a thicker ring; a normal hit does not. A fence hit is a red bite in the rail.
  */
 import { ARENA, slotGeometry } from '../shared.js';
 
@@ -708,6 +709,20 @@ export function createEffects() {
     ];
   }
 
+  // Crit-only. One particle, so it stays inside the particle cap. The diamond
+  // is not the plus, needle, hollow ring, or kinked bolt used by other hits.
+  function pushFlash(x, y, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'flash',
+      x: Math.round(x),
+      y: Math.round(y),
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
   function pushImpact(x, y, arm, palette, crit, life) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     pushParticle({
@@ -851,7 +866,7 @@ export function createEffects() {
   function showNumber(desc, x, y, seed, palette) {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
-      const lift = desc.crit ? 10 : 4;
+      const lift = desc.crit ? 16 : 4;
       pushFloater(
         x, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
@@ -926,7 +941,10 @@ export function createEffects() {
         }
       }
     }
-    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
+    if (desc.crit) {
+      pushFlash(point.x, point.y, 0.36);
+      pushRing(point.x, point.y, 13, 34, '#ffe56a', 0.34, 2);
+    }
     showNumber(desc, point.x, point.y, seed, palette);
     if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
   }
@@ -1255,6 +1273,34 @@ export function createEffects() {
     }
   }
 
+  function drawDiamond(ctx, cx, cy, radius) {
+    const reach = radius | 0;
+    for (let dx = -reach; dx <= reach; dx++) {
+      const dy = reach - Math.abs(dx);
+      ctx.fillRect(cx + dx, cy - dy, 1, 1);
+      if (dy) ctx.fillRect(cx + dx, cy + dy, 1, 1);
+    }
+  }
+
+  function drawFlash(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#3a2410';
+    drawDiamond(ctx, cx, cy, 8);
+    ctx.fillStyle = '#ffe56a';
+    drawDiamond(ctx, cx, cy, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - 3, cy, 7, 1);
+    ctx.fillRect(cx, cy - 3, 1, 7);
+    ctx.fillRect(cx - 1, cy - 1, 3, 3);
+    ctx.fillRect(cx - 11, cy, 2, 1);
+    ctx.fillRect(cx + 10, cy, 2, 1);
+    ctx.fillRect(cx, cy - 11, 1, 2);
+    ctx.fillRect(cx, cy + 10, 1, 2);
+  }
+
   function drawImpact(ctx, particle, alpha) {
     if (alpha < 0.02) return;
     const cx = Math.round(particle.x);
@@ -1481,6 +1527,9 @@ export function createEffects() {
         break;
       case 'impact':
         drawImpact(ctx, particle, alpha);
+        break;
+      case 'flash':
+        drawFlash(ctx, particle, alpha);
         break;
       case 'notch':
         drawNotch(ctx, particle, alpha);

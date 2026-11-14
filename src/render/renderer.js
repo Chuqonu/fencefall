@@ -11,6 +11,7 @@
  * previous draw so a restart frame does not drop its own feedback.
  * A live burn, poison, or slow tints that sprite warm, green, or cold.
  * A bilingual director or wave hint is drawn in the top margin.
+ * The selected defender shows its rank just above the sprite.
  */
 
 import {drawWorld} from './world.js';
@@ -59,6 +60,14 @@ const TINT_ALPHA = 0.55;
 const HINT_BAND = 42;
 const HINT_MAX_LINES = 3;
 const HINT_CHAR_LIMIT = 220;
+// 3×5 rank digits, painted at 2× in the band above the selected sprite.
+const RANK_DIGIT = [
+  null,
+  ['.#.', '##.', '.#.', '.#.', '###'],
+  ['###', '..#', '###', '#..', '###'],
+  ['###', '..#', '###', '..#', '###'],
+  ['#.#', '#.#', '###', '..#', '..#'],
+];
 let tintSurface = null;
 
 function finite(value) {
@@ -884,6 +893,40 @@ function drawFieldHint(ctx, state, ui) {
   }
 }
 
+// Rank 1–4 sits in the open band above the selected sprite, clear of its body.
+function drawSelectedRank(ctx, unit, anchorX, anchorY, size) {
+  const rank = clamp(Math.round(finite(unit?.rank) ?? 1), 1, 4);
+  const glyph = RANK_DIGIT[rank];
+  const scale = 2;
+  const cols = glyph[0].length;
+  const rows = glyph.length;
+  const plateW = cols * scale + 2;
+  const plateH = rows * scale + 2;
+  const spriteTop = Math.round(anchorY - size.height);
+  let x = Math.round(anchorX - plateW / 2);
+  let y = spriteTop - plateH - 1;
+  if (y < 1) y = Math.min(ARENA.height - plateH - 1, spriteTop + 1);
+  x = clamp(x, 1, ARENA.width - plateW - 1);
+  y = clamp(y, 1, ARENA.height - plateH - 1);
+  ctx.fillStyle = '#101418';
+  ctx.fillRect(x, y, plateW, plateH);
+  ctx.fillStyle = '#f0cb72';
+  ctx.fillRect(x, y, plateW, 1);
+  ctx.fillRect(x, y + plateH - 1, plateW, 1);
+  ctx.fillRect(x, y, 1, plateH);
+  ctx.fillRect(x + plateW - 1, y, 1, plateH);
+  ctx.fillStyle = '#fff6c8';
+  const ox = x + 1;
+  const oy = y + 1;
+  for (let row = 0; row < rows; row++) {
+    const line = glyph[row];
+    for (let col = 0; col < cols; col++) {
+      if (line[col] !== '#') continue;
+      ctx.fillRect(ox + col * scale, oy + row * scale, scale, scale);
+    }
+  }
+}
+
 function enemyFlash(enemy, hits, now, duration) {
   let best = 0;
   const radius = (finite(enemy.radius) ?? 14) + 8;
@@ -1212,7 +1255,21 @@ export function createRenderer(canvas) {
       if (pulse > 0 && index !== selected) strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse})`, 2);
     }
     if (hover >= 0 && hover !== selected) strokeSlot(ctx, slotBox(slots[hover], hover), 'rgba(198, 214, 210, 0.9)', 1);
-    if (selected >= 0) strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
+    if (selected >= 0) {
+      strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
+      const selectedUnit = slots[selected]?.unit;
+      if (selectedUnit) {
+        const selectedSize = measureDefender(selectedUnit);
+        const selectedOrigin = slotCenter(slots[selected], selected);
+        isolate(ctx, () => drawSelectedRank(
+          ctx,
+          selectedUnit,
+          Math.round(selectedOrigin.x),
+          Math.round(selectedOrigin.y + selectedSize.height / 2),
+          selectedSize,
+        ));
+      }
+    }
 
     isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
     drawFieldHint(ctx, state, ui);

@@ -6,6 +6,8 @@
  * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
  * Animation uses the `time` argument.
+ * When state.director.hasBoss is true, the sky, the top edge, and the open field
+ * take a boss-wave tint. The cached night backdrop stays unchanged for other waves.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 import { ARENA, slotGeometry } from '../shared.js';
@@ -483,6 +485,48 @@ function drawMist(ctx, time, reduced) {
   ctx.globalAlpha = base;
 }
 
+function directorHasBoss(state) {
+  return !!(state && state.director && state.director.hasBoss === true);
+}
+
+// Wash laid over the cached night, only while a boss wave is current.
+// Full-width bands, never columns. Fence posts begin at y=418, so the veil stops above them.
+function drawBossWave(ctx, time, reduced) {
+  const base = readAlpha(ctx);
+  const breathe = reduced ? 0.9 : 0.82 + 0.1 * (0.5 + 0.5 * Math.sin(time * 1.15));
+  ctx.globalAlpha = base * breathe;
+  ctx.fillStyle = '#40101c';
+  ctx.fillRect(0, 0, W, 12);
+  ctx.fillStyle = '#781828';
+  ctx.fillRect(0, 12, W, 14);
+  ctx.fillStyle = '#a82838';
+  ctx.fillRect(0, 26, W, 16);
+  ctx.fillStyle = '#c43840';
+  ctx.fillRect(0, 42, W, 10);
+  ctx.globalAlpha = base * 0.4;
+  ctx.fillStyle = '#902838';
+  ctx.fillRect(0, 64, W, 170);
+  ctx.globalAlpha = base * 0.28;
+  ctx.fillStyle = '#601820';
+  ctx.fillRect(0, 234, W, 174);
+  const edge = reduced ? 0.96 : 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(time * 2.4));
+  ctx.globalAlpha = base * edge;
+  ctx.fillStyle = '#e23830';
+  ctx.fillRect(0, ENTRY_Y, W, 3);
+  ctx.fillStyle = '#ffb060';
+  ctx.fillRect(0, ENTRY_Y, W, 1);
+  const shift = reduced ? 16 : Math.floor(time * 8) % 48;
+  ctx.globalAlpha = base * 0.55;
+  ctx.fillStyle = '#e25822';
+  for (let i = 0; i < 4; i++) {
+    const x = ((i * 96 + shift) % 420) - 24;
+    const y = 6 + (i % 2) * 10;
+    ctx.fillRect(x, y, 18, 1);
+  }
+  ctx.globalAlpha = base;
+  drawMoon(ctx);
+}
+
 function drawTuft(ctx, x, y, sway) {
   ctx.fillStyle = '#1a2824';
   ctx.fillRect(x, y, 1, 4);
@@ -822,6 +866,7 @@ export function drawWorld(ctx, state, options) {
     const cached = backdropCanvas();
     if (cached && typeof ctx.drawImage === 'function') ctx.drawImage(cached, 0, 0, W, H);
     else paintBackdrop(ctx);
+    if (directorHasBoss(state)) drawBossWave(ctx, time, reduced);
     drawStars(ctx, time, reduced);
     drawMist(ctx, time, reduced);
     drawGrass(ctx, time, reduced);

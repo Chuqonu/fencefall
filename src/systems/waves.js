@@ -20,6 +20,11 @@
 // not change counts, timings, kinds, or difficulty multipliers. Endless play
 // keeps the hint of the endless wave that is current. A wave with no hint
 // leaves playerHint unchanged.
+// director.nextHint is the next campaign wave's bilingual hint {en, zh} when
+// that wave is still waiting on the schedule. Each update copies it from that
+// wave. The copy does not change counts, timings, kinds, or difficulty
+// multipliers. Endless waves are not campaign waves. When no later campaign
+// wave exists, nextHint is null. director.playerHint stays the current hint.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
@@ -334,6 +339,7 @@ export function updateWaves(state, dt = 0) {
 
   syncBossFlag(state, director, sys);
   syncPlayerHint(state, director, sys);
+  syncNextHint(director);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -724,6 +730,20 @@ function copyHint(hint) {
   if (!hint || typeof hint !== 'object') return null;
   if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return null;
   return {en: hint.en, zh: hint.zh};
+}
+
+// Next campaign wave is WAVES[nextWave] until that index leaves the schedule.
+// Same copy as playerHint. No spawn, timing, kind, or difficulty change.
+function syncNextHint(director) {
+  const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  if (index >= 0 && index < WAVES.length) {
+    const hint = copyHint(WAVES[index]?.hint);
+    if (hint) {
+      director.nextHint = hint;
+      return;
+    }
+  }
+  director.nextHint = null;
 }
 
 function readHasBoss(state, director) {

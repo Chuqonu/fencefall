@@ -439,6 +439,26 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .hud-message:empty { display: none; }
 
+/* One battle-HUD line. A long wave note ellipsizes instead of covering the meters. */
+.hud-hint {
+  order: 4;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #24362a;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-height: 1.35em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-hint:empty { display: none; }
+
 /* Long merge copy scrolls inside the meter block. It must not lengthen the
    phone footer: that height comes straight out of the field, and at 390px
    the frame needs to stay near 340px wide. */
@@ -455,6 +475,11 @@ img, svg, video { max-width: 100%; height: auto; }
     margin: 0;
     overflow: auto;
     overscroll-behavior: contain;
+  }
+
+  .hud-hint:not(:empty) {
+    max-height: 1.35em;
+    overflow: hidden;
   }
 }
 

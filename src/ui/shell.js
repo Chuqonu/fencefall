@@ -10,6 +10,7 @@ const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 
  * Renderer resize must use that same full-box mapping (no inner letterbox).
  * `pause` is sent with no payload and is a toggle; `resume` stays the continue-run action.
  * Containers marked data-ui are never cleared here — panel modules own their children.
+ * When director.playerHint has en and zh, the battle HUD shows that text in the active language.
  */
 export function mountShell(root, api) {
   if (!root || typeof root.appendChild !== 'function') {
@@ -122,11 +123,13 @@ export function mountShell(root, api) {
   controls.append(pauseButton, speedRow, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
+  const waveHint = el('p', { class: 'hud-hint', 'data-testid': 'hud-hint' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
   const hudMain = el('div', { class: 'hud-main' });
   hudMain.append(
     el('div', { class: 'hud-meters' }, [fenceMeter, xpMeter]),
     stats,
+    waveHint,
     message
   );
   hud.append(hudMain, controls, live);
@@ -430,6 +433,11 @@ export function mountShell(root, api) {
     setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
     const note = messageText(ui?.message, language, ui);
     setText(message, note);
+    const hintLine = screen === 'battle' ? playerHintLine(state, language) : '';
+    setText(waveHint, hintLine);
+    waveHint.hidden = !hintLine;
+    if (hintLine) waveHint.title = hintLine;
+    else waveHint.removeAttribute('title');
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
   }
@@ -615,6 +623,15 @@ export function mountShell(root, api) {
   }
 }
 
+function playerHintLine(state, language) {
+  const hint = state?.director?.playerHint;
+  if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
+  if (!hint.en.trim() || !hint.zh.trim()) return '';
+  const line = contentText(hint, language);
+  return typeof line === 'string' ? line.trim() : '';
+}
+
 function controlButton(testid, action) {
   const button = el('button', {
     class: 'btn',
@@ -705,6 +722,7 @@ function structuralKey(state, profile, ui) {
     ui?.mergePreview ? 1 : 0,
     message,
     state?.wave ?? '',
+    playerHintKey(state?.director?.playerHint),
     state?.draftLevel ?? '',
     state?.nextDraftXp ?? '',
     state?.difficulty ?? '',
@@ -760,6 +778,13 @@ function num(value, language) {
   } catch {
     return String(n);
   }
+}
+
+function playerHintKey(hint) {
+  if (!hint || typeof hint !== 'object') return '';
+  const en = typeof hint.en === 'string' ? hint.en : '';
+  const zh = typeof hint.zh === 'string' ? hint.zh : '';
+  return `${en}\n${zh}`;
 }
 
 function contentText(value, language) {

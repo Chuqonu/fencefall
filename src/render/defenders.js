@@ -12,10 +12,13 @@
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
  * Rank 1–4 is a row of chevrons on the plinth, one mark per rank.
+ * A defender whose stats include an aura wears a teal ring around the sprite.
+ * The ring sits outside the body, so chevrons and hybrid shapes stay put.
  * Nothing here reads or writes gameplay RNG or run state.
  */
 import {BASE_TYPES, clamp} from '../shared.js';
 import {RECIPES} from '../data/recipes.js';
+import {getUnitStats} from '../data/towers.js';
 
 const W = 40;
 const H = 40;
@@ -194,6 +197,64 @@ export function defenderSize(unit) {
   return {width: W, height: H};
 }
 
+function statsHaveAura(stats) {
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return false;
+  const aura = stats.aura;
+  if (aura && typeof aura === 'object' && !Array.isArray(aura)) return true;
+  const mechanics = stats.mechanics;
+  if (!Array.isArray(mechanics)) return false;
+  for (let i = 0; i < mechanics.length; i++) {
+    if (String(mechanics[i]).trim().toLowerCase() === 'aura') return true;
+  }
+  return false;
+}
+
+function unitHasAura(unit) {
+  if (statsHaveAura(unit.stats)) return true;
+  try {
+    return statsHaveAura(getUnitStats(unit));
+  } catch {
+    return false;
+  }
+}
+
+function drawPixelCircle(ctx, cx, cy, radius, color) {
+  const r = Math.round(radius);
+  if (r <= 0 || typeof ctx.fillRect !== 'function') return;
+  let x = r;
+  let y = 0;
+  let decision = 1 - r;
+  ctx.fillStyle = color;
+  while (x >= y) {
+    ctx.fillRect(cx + x, cy + y, 1, 1);
+    ctx.fillRect(cx + y, cy + x, 1, 1);
+    ctx.fillRect(cx - x, cy + y, 1, 1);
+    ctx.fillRect(cx - y, cy + x, 1, 1);
+    ctx.fillRect(cx + x, cy - y, 1, 1);
+    ctx.fillRect(cx + y, cy - x, 1, 1);
+    ctx.fillRect(cx - x, cy - y, 1, 1);
+    ctx.fillRect(cx - y, cy - x, 1, 1);
+    y += 1;
+    if (decision <= 0) decision += 2 * y + 1;
+    else {
+      x -= 1;
+      decision += 2 * (y - x) + 1;
+    }
+  }
+}
+
+// Halo in the slot padding, outside the 40px body. Outer radius stays inside
+// the 64px slot and off the silhouette, chevrons, and contact shadow.
+function drawAuraRing(ctx, dx, dy, dw, dh) {
+  const cx = Math.round(dx + dw / 2);
+  const cy = Math.round(dy + dh / 2);
+  const reach = Math.round(Math.min(dw, dh) / 2);
+  const outer = reach + Math.max(8, Math.round(Math.min(dw, dh) * 0.25));
+  drawPixelCircle(ctx, cx, cy, outer, '#0c3f36');
+  drawPixelCircle(ctx, cx, cy, outer - 1, '#7dcec0');
+  drawPixelCircle(ctx, cx, cy, outer - 2, '#e7fff8');
+}
+
 export function drawDefender(ctx, unit, x, y, options = {}) {
   if (!ctx || !unit || typeof unit !== 'object' || typeof ctx.save !== 'function') return;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -210,6 +271,7 @@ export function drawDefender(ctx, unit, x, y, options = {}) {
   const dh = Math.max(1, Math.round(H * scale));
   const dx = Math.round(x - dw / 2);
   const dy = Math.round(y - dh);
+  const aura = unitHasAura(unit);
   ctx.save();
   try {
     try { ctx.imageSmoothingEnabled = false; } catch { /* older contexts */ }
@@ -218,6 +280,11 @@ export function drawDefender(ctx, unit, x, y, options = {}) {
       ctx.globalAlpha = flash;
       ctx.globalCompositeOperation = 'lighter';
       blit(ctx, sprite, dx, dy, dw, dh);
+    }
+    if (aura) {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      drawAuraRing(ctx, dx, dy, dw, dh);
     }
   } finally {
     ctx.restore();

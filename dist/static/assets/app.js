@@ -30,9 +30,10 @@ const collectFeedback = __ff_m0["collectFeedback"];
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
  * Shot, hit, merge, draft, fence damage, victory, and defeat each use a
- * different contour. Repeated shot tones stay under a fence hit, a merge,
- * a draft opening, a victory, and a defeat. Tower identity uses towerType
- * (bolt, fire, frost, lightning, poison, support, hero).
+ * different contour. A critical hit is its own short high chime, separate
+ * from a normal hit and quieter than a fence hit. Repeated shot tones stay
+ * under a fence hit, a merge, a draft opening, a victory, and a defeat.
+ * Tower identity uses towerType (bolt, fire, frost, lightning, poison, support, hero).
  */
 
 
@@ -40,6 +41,7 @@ const MASTER = 0.28;
 const MAX_VOICES = 16;
 // Lightning noise (0.07) is the loudest shot layer. SHOT_BED keeps a shot, and
 // every repeat, under draft (0.03), merge (0.042), victory and defeat (0.048), and a fence hit (0.072).
+// A crit chime peaks at 0.044, under that fence hit. setEnabled(false) mutes it with everything else.
 const SHOT_BED = 0.2;
 const SHOT_REPEAT_WINDOW = 1.35;
 const SHOT_REPEAT_STEPS = Object.freeze([1, 0.58, 0.42]);
@@ -410,24 +412,16 @@ function createAudio() {
   function playHit(desc, delay) {
     const tint = Math.min(260, Math.max(90, pitchFor(desc) * 0.28));
     const body = wobble(tint, desc.time + 0.17);
-    const crit = desc.crit;
+    if (desc.crit) {
+      // Rising chime, not the low hit thud. Both layers stay under the fence sine at 0.072.
+      return safe(() => layers(
+        tone({ freq: 1174, dur: 0.04, type: 'triangle', gain: 0.044, slide: 196, delay }),
+        tone({ freq: 1760, dur: 0.032, type: 'square', gain: 0.018, delay: delay + 0.016 }),
+      ));
+    }
     return safe(() => layers(
-      noise({
-        dur: crit ? 0.055 : 0.032,
-        gain: crit ? 0.058 : 0.042,
-        band: crit ? 1700 : 980,
-        q: 0.9,
-        delay,
-      }),
-      tone({
-        freq: crit ? Math.min(340, body * 1.2) : body,
-        dur: crit ? 0.07 : 0.042,
-        type: 'sine',
-        gain: crit ? 0.055 : 0.04,
-        slide: crit ? -90 : -55,
-        delay,
-      }),
-      crit ? tone({ freq: 1480, dur: 0.05, type: 'square', gain: 0.026, delay: delay + 0.01 }) : false,
+      noise({ dur: 0.032, gain: 0.042, band: 980, q: 0.9, delay }),
+      tone({ freq: body, dur: 0.042, type: 'sine', gain: 0.04, slide: -55, delay }),
     ));
   }
 
@@ -2056,10 +2050,12 @@ function getHybridStats(unit) {
 __ff_factories["src/data/towers.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["getUnitStats"] = getUnitStats;
-const __ff_m0 = __ff_load("src/data/recipes.js");
-const __ff_m1 = __ff_load("src/systems/hero.js");
-const RECIPES = __ff_m0["RECIPES"];
-const getHeroStats = __ff_m1["getHeroStats"];
+const __ff_m0 = __ff_load("src/shared.js");
+const __ff_m1 = __ff_load("src/data/recipes.js");
+const __ff_m2 = __ff_load("src/systems/hero.js");
+const BASE_TYPES = __ff_m0["BASE_TYPES"];
+const RECIPES = __ff_m1["RECIPES"];
+const getHeroStats = __ff_m2["getHeroStats"];
 /**
  * Base tower catalog. Keys match BASE_TYPES in src/shared.js.
  *
@@ -2090,6 +2086,7 @@ const getHeroStats = __ff_m1["getHeroStats"];
  * Every base tower fires on its interval, including support.
  * Unknown extra stat fields are copied through and are not rank-scaled.
  */
+
 
 
 
@@ -2398,64 +2395,131 @@ const supportReach = supportAuraMax < 144
       zh: '光环按槽位中心之间的距离计算，并且始终小于攻击射程。'
     };
 
+const BASE_IDENTITY = Object.freeze({
+  bolt: Object.freeze({
+    role: Object.freeze({en: 'Projectile', zh: '投射'}),
+    name: Object.freeze({en: 'Rivet', zh: '穿钉'})
+  }),
+  fire: Object.freeze({
+    role: Object.freeze({en: 'Fire', zh: '火焰'}),
+    name: Object.freeze({en: 'Cinder', zh: '烬火'})
+  }),
+  frost: Object.freeze({
+    role: Object.freeze({en: 'Frost', zh: '冰霜'}),
+    name: Object.freeze({en: 'Rime', zh: '霜结'})
+  }),
+  lightning: Object.freeze({
+    role: Object.freeze({en: 'Lightning', zh: '闪电'}),
+    name: Object.freeze({en: 'Arc', zh: '弧雷'})
+  }),
+  poison: Object.freeze({
+    role: Object.freeze({en: 'Poison', zh: '毒素'}),
+    name: Object.freeze({en: 'Blight', zh: '瘴毒'})
+  }),
+  support: Object.freeze({
+    role: Object.freeze({en: 'Support', zh: '辅助'}),
+    name: Object.freeze({en: 'Banner', zh: '旌旗'})
+  })
+});
+
+function joinEnglish(clauses) {
+  if (clauses.length <= 1) return clauses.join('');
+  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`;
+  return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`;
+}
+
+// Follows the role sentence. Hybrid names and the other parent come from RECIPES.
+function partnerSentence(type) {
+  const rows = [];
+  for (const recipe of RECIPES) {
+    const parents = recipe?.parents;
+    if (!Array.isArray(parents) || parents.length !== 2 || !parents.includes(type)) continue;
+    const other = parents[0] === type ? parents[1] : parents[0];
+    const partner = BASE_IDENTITY[other];
+    if (!partner?.role?.en || !partner?.role?.zh || !partner?.name?.en || !partner?.name?.zh || !recipe.name?.en || !recipe.name?.zh) {
+      throw new Error(`missing merge partner text for ${type}+${other}`);
+    }
+    rows.push({other, partner, hybrid: recipe.name});
+  }
+  rows.sort((a, b) => BASE_TYPES.indexOf(a.other) - BASE_TYPES.indexOf(b.other));
+  if (rows.length !== BASE_TYPES.length - 1) throw new Error(`${type} must name a hybrid with every other base type`);
+  const en = `${joinEnglish(rows.map((row, index) => {
+    const label = `${row.partner.role.en} (${row.partner.name.en})`;
+    const verb = index === 0 ? `Merged with ${label} it becomes` : `with ${label} it becomes`;
+    return `${verb} ${row.hybrid.en}`;
+  }))}.`;
+  const zh = `${rows.map((row, index) => {
+    const lead = index === 0 ? '它与' : '与';
+    return `${lead}${row.partner.role.zh}（${row.partner.name.zh}）合成为${row.hybrid.zh}`;
+  }).join('，')}。`;
+  return {en, zh};
+}
+
+const boltPartners = partnerSentence('bolt');
+const firePartners = partnerSentence('fire');
+const frostPartners = partnerSentence('frost');
+const lightningPartners = partnerSentence('lightning');
+const poisonPartners = partnerSentence('poison');
+const supportPartners = partnerSentence('support');
+
 const TOWERS = Object.freeze({
   bolt: Object.freeze({
     id: 'bolt',
-    role: Object.freeze({en: 'Projectile', zh: '投射'}),
-    name: Object.freeze({en: 'Rivet', zh: '穿钉'}),
+    role: BASE_IDENTITY.bolt.role,
+    name: BASE_IDENTITY.bolt.name,
     description: Object.freeze({
-      en: `Projectile shots pierce one extra enemy and can crit. Rank 1 deals ${boltStats.damage} damage every ${boltStats.interval}s. Attack range is ${boltStats.range}. It fires a fast rivet from its slot center at any enemy in that range. There are no lanes. It pierces ${boltStats.pierce} extra enemy and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
-      zh: `投射会贯穿额外一名敌人，并且可以暴击。1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，攻击射程 ${boltStats.range}。从槽位中心攻击该射程内的任意敌人，不按列锁定。可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
+      en: `Projectile shots pierce one extra enemy and can crit. ${boltPartners.en} Rank 1 deals ${boltStats.damage} damage every ${boltStats.interval}s. Attack range is ${boltStats.range}. It fires a fast rivet from its slot center at any enemy in that range. There are no lanes. It pierces ${boltStats.pierce} extra enemy and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
+      zh: `投射会贯穿额外一名敌人，并且可以暴击。${boltPartners.zh}1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，攻击射程 ${boltStats.range}。从槽位中心攻击该射程内的任意敌人，不按列锁定。可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
     }),
     stats: Object.freeze(boltStats)
   }),
   fire: Object.freeze({
     id: 'fire',
-    role: Object.freeze({en: 'Fire', zh: '火焰'}),
-    name: Object.freeze({en: 'Cinder', zh: '烬火'}),
+    role: BASE_IDENTITY.fire.role,
+    name: BASE_IDENTITY.fire.name,
     description: Object.freeze({
-      en: `Fire shots burn the target and splash that same hit onto nearby enemies. Rank 1 deals ${fireStats.damage} damage every ${fireStats.interval}s. Attack range is ${fireStats.range}. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within splash radius ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
-      zh: `火焰会让目标燃烧，并把同样的一击溅射到附近敌人。1 阶伤害 ${fireStats.damage}，攻击间隔 ${fireStats.interval} 秒，攻击射程 ${fireStats.range}。目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标溅射半径 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
+      en: `Fire shots burn the target and splash that same hit onto nearby enemies. ${firePartners.en} Rank 1 deals ${fireStats.damage} damage every ${fireStats.interval}s. Attack range is ${fireStats.range}. The target burns for ${fireStats.burn.dps} damage per second for ${fireStats.burn.duration}s. Every other enemy within splash radius ${fireStats.splash} of the target takes that same hit and burn. The first target is not damaged twice. Higher ranks strengthen the burst, the burn, and the range, through rank 4.`,
+      zh: `火焰会让目标燃烧，并把同样的一击溅射到附近敌人。${firePartners.zh}1 阶伤害 ${fireStats.damage}，攻击间隔 ${fireStats.interval} 秒，攻击射程 ${fireStats.range}。目标以每秒 ${fireStats.burn.dps} 点燃烧 ${fireStats.burn.duration} 秒。距离目标溅射半径 ${fireStats.splash} 以内的其他敌人受到相同的撞击和燃烧，第一个目标不会被结算两次。更高阶会加强爆炸、燃烧和射程，最高 4 阶。`
     }),
     stats: Object.freeze(fireStats)
   }),
   frost: Object.freeze({
     id: 'frost',
-    role: Object.freeze({en: 'Frost', zh: '冰霜'}),
-    name: Object.freeze({en: 'Rime', zh: '霜结'}),
+    role: BASE_IDENTITY.frost.role,
+    name: BASE_IDENTITY.frost.name,
     description: Object.freeze({
-      en: `Frost shots slow one enemy. Rank 1 deals ${frostStats.damage} damage every ${frostStats.interval}s. Attack range is ${frostStats.range}. The shot is single-target and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
-      zh: `冰霜会减速单个敌人。1 阶伤害 ${frostStats.damage}，攻击间隔 ${frostStats.interval} 秒，攻击射程 ${frostStats.range}。这是单体射击，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
+      en: `Frost shots slow one enemy. ${frostPartners.en} Rank 1 deals ${frostStats.damage} damage every ${frostStats.interval}s. Attack range is ${frostStats.range}. The shot is single-target and slows that enemy to ${percent(frostStats.slow.factor)}% movement speed for ${frostStats.slow.duration}s. Slow is the speed the enemy keeps, not a percent subtracted. It does not splash or freeze. Higher ranks slow a little more, but remaining speed never drops below ${percent(RANK_SCALE.slowFactorFloor)}%.`,
+      zh: `冰霜会减速单个敌人。${frostPartners.zh}1 阶伤害 ${frostStats.damage}，攻击间隔 ${frostStats.interval} 秒，攻击射程 ${frostStats.range}。这是单体射击，并在 ${frostStats.slow.duration} 秒内使该敌人的移速变为 ${percent(frostStats.slow.factor)}%。减速数值是敌人保留的移速，不是被减去的百分比。没有溅射，也不能冻结。更高阶会稍加强减速，但剩余移速不会低于 ${percent(RANK_SCALE.slowFactorFloor)}%。`
     }),
     stats: Object.freeze(frostStats)
   }),
   lightning: Object.freeze({
     id: 'lightning',
-    role: Object.freeze({en: 'Lightning', zh: '闪电'}),
-    name: Object.freeze({en: 'Arc', zh: '弧雷'}),
+    role: BASE_IDENTITY.lightning.role,
+    name: BASE_IDENTITY.lightning.name,
     description: Object.freeze({
-      en: `Lightning chains to extra enemies and ignores columns. Rank 1 deals ${lightningStats.damage} damage every ${lightningStats.interval}s. Attack range is ${lightningStats.range}, the longest of the base towers. It then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
-      zh: `闪电会连锁到额外敌人，不按列限制。1 阶伤害 ${lightningStats.damage}，攻击间隔 ${lightningStats.interval} 秒，攻击射程 ${lightningStats.range}，是基础塔里最长的。然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
+      en: `Lightning chains to extra enemies and ignores columns. ${lightningPartners.en} Rank 1 deals ${lightningStats.damage} damage every ${lightningStats.interval}s. Attack range is ${lightningStats.range}, the longest of the base towers. It then jumps to ${lightningStats.chain} extra enemies. Each jump reaches at most ${lightningStats.chainRange} from the previous enemy. Ranks 3 and 4 each add one jump, up to ${RANK_SCALE.chainCap} extra targets.`,
+      zh: `闪电会连锁到额外敌人，不按列限制。${lightningPartners.zh}1 阶伤害 ${lightningStats.damage}，攻击间隔 ${lightningStats.interval} 秒，攻击射程 ${lightningStats.range}，是基础塔里最长的。然后跳向另外 ${lightningStats.chain} 名敌人。每次跳跃最远离上一名敌人 ${lightningStats.chainRange}。3 阶和 4 阶各增加 1 次跳跃，额外目标最多 ${RANK_SCALE.chainCap} 个。`
     }),
     stats: Object.freeze(lightningStats)
   }),
   poison: Object.freeze({
     id: 'poison',
-    role: Object.freeze({en: 'Poison', zh: '毒素'}),
-    name: Object.freeze({en: 'Blight', zh: '瘴毒'}),
+    role: BASE_IDENTITY.poison.role,
+    name: BASE_IDENTITY.poison.name,
     description: Object.freeze({
-      en: `Poison stacks on one tough enemy. Rank 1 deals ${poisonStats.damage} damage every ${poisonStats.interval}s. Attack range is ${poisonStats.range}. Each hit adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}.`,
-      zh: `毒素会叠在单个厚血敌人身上。1 阶直接伤害 ${poisonStats.damage}，攻击间隔 ${poisonStats.interval} 秒，攻击射程 ${poisonStats.range}。命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。`
+      en: `Poison stacks on one tough enemy. ${poisonPartners.en} Rank 1 deals ${poisonStats.damage} damage every ${poisonStats.interval}s. Attack range is ${poisonStats.range}. Each hit adds one poison stack. Each stack deals ${poisonStats.poison.dps} damage per second for ${poisonStats.poison.duration}s, up to ${poisonStats.poison.maxStacks} stacks. Status rules refresh the timer and cap the stacks. Rank 4 adds one stack, and stacks never exceed ${RANK_SCALE.poisonStacksCap}.`,
+      zh: `毒素会叠在单个厚血敌人身上。${poisonPartners.zh}1 阶直接伤害 ${poisonStats.damage}，攻击间隔 ${poisonStats.interval} 秒，攻击射程 ${poisonStats.range}。命中时叠加 1 层瘴毒。每层每秒造成 ${poisonStats.poison.dps} 点伤害，持续 ${poisonStats.poison.duration} 秒，最多 ${poisonStats.poison.maxStacks} 层。持续时间刷新和层数上限由状态系统处理。4 阶额外增加 1 层，层数绝不超过 ${RANK_SCALE.poisonStacksCap}。`
     }),
     stats: Object.freeze(poisonStats)
   }),
   support: Object.freeze({
     id: 'support',
-    role: Object.freeze({en: 'Support', zh: '辅助'}),
-    name: Object.freeze({en: 'Banner', zh: '旌旗'}),
+    role: BASE_IDENTITY.support.role,
+    name: BASE_IDENTITY.support.name,
     description: Object.freeze({
-      en: `Support buffs nearby defenders, including itself, and this banner still fires. Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. Attack range is ${supportStats.range}. It shoots a light bolt at any enemy within that range of this slot's center, across columns, by the same rule as the other towers. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
-      zh: `辅助会强化附近的防御者（包括自身），同时这面旌旗仍然射击。1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。射击规则与其他塔相同：攻击距离槽位中心该射程以内的任意敌人，可以跨列。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
+      en: `Support buffs nearby defenders, including itself, and this banner still fires. ${supportPartners.en} Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. Attack range is ${supportStats.range}. It shoots a light bolt at any enemy within that range of this slot's center, across columns, by the same rule as the other towers. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
+      zh: `辅助会强化附近的防御者（包括自身），同时这面旌旗仍然射击。${supportPartners.zh}1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。射击规则与其他塔相同：攻击距离槽位中心该射程以内的任意敌人，可以跨列。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
     }),
     stats: Object.freeze(supportStats)
   })
@@ -2510,6 +2574,20 @@ function assertCatalog() {
     if (!tower.name?.en || !tower.name?.zh || !tower.description?.en || !tower.description?.zh) throw new Error(`missing bilingual text: ${id}`);
     if (!tower.description.en.startsWith(tower.role.en) || !tower.description.zh.startsWith(tower.role.zh)) {
       throw new Error(`${id} blurb does not lead with its role`);
+    }
+    const enAfterRole = tower.description.en.slice(tower.description.en.indexOf('.') + 1);
+    const zhAfterRole = tower.description.zh.slice(tower.description.zh.indexOf('。') + 1);
+    for (const recipe of RECIPES) {
+      const parents = recipe?.parents;
+      if (!Array.isArray(parents) || !parents.includes(id)) continue;
+      const other = parents[0] === id ? parents[1] : parents[0];
+      const partner = BASE_IDENTITY[other];
+      if (!enAfterRole.includes(recipe.name.en) || !enAfterRole.includes(partner.role.en) || !enAfterRole.includes(partner.name.en)) {
+        throw new Error(`${id} blurb does not name hybrid ${recipe.id} in English`);
+      }
+      if (!zhAfterRole.includes(recipe.name.zh) || !zhAfterRole.includes(partner.role.zh) || !zhAfterRole.includes(partner.name.zh)) {
+        throw new Error(`${id} blurb does not name hybrid ${recipe.id} in Chinese`);
+      }
     }
     for (const field of ['damage', 'interval', 'range']) {
       const token = String(tower.stats[field]);
@@ -2871,6 +2949,7 @@ const ROWS = [
   ['waveIncoming', 'Incoming', '即将到来'],
   ['bossWarning', 'Boss approaching', '首领接近'],
   ['finalWave', 'Final wave', '最后一波'],
+  ['nextWave', 'Next wave', '下一波'],
   ['wavesSpawned', 'All waves have spawned', '各波敌人已出场'],
   ['wavesStarted', 'Waves started', '已开始波次'],
   ['clearRemaining', 'Defeat the enemies still on the field', '击败场上剩余的敌人'],
@@ -3478,9 +3557,11 @@ __ff_exports["defenderSize"] = defenderSize;
 __ff_exports["drawDefender"] = drawDefender;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/data/recipes.js");
+const __ff_m2 = __ff_load("src/data/towers.js");
 const BASE_TYPES = __ff_m0["BASE_TYPES"];
 const clamp = __ff_m0["clamp"];
 const RECIPES = __ff_m1["RECIPES"];
+const getUnitStats = __ff_m2["getUnitStats"];
 /**
  * Fencefall defender sprites (logical pixels, bottom-center anchor).
  *
@@ -3495,8 +3576,11 @@ const RECIPES = __ff_m1["RECIPES"];
  * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
  * or a known flavor alias). Unknown ids still draw a ranked reliquary.
  * Rank 1–4 is a row of chevrons on the plinth, one mark per rank.
+ * A defender whose stats include an aura wears a teal ring around the sprite.
+ * The ring sits outside the body, so chevrons and hybrid shapes stay put.
  * Nothing here reads or writes gameplay RNG or run state.
  */
+
 
 
 
@@ -3677,6 +3761,64 @@ function defenderSize(unit) {
   return {width: W, height: H};
 }
 
+function statsHaveAura(stats) {
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return false;
+  const aura = stats.aura;
+  if (aura && typeof aura === 'object' && !Array.isArray(aura)) return true;
+  const mechanics = stats.mechanics;
+  if (!Array.isArray(mechanics)) return false;
+  for (let i = 0; i < mechanics.length; i++) {
+    if (String(mechanics[i]).trim().toLowerCase() === 'aura') return true;
+  }
+  return false;
+}
+
+function unitHasAura(unit) {
+  if (statsHaveAura(unit.stats)) return true;
+  try {
+    return statsHaveAura(getUnitStats(unit));
+  } catch {
+    return false;
+  }
+}
+
+function drawPixelCircle(ctx, cx, cy, radius, color) {
+  const r = Math.round(radius);
+  if (r <= 0 || typeof ctx.fillRect !== 'function') return;
+  let x = r;
+  let y = 0;
+  let decision = 1 - r;
+  ctx.fillStyle = color;
+  while (x >= y) {
+    ctx.fillRect(cx + x, cy + y, 1, 1);
+    ctx.fillRect(cx + y, cy + x, 1, 1);
+    ctx.fillRect(cx - x, cy + y, 1, 1);
+    ctx.fillRect(cx - y, cy + x, 1, 1);
+    ctx.fillRect(cx + x, cy - y, 1, 1);
+    ctx.fillRect(cx + y, cy - x, 1, 1);
+    ctx.fillRect(cx - x, cy - y, 1, 1);
+    ctx.fillRect(cx - y, cy - x, 1, 1);
+    y += 1;
+    if (decision <= 0) decision += 2 * y + 1;
+    else {
+      x -= 1;
+      decision += 2 * (y - x) + 1;
+    }
+  }
+}
+
+// Halo in the slot padding, outside the 40px body. Outer radius stays inside
+// the 64px slot and off the silhouette, chevrons, and contact shadow.
+function drawAuraRing(ctx, dx, dy, dw, dh) {
+  const cx = Math.round(dx + dw / 2);
+  const cy = Math.round(dy + dh / 2);
+  const reach = Math.round(Math.min(dw, dh) / 2);
+  const outer = reach + Math.max(8, Math.round(Math.min(dw, dh) * 0.25));
+  drawPixelCircle(ctx, cx, cy, outer, '#0c3f36');
+  drawPixelCircle(ctx, cx, cy, outer - 1, '#7dcec0');
+  drawPixelCircle(ctx, cx, cy, outer - 2, '#e7fff8');
+}
+
 function drawDefender(ctx, unit, x, y, options = {}) {
   if (!ctx || !unit || typeof unit !== 'object' || typeof ctx.save !== 'function') return;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -3693,6 +3835,7 @@ function drawDefender(ctx, unit, x, y, options = {}) {
   const dh = Math.max(1, Math.round(H * scale));
   const dx = Math.round(x - dw / 2);
   const dy = Math.round(y - dh);
+  const aura = unitHasAura(unit);
   ctx.save();
   try {
     try { ctx.imageSmoothingEnabled = false; } catch { /* older contexts */ }
@@ -3701,6 +3844,11 @@ function drawDefender(ctx, unit, x, y, options = {}) {
       ctx.globalAlpha = flash;
       ctx.globalCompositeOperation = 'lighter';
       blit(ctx, sprite, dx, dy, dw, dh);
+    }
+    if (aura) {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      drawAuraRing(ctx, dx, dy, dw, dh);
     }
   } finally {
     ctx.restore();
@@ -4677,7 +4825,8 @@ const slotGeometry = __ff_m0["slotGeometry"];
  * and drops traveling debris.
  * A plain shot is a short arrow. A pierce shot is a thin needle along the aim.
  * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
- * stay starbursts with a damage number. A fence hit is a red bite in the rail.
+ * stay starbursts with a damage number. A critical hit adds one gold diamond
+ * flash and a thicker ring; a normal hit does not. A fence hit is a red bite in the rail.
  */
 
 
@@ -5369,6 +5518,20 @@ function createEffects() {
     ];
   }
 
+  // Crit-only. One particle, so it stays inside the particle cap. The diamond
+  // is not the plus, needle, hollow ring, or kinked bolt used by other hits.
+  function pushFlash(x, y, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'flash',
+      x: Math.round(x),
+      y: Math.round(y),
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
   function pushImpact(x, y, arm, palette, crit, life) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     pushParticle({
@@ -5512,7 +5675,7 @@ function createEffects() {
   function showNumber(desc, x, y, seed, palette) {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
-      const lift = desc.crit ? 10 : 4;
+      const lift = desc.crit ? 16 : 4;
       pushFloater(
         x, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
@@ -5587,7 +5750,10 @@ function createEffects() {
         }
       }
     }
-    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
+    if (desc.crit) {
+      pushFlash(point.x, point.y, 0.36);
+      pushRing(point.x, point.y, 13, 34, '#ffe56a', 0.34, 2);
+    }
     showNumber(desc, point.x, point.y, seed, palette);
     if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
   }
@@ -5916,6 +6082,34 @@ function createEffects() {
     }
   }
 
+  function drawDiamond(ctx, cx, cy, radius) {
+    const reach = radius | 0;
+    for (let dx = -reach; dx <= reach; dx++) {
+      const dy = reach - Math.abs(dx);
+      ctx.fillRect(cx + dx, cy - dy, 1, 1);
+      if (dy) ctx.fillRect(cx + dx, cy + dy, 1, 1);
+    }
+  }
+
+  function drawFlash(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#3a2410';
+    drawDiamond(ctx, cx, cy, 8);
+    ctx.fillStyle = '#ffe56a';
+    drawDiamond(ctx, cx, cy, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - 3, cy, 7, 1);
+    ctx.fillRect(cx, cy - 3, 1, 7);
+    ctx.fillRect(cx - 1, cy - 1, 3, 3);
+    ctx.fillRect(cx - 11, cy, 2, 1);
+    ctx.fillRect(cx + 10, cy, 2, 1);
+    ctx.fillRect(cx, cy - 11, 1, 2);
+    ctx.fillRect(cx, cy + 10, 1, 2);
+  }
+
   function drawImpact(ctx, particle, alpha) {
     if (alpha < 0.02) return;
     const cx = Math.round(particle.x);
@@ -6142,6 +6336,9 @@ function createEffects() {
         break;
       case 'impact':
         drawImpact(ctx, particle, alpha);
+        break;
+      case 'flash':
+        drawFlash(ctx, particle, alpha);
         break;
       case 'notch':
         drawNotch(ctx, particle, alpha);
@@ -6546,12 +6743,14 @@ function armored(step, attack) {
 function spitter(step, attack) {
   return sprite(22, 26, (grid) => {
     fillEllipse(grid, 11, 4, 3, 4, 'o');
-    fillEllipse(grid, 11, 12, attack ? 7 : 8, attack ? 5 : 6, 'h');
+    fillEllipse(grid, 11, 12, 8, 6, 'h');
     fillEllipse(grid, 2, 12, 2, 3, 'h');
     fillEllipse(grid, 19, 12, 2, 3, 'h');
-    glaze(grid, 11, attack ? 13 : 11, 3, 2, 'e');
-    seam(grid, 9, 12, 2);
-    seam(grid, 13, 14, 2);
+    if (!attack) {
+      glaze(grid, 11, 11, 3, 2, 'e');
+      seam(grid, 9, 12, 2);
+      seam(grid, 13, 14, 2);
+    }
     eye(grid, 9, 4);
     eye(grid, 12, 4);
     if (attack) {
@@ -6569,6 +6768,24 @@ function spitter(step, attack) {
     fillEllipse(grid, 7 - spread, 24, 1, 1, 'o');
     fillEllipse(grid, 15 + spread, 24, 1, 1, 'o');
     eraseEllipse(grid, 11, 23, 1, 2);
+    if (attack) {
+      const mark = (x, y, ink) => {
+        if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
+        if (grid.rows[y][x] === '.') return;
+        grid.put(x, y, ink);
+      };
+      // Open sac: dark cavity in the belly, sap in the throat, drip toward the fence.
+      const cavity = [[10, 1], [11, 2], [12, 3], [13, 4], [14, 3], [15, 2], [16, 1]];
+      for (const [y, mid] of cavity) {
+        for (let dx = -mid; dx <= mid; dx += 1) mark(11 + dx, y, '#');
+      }
+      for (let y = 12; y <= 14; y += 1) {
+        mark(10, y, 'e');
+        mark(11, y, 'e');
+        mark(12, y, 'e');
+      }
+      for (let y = 15; y <= 19; y += 1) mark(11, y, 'e');
+    }
   });
 }
 
@@ -6786,6 +7003,7 @@ const slotGeometry = __ff_m5["slotGeometry"];
  * previous draw so a restart frame does not drop its own feedback.
  * A live burn, poison, or slow tints that sprite warm, green, or cold.
  * A bilingual director or wave hint is drawn in the top margin.
+ * The selected defender shows its rank just above the sprite.
  */
 
 
@@ -6834,6 +7052,14 @@ const TINT_ALPHA = 0.55;
 const HINT_BAND = 42;
 const HINT_MAX_LINES = 3;
 const HINT_CHAR_LIMIT = 220;
+// 3×5 rank digits, painted at 2× in the band above the selected sprite.
+const RANK_DIGIT = [
+  null,
+  ['.#.', '##.', '.#.', '.#.', '###'],
+  ['###', '..#', '###', '#..', '###'],
+  ['###', '..#', '###', '..#', '###'],
+  ['#.#', '#.#', '###', '..#', '..#'],
+];
 let tintSurface = null;
 
 function finite(value) {
@@ -7659,6 +7885,40 @@ function drawFieldHint(ctx, state, ui) {
   }
 }
 
+// Rank 1–4 sits in the open band above the selected sprite, clear of its body.
+function drawSelectedRank(ctx, unit, anchorX, anchorY, size) {
+  const rank = clamp(Math.round(finite(unit?.rank) ?? 1), 1, 4);
+  const glyph = RANK_DIGIT[rank];
+  const scale = 2;
+  const cols = glyph[0].length;
+  const rows = glyph.length;
+  const plateW = cols * scale + 2;
+  const plateH = rows * scale + 2;
+  const spriteTop = Math.round(anchorY - size.height);
+  let x = Math.round(anchorX - plateW / 2);
+  let y = spriteTop - plateH - 1;
+  if (y < 1) y = Math.min(ARENA.height - plateH - 1, spriteTop + 1);
+  x = clamp(x, 1, ARENA.width - plateW - 1);
+  y = clamp(y, 1, ARENA.height - plateH - 1);
+  ctx.fillStyle = '#101418';
+  ctx.fillRect(x, y, plateW, plateH);
+  ctx.fillStyle = '#f0cb72';
+  ctx.fillRect(x, y, plateW, 1);
+  ctx.fillRect(x, y + plateH - 1, plateW, 1);
+  ctx.fillRect(x, y, 1, plateH);
+  ctx.fillRect(x + plateW - 1, y, 1, plateH);
+  ctx.fillStyle = '#fff6c8';
+  const ox = x + 1;
+  const oy = y + 1;
+  for (let row = 0; row < rows; row++) {
+    const line = glyph[row];
+    for (let col = 0; col < cols; col++) {
+      if (line[col] !== '#') continue;
+      ctx.fillRect(ox + col * scale, oy + row * scale, scale, scale);
+    }
+  }
+}
+
 function enemyFlash(enemy, hits, now, duration) {
   let best = 0;
   const radius = (finite(enemy.radius) ?? 14) + 8;
@@ -7987,7 +8247,21 @@ function createRenderer(canvas) {
       if (pulse > 0 && index !== selected) strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse})`, 2);
     }
     if (hover >= 0 && hover !== selected) strokeSlot(ctx, slotBox(slots[hover], hover), 'rgba(198, 214, 210, 0.9)', 1);
-    if (selected >= 0) strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
+    if (selected >= 0) {
+      strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
+      const selectedUnit = slots[selected]?.unit;
+      if (selectedUnit) {
+        const selectedSize = measureDefender(selectedUnit);
+        const selectedOrigin = slotCenter(slots[selected], selected);
+        isolate(ctx, () => drawSelectedRank(
+          ctx,
+          selectedUnit,
+          Math.round(selectedOrigin.x),
+          Math.round(selectedOrigin.y + selectedSize.height / 2),
+          selectedSize,
+        ));
+      }
+    }
 
     isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
     drawFieldHint(ctx, state, ui);
@@ -8085,6 +8359,8 @@ const slotGeometry = __ff_m0["slotGeometry"];
  * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
  * Animation uses the `time` argument.
+ * When state.director.hasBoss is true, the sky, the top edge, and the open field
+ * take a boss-wave tint. The cached night backdrop stays unchanged for other waves.
  * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
  */
 
@@ -8562,6 +8838,48 @@ function drawMist(ctx, time, reduced) {
   ctx.globalAlpha = base;
 }
 
+function directorHasBoss(state) {
+  return !!(state && state.director && state.director.hasBoss === true);
+}
+
+// Wash laid over the cached night, only while a boss wave is current.
+// Full-width bands, never columns. Fence posts begin at y=418, so the veil stops above them.
+function drawBossWave(ctx, time, reduced) {
+  const base = readAlpha(ctx);
+  const breathe = reduced ? 0.9 : 0.82 + 0.1 * (0.5 + 0.5 * Math.sin(time * 1.15));
+  ctx.globalAlpha = base * breathe;
+  ctx.fillStyle = '#40101c';
+  ctx.fillRect(0, 0, W, 12);
+  ctx.fillStyle = '#781828';
+  ctx.fillRect(0, 12, W, 14);
+  ctx.fillStyle = '#a82838';
+  ctx.fillRect(0, 26, W, 16);
+  ctx.fillStyle = '#c43840';
+  ctx.fillRect(0, 42, W, 10);
+  ctx.globalAlpha = base * 0.4;
+  ctx.fillStyle = '#902838';
+  ctx.fillRect(0, 64, W, 170);
+  ctx.globalAlpha = base * 0.28;
+  ctx.fillStyle = '#601820';
+  ctx.fillRect(0, 234, W, 174);
+  const edge = reduced ? 0.96 : 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(time * 2.4));
+  ctx.globalAlpha = base * edge;
+  ctx.fillStyle = '#e23830';
+  ctx.fillRect(0, ENTRY_Y, W, 3);
+  ctx.fillStyle = '#ffb060';
+  ctx.fillRect(0, ENTRY_Y, W, 1);
+  const shift = reduced ? 16 : Math.floor(time * 8) % 48;
+  ctx.globalAlpha = base * 0.55;
+  ctx.fillStyle = '#e25822';
+  for (let i = 0; i < 4; i++) {
+    const x = ((i * 96 + shift) % 420) - 24;
+    const y = 6 + (i % 2) * 10;
+    ctx.fillRect(x, y, 18, 1);
+  }
+  ctx.globalAlpha = base;
+  drawMoon(ctx);
+}
+
 function drawTuft(ctx, x, y, sway) {
   ctx.fillStyle = '#1a2824';
   ctx.fillRect(x, y, 1, 4);
@@ -8901,6 +9219,7 @@ function drawWorld(ctx, state, options) {
     const cached = backdropCanvas();
     if (cached && typeof ctx.drawImage === 'function') ctx.drawImage(cached, 0, 0, W, H);
     else paintBackdrop(ctx);
+    if (directorHasBoss(state)) drawBossWave(ctx, time, reduced);
     drawStars(ctx, time, reduced);
     drawMist(ctx, time, reduced);
     drawGrass(ctx, time, reduced);
@@ -11699,8 +12018,10 @@ const random = __ff_m2["random"];
  * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
  * Empty board slots produce placeable tower cards. When empty slots remain, a
  * base type is still absent from the board, and two placeable tower cards are
- * offered, one of those cards is a missing base type. That swap does not roll
- * RNG again, so the same seed and board stay stable. A full board offers three
+ * offered, one of those cards is a missing base type. When every base type is
+ * already on the board, empty slots remain, and a hero upgrade can still be
+ * offered, one of the three cards is a hero upgrade. Neither swap rolls RNG
+ * again, so the same seed and board stay stable. A full board offers three
  * uncapped hero upgrades, or those upgrades plus `replace: true` tower cards
  * when fewer than three upgrades remain — never a surprise tower. Replacement
  * never targets the hero and `placePending` requires `{replace: true}` for an
@@ -11752,7 +12073,7 @@ function generateDraft(state) {
   }
   picked = picked.slice(0, 3);
   if (picked.length !== 3) return picked;
-  return shuffle(state, preferMissingType(state, picked));
+  return shuffle(state, preferHeroWhenCovered(state, preferMissingType(state, picked), heroIds));
 }
 
 function updateDrafts(state) {
@@ -12159,6 +12480,40 @@ function preferMissingType(state, picked) {
   return next;
 }
 
+function typesCovered(state) {
+  const present = presentBaseTypes(state);
+  const types = catalogTowerTypes();
+  return types.length > 0 && types.every(type => present.has(type));
+}
+
+// Covered board: keep one hero upgrade in the three cards. No random() call.
+function preferHeroWhenCovered(state, picked, heroIds) {
+  if (!Array.isArray(picked) || picked.length !== 3) return picked;
+  if (countEmpty(state) <= 0) return picked;
+  if (!typesCovered(state)) return picked;
+  if (picked.some(card => card && card.kind === 'hero_upgrade')) return picked;
+  if (!heroIds || heroIds.size === 0) return picked;
+  const used = new Set(picked.map(card => card && card.id));
+  let replacement = null;
+  for (const id of upgradeIds()) {
+    if (!heroIds.has(id) || used.has(`hero_upgrade:${id}`)) continue;
+    const card = heroCard(state, id);
+    if (!cardValid(state, card, heroIds)) continue;
+    replacement = card;
+    break;
+  }
+  if (!replacement) return picked;
+  let index = -1;
+  for (let i = 0; i < picked.length; i += 1) {
+    const card = picked[i];
+    if (card && card.kind === 'tower' && card.replace !== true) index = i;
+  }
+  if (index < 0) index = picked.length - 1;
+  const next = picked.slice();
+  next[index] = replacement;
+  return next;
+}
+
 function selectThree(state, cards) {
   const empty = countEmpty(state) > 0;
   const emptyCount = countEmpty(state);
@@ -12515,6 +12870,7 @@ __ff_exports["mergeUnits"] = mergeUnits;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/data/recipes.js");
 const __ff_m2 = __ff_load("src/data/towers.js");
+const __ff_m3 = __ff_load("src/i18n.js");
 const BASE_TYPES = __ff_m0["BASE_TYPES"];
 const canPlan = __ff_m0["canPlan"];
 const createUnit = __ff_m0["createUnit"];
@@ -12524,9 +12880,11 @@ const findRecipe = __ff_m1["findRecipe"];
 const getRecipe = __ff_m1["getRecipe"];
 const isRecipeId = __ff_m1["isRecipeId"];
 const TOWERS = __ff_m2["TOWERS"];
+const t = __ff_m3["t"];
 // Merge planning. previewMerge is pure; mergeUnits is the only mutation.
 // Merges are legal only while canPlan(state) is true (paused, or phase draft).
 // The source slot is consumed and the target slot receives the result.
+
 
 
 
@@ -12544,18 +12902,65 @@ const BASE_LABELS = Object.freeze({
   support: Object.freeze({ en: 'Support', zh: '支援' }),
 });
 
-// Stable reason codes. Preview also returns bilingual description text.
+// Reason codes stay stable. Each catalog key is the player-facing reason.
+// empty_slot uses missingUnit, the line for two occupied slots.
+const REASON_KEYS = Object.freeze({
+  not_planning: 'notPlanning',
+  invalid_slot: 'invalidSlot',
+  same_slot: 'sameSlot',
+  empty_slot: 'missingUnit',
+  hero_protected: 'heroProtected',
+  rank_mismatch: 'rankMismatch',
+  rank_cap: 'maxRank',
+  hybrid_locked: 'hybridMix',
+  no_recipe: 'noRecipe',
+  invalid_merge: 'invalidMerge',
+});
+
+// Sentence after the reason. A failed preview leads with the catalog reason.
+const REASON_DETAIL = Object.freeze({
+  not_planning: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的格子。' }),
+  same_slot: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  empty_slot: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  hero_protected: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+  rank_mismatch: Object.freeze({ en: 'Unequal ranks stay as they are.', zh: '不同阶会原样保留。' }),
+  rank_cap: Object.freeze({ en: 'Same-type merges stop at rank 4.', zh: '同型合成到 4 阶为止。' }),
+  hybrid_locked: Object.freeze({ en: 'A different type stays as it is.', zh: '不同的类型会原样保留。' }),
+  no_recipe: Object.freeze({ en: 'Both units stay.', zh: '双方都保留。' }),
+  invalid_merge: Object.freeze({ en: 'Nothing was changed.', zh: '没有改动。' }),
+});
+
+function reasonLead(key) {
+  const en = t('en', key).trim();
+  const zh = t('zh', key).trim();
+  return {
+    en: /[.!?]$/.test(en) ? en : `${en}.`,
+    zh: /[。！？]$/.test(zh) ? zh : `${zh}。`,
+  };
+}
+
+function reasonCopy(code) {
+  const lead = reasonLead(REASON_KEYS[code]);
+  const detail = REASON_DETAIL[code];
+  return Object.freeze({
+    en: `${lead.en} ${detail.en}`,
+    zh: `${lead.zh}${detail.zh}`,
+  });
+}
+
+// Stable reason codes. Preview description leads with that player-facing reason.
 const MERGE_REASONS = Object.freeze({
-  not_planning: Object.freeze({ en: 'Pause the battle, or wait for a draft, before merging.', zh: '请先暂停战斗，或在选秀期间再合成。' }),
-  invalid_slot: Object.freeze({ en: 'Choose a slot in the two rows of five.', zh: '请选择两排五格中的槽位。' }),
-  same_slot: Object.freeze({ en: 'Choose two different slots.', zh: '请选择两个不同的槽位。' }),
-  empty_slot: Object.freeze({ en: 'Both slots need a unit. Nothing was changed.', zh: '两个槽位都要有单位。没有改动。' }),
-  hero_protected: Object.freeze({ en: 'The hero never merges and cannot be replaced.', zh: '英雄永不合成，也不能被替换。' }),
-  rank_mismatch: Object.freeze({ en: 'Both units must be the same rank. Unequal ranks stay as they are.', zh: '双方必须同阶。不同阶会原样保留。' }),
-  rank_cap: Object.freeze({ en: 'Rank 4 is the cap. Same-type merges stop there.', zh: '4 阶已是上限，同型不能再合成。' }),
-  hybrid_locked: Object.freeze({ en: 'A hybrid only merges with the same hybrid at the same rank.', zh: '杂交单位只能与同名同阶的杂交单位再合成。' }),
-  no_recipe: Object.freeze({ en: 'These tower types have no recipe. Both units stay.', zh: '这两种塔没有配方，双方都保留。' }),
-  invalid_merge: Object.freeze({ en: 'These units cannot be merged. Nothing was changed.', zh: '这些单位不能合成。没有改动。' }),
+  not_planning: reasonCopy('not_planning'),
+  invalid_slot: reasonCopy('invalid_slot'),
+  same_slot: reasonCopy('same_slot'),
+  empty_slot: reasonCopy('empty_slot'),
+  hero_protected: reasonCopy('hero_protected'),
+  rank_mismatch: reasonCopy('rank_mismatch'),
+  rank_cap: reasonCopy('rank_cap'),
+  hybrid_locked: reasonCopy('hybrid_locked'),
+  no_recipe: reasonCopy('no_recipe'),
+  invalid_merge: reasonCopy('invalid_merge'),
 });
 __ff_exports["MERGE_REASONS"] = MERGE_REASONS;
 
@@ -14182,6 +14587,11 @@ const spawnEnemy = __ff_m2["spawnEnemy"];
 // not change counts, timings, kinds, or difficulty multipliers. Endless play
 // keeps the hint of the endless wave that is current. A wave with no hint
 // leaves playerHint unchanged.
+// director.nextHint is the next campaign wave's bilingual hint {en, zh} when
+// that wave is still waiting on the schedule. Each update copies it from that
+// wave. The copy does not change counts, timings, kinds, or difficulty
+// multipliers. Endless waves are not campaign waves. When no later campaign
+// wave exists, nextHint is null. director.playerHint stays the current hint.
 //
 // Private serializable state lives on state.systems.waves:
 //   countRemainder, summonRemainder, waveStartedAt,
@@ -14498,6 +14908,7 @@ function updateWaves(state, dt = 0) {
 
   syncBossFlag(state, director, sys);
   syncPlayerHint(state, director, sys);
+  syncNextHint(director);
   updateBosses(state, sys);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
@@ -14888,6 +15299,20 @@ function copyHint(hint) {
   if (!hint || typeof hint !== 'object') return null;
   if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return null;
   return {en: hint.en, zh: hint.zh};
+}
+
+// Next campaign wave is WAVES[nextWave] until that index leaves the schedule.
+// Same copy as playerHint. No spawn, timing, kind, or difficulty change.
+function syncNextHint(director) {
+  const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  if (index >= 0 && index < WAVES.length) {
+    const hint = copyHint(WAVES[index]?.hint);
+    if (hint) {
+      director.nextHint = hint;
+      return;
+    }
+  }
+  director.nextHint = null;
 }
 
 function readHasBoss(state, director) {
@@ -17943,12 +18368,16 @@ function renderRecipes(ctx) {
   const recipes = catalogEntries(RECIPES);
   const fieldTypes = boardParentTypes(ctx.run);
   if (!recipes.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'recipes')}));
-  for (const recipe of recipes) {
+  const ordered = recipes
+    .map((recipe, index) => {
+      const parents = recipeParentList(recipe);
+      return {recipe, parents, ready: parentsReady(parents, fieldTypes), index};
+    })
+    .sort((a, b) => Number(b.ready) - Number(a.ready) || a.index - b.index);
+  for (const {recipe, parents, ready} of ordered) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-recipe-${cssId(recipe.id)}`});
     card.append(h(doc, 'h3', {text: entryName(recipe, lang, recipe.id)}));
-    const parents = Array.isArray(recipe.parents) ? recipe.parents : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
     card.append(line(ctx, t(api, 'ingredients'), parents.map(parent => parentName(parent, lang)).join(' + ') || '—'));
-    const ready = parentsReady(parents, fieldTypes);
     card.setAttribute('data-codex-ready', ready ? 'true' : 'false');
     const status = ready
       ? tx(api, lang, 'codexReady', 'Both parents are on the field', '两种材料都在场上')
@@ -18732,6 +19161,12 @@ function boardParentTypes(run) {
   return present;
 }
 
+function recipeParentList(recipe) {
+  if (Array.isArray(recipe?.parents)) return recipe.parents;
+  if (Array.isArray(recipe?.ingredients)) return recipe.ingredients;
+  return [];
+}
+
 function parentsReady(parents, present) {
   if (!Array.isArray(parents) || parents.length < 2 || !present) return false;
   const ids = [];
@@ -18932,6 +19367,7 @@ const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 
  * Renderer resize must use that same full-box mapping (no inner letterbox).
  * `pause` is sent with no payload and is a toggle; `resume` stays the continue-run action.
  * Containers marked data-ui are never cleared here — panel modules own their children.
+ * When director.playerHint has en and zh, the battle HUD shows that text in the active language.
  */
 function mountShell(root, api) {
   if (!root || typeof root.appendChild !== 'function') {
@@ -19044,11 +19480,13 @@ function mountShell(root, api) {
   controls.append(pauseButton, speedRow, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
+  const waveHint = el('p', { class: 'hud-hint', 'data-testid': 'hud-hint' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
   const hudMain = el('div', { class: 'hud-main' });
   hudMain.append(
     el('div', { class: 'hud-meters' }, [fenceMeter, xpMeter]),
     stats,
+    waveHint,
     message
   );
   hud.append(hudMain, controls, live);
@@ -19352,6 +19790,11 @@ function mountShell(root, api) {
     setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
     const note = messageText(ui?.message, language, ui);
     setText(message, note);
+    const hintLine = screen === 'battle' ? playerHintLine(state, language) : '';
+    setText(waveHint, hintLine);
+    waveHint.hidden = !hintLine;
+    if (hintLine) waveHint.title = hintLine;
+    else waveHint.removeAttribute('title');
     const liveText = [phaseText, note].filter(Boolean).join(' · ');
     setText(live, liveText);
   }
@@ -19537,6 +19980,15 @@ function mountShell(root, api) {
   }
 }
 
+function playerHintLine(state, language) {
+  const hint = state?.director?.playerHint;
+  if (!hint || typeof hint !== 'object' || Array.isArray(hint)) return '';
+  if (typeof hint.en !== 'string' || typeof hint.zh !== 'string') return '';
+  if (!hint.en.trim() || !hint.zh.trim()) return '';
+  const line = contentText(hint, language);
+  return typeof line === 'string' ? line.trim() : '';
+}
+
 function controlButton(testid, action) {
   const button = el('button', {
     class: 'btn',
@@ -19627,6 +20079,7 @@ function structuralKey(state, profile, ui) {
     ui?.mergePreview ? 1 : 0,
     message,
     state?.wave ?? '',
+    playerHintKey(state?.director?.playerHint),
     state?.draftLevel ?? '',
     state?.nextDraftXp ?? '',
     state?.difficulty ?? '',
@@ -19682,6 +20135,13 @@ function num(value, language) {
   } catch {
     return String(n);
   }
+}
+
+function playerHintKey(hint) {
+  if (!hint || typeof hint !== 'object') return '';
+  const en = typeof hint.en === 'string' ? hint.en : '';
+  const zh = typeof hint.zh === 'string' ? hint.zh : '';
+  return `${en}\n${zh}`;
 }
 
 function contentText(value, language) {

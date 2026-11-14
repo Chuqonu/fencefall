@@ -99,6 +99,7 @@ const ROWS = [
   ['waveIncoming', 'Incoming', '即将到来'],
   ['bossWarning', 'Boss approaching', '首领接近'],
   ['finalWave', 'Final wave', '最后一波'],
+  ['nextWave', 'Next wave', '下一波'],
   ['wavesSpawned', 'All waves have spawned', '各波敌人已出场'],
   ['wavesStarted', 'Waves started', '已开始波次'],
   ['clearRemaining', 'Defeat the enemies still on the field', '击败场上剩余的敌人'],

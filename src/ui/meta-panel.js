@@ -689,12 +689,16 @@ function renderRecipes(ctx) {
   const recipes = catalogEntries(RECIPES);
   const fieldTypes = boardParentTypes(ctx.run);
   if (!recipes.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'recipes')}));
-  for (const recipe of recipes) {
+  const ordered = recipes
+    .map((recipe, index) => {
+      const parents = recipeParentList(recipe);
+      return {recipe, parents, ready: parentsReady(parents, fieldTypes), index};
+    })
+    .sort((a, b) => Number(b.ready) - Number(a.ready) || a.index - b.index);
+  for (const {recipe, parents, ready} of ordered) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-recipe-${cssId(recipe.id)}`});
     card.append(h(doc, 'h3', {text: entryName(recipe, lang, recipe.id)}));
-    const parents = Array.isArray(recipe.parents) ? recipe.parents : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
     card.append(line(ctx, t(api, 'ingredients'), parents.map(parent => parentName(parent, lang)).join(' + ') || '—'));
-    const ready = parentsReady(parents, fieldTypes);
     card.setAttribute('data-codex-ready', ready ? 'true' : 'false');
     const status = ready
       ? tx(api, lang, 'codexReady', 'Both parents are on the field', '两种材料都在场上')
@@ -1476,6 +1480,12 @@ function boardParentTypes(run) {
     if (BASE_TYPES.includes(type)) present.add(type);
   }
   return present;
+}
+
+function recipeParentList(recipe) {
+  if (Array.isArray(recipe?.parents)) return recipe.parents;
+  if (Array.isArray(recipe?.ingredients)) return recipe.ingredients;
+  return [];
 }
 
 function parentsReady(parents, present) {

@@ -10,9 +10,10 @@
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
  * Shot, hit, merge, draft, fence damage, victory, and defeat each use a
- * different contour. Repeated shot tones stay under a fence hit, a merge,
- * a draft opening, a victory, and a defeat. Tower identity uses towerType
- * (bolt, fire, frost, lightning, poison, support, hero).
+ * different contour. A critical hit is its own short high chime, separate
+ * from a normal hit and quieter than a fence hit. Repeated shot tones stay
+ * under a fence hit, a merge, a draft opening, a victory, and a defeat.
+ * Tower identity uses towerType (bolt, fire, frost, lightning, poison, support, hero).
  */
 import { collectFeedback } from './render/effects.js';
 
@@ -20,6 +21,7 @@ const MASTER = 0.28;
 const MAX_VOICES = 16;
 // Lightning noise (0.07) is the loudest shot layer. SHOT_BED keeps a shot, and
 // every repeat, under draft (0.03), merge (0.042), victory and defeat (0.048), and a fence hit (0.072).
+// A crit chime peaks at 0.044, under that fence hit. setEnabled(false) mutes it with everything else.
 const SHOT_BED = 0.2;
 const SHOT_REPEAT_WINDOW = 1.35;
 const SHOT_REPEAT_STEPS = Object.freeze([1, 0.58, 0.42]);
@@ -390,24 +392,16 @@ export function createAudio() {
   function playHit(desc, delay) {
     const tint = Math.min(260, Math.max(90, pitchFor(desc) * 0.28));
     const body = wobble(tint, desc.time + 0.17);
-    const crit = desc.crit;
+    if (desc.crit) {
+      // Rising chime, not the low hit thud. Both layers stay under the fence sine at 0.072.
+      return safe(() => layers(
+        tone({ freq: 1174, dur: 0.04, type: 'triangle', gain: 0.044, slide: 196, delay }),
+        tone({ freq: 1760, dur: 0.032, type: 'square', gain: 0.018, delay: delay + 0.016 }),
+      ));
+    }
     return safe(() => layers(
-      noise({
-        dur: crit ? 0.055 : 0.032,
-        gain: crit ? 0.058 : 0.042,
-        band: crit ? 1700 : 980,
-        q: 0.9,
-        delay,
-      }),
-      tone({
-        freq: crit ? Math.min(340, body * 1.2) : body,
-        dur: crit ? 0.07 : 0.042,
-        type: 'sine',
-        gain: crit ? 0.055 : 0.04,
-        slide: crit ? -90 : -55,
-        delay,
-      }),
-      crit ? tone({ freq: 1480, dur: 0.05, type: 'square', gain: 0.026, delay: delay + 0.01 }) : false,
+      noise({ dur: 0.032, gain: 0.042, band: 980, q: 0.9, delay }),
+      tone({ freq: body, dur: 0.042, type: 'sine', gain: 0.04, slide: -55, delay }),
     ));
   }
 
