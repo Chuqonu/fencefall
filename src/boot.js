@@ -1,5 +1,5 @@
 import {ARENA, DIFFICULTIES, canPlan, clone, hitSlot, slotGeometry} from './shared.js';
-import {advance, createProfile, createRun, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
+import {advance, createProfile, createRun, enterEndless, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
 import * as hero from './systems/hero.js';
 import * as merges from './systems/merges.js';
 import * as drafts from './systems/drafts.js';
@@ -16,7 +16,7 @@ import * as audioMod from './audio.js';
 import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
+export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless']);
 
 const TEXT = {
   en:{
@@ -223,6 +223,14 @@ export async function createController(options = {}) {
       ui.screen = 'results';
       saveRun();
       return settleTerminal();
+    }
+    if (action === 'endless') {
+      if (!run) return {ok:false, reason:'no-run'};
+      const outcome = enterEndless(run);
+      if (!outcome.ok) return outcome;
+      ui.screen = 'battle';
+      saveRun();
+      return {ok:true};
     }
     if (action === 'speed') {
       if (!run) return {ok:false, reason:'no-run'};

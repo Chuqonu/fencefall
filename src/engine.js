@@ -178,3 +178,13 @@ export function exportRun(state) {
   out.accumulator = 0;
   return out;
 }
+
+export function enterEndless(state) {
+  if (!state || typeof state !== 'object') return {ok: false, reason: 'bad-phase'};
+  if (state.endless === true) return {ok: false, reason: 'already'};
+  if (state.phase !== 'victory') return {ok: false, reason: 'bad-phase'};
+  state.endless = true;
+  state.phase = 'playing';
+  state.paused = false;
+  return {ok: true};
+}

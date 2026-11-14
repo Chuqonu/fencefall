@@ -4,10 +4,13 @@
  * renderBuildPanel(container, state, api) rebuilds only the given container.
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
- * while playing. A draft overlay keeps three short choice cards and does not
- * include the 10-slot rearrange grid. Each card is the choice: tap the card,
- * there is no confirm or cancel under it. A mark and a meter show the power:
- * damage, attack speed, and range, or the one stat a hero upgrade changes.
+ * while playing. While placing, the five-column slot row and cancel sit above
+ * the unit description. That description, the stats, and the replace copy
+ * scroll in a short body so the slots stay on screen. A draft overlay keeps
+ * three short choice cards and does not include the 10-slot rearrange grid.
+ * Each card is the choice: tap the card, there is no confirm or cancel under
+ * it. A mark and a meter show the power: damage, attack speed, and range, or
+ * the one stat a hero upgrade changes.
  * A tower card says whether that base type is already on the board. Merge confirmation, when
  * a preview is open, shows the result name and rank, then at most two more lines.
  * It does not paste the catalog essay. Confirm and cancel stay 44px buttons.
@@ -75,6 +78,9 @@ const CSS = `
 .ff-build .ff-field.is-owned{color:#a5b8be}
 .ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
 .ff-build.is-draft .ff-draft-merge .btn{width:100%}
+.ff-build.is-placing .ff-place-row{grid-template-columns:repeat(5,minmax(0,1fr))}
+.ff-build.is-placing .ff-place-body{overflow:auto;max-height:6.5rem}
+.ff-build.is-placing .ff-place-row .btn,.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -2028,7 +2034,6 @@ function renderDraft(state, lang, tr, idSuffix) {
 function renderPlacing(state, lang, tr) {
   const section = el('section', { 'data-testid': 'build-placing' });
   section.append(el('h2', { class: 'ff-title', text: tr('chooseSlot') }));
-  section.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
   const pending = state.pendingUnit;
   const unit = pending?.unit;
   if (!unit) {
@@ -2041,20 +2046,8 @@ function renderPlacing(state, lang, tr) {
     return section;
   }
   const allowReplace = pending.replace === true || emptySlots(state).length === 0;
-  section.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
-    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
-    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
-    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
-    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
-    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
-  ));
+  // Slot buttons and cancel stay above the long description.
   if (ephemeral.replaceIndex >= 0) {
-    const target = slotUnit(state, ephemeral.replaceIndex);
-    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
-    box.append(el('h3', { text: tr('replaceConfirm') }));
-    box.append(el('p', { text: tr('confirmReplaceBody') }));
-    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
-    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
     const actions = el('div', { class: 'ff-actions' });
     actions.append(button({
       primary: true,
@@ -2069,22 +2062,15 @@ function renderPlacing(state, lang, tr) {
       'data-testid': 'replace-cancel',
       text: tr('cancel'),
     }));
-    box.append(actions);
-    section.append(box);
+    section.append(actions);
   } else {
-    if (allowReplace && emptySlots(state).length === 0) {
-      section.append(el('p', { text: tr('fullBoard') }));
-      section.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
-    } else {
-      section.append(el('p', { class: 'muted', text: tr('placeHint') }));
-    }
-    const list = el('div', { class: 'grid ff-slots', 'data-testid': 'place-grid' });
+    const list = el('div', { class: 'grid ff-slots ff-place-row', 'data-testid': 'place-grid' });
     for (let index = 0; index < 10; index += 1) {
       const slot = slotAt(state, index) || { index, unit: null };
       const occupant = slot.unit;
       if (!occupant) {
         list.append(button({
-          class: 'slot-btn',
+          class: 'slot-btn empty-slot',
           primary: true,
           'data-action': 'place',
           'data-index': String(index),
@@ -2103,7 +2089,7 @@ function renderPlacing(state, lang, tr) {
         continue;
       }
       list.append(button({
-        class: 'slot-btn',
+        class: 'slot-btn occupied-slot',
         'data-intent': 'arm-replace',
         'data-index': String(index),
         'data-testid': `replace-slot-${index}`,
@@ -2118,6 +2104,30 @@ function renderPlacing(state, lang, tr) {
     'data-testid': 'cancel-placement',
     text: tr('cancelPlacement'),
   }));
+  const body = el('div', { class: 'ff-place-body' });
+  body.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
+    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
+    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
+    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
+    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
+    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
+  ));
+  if (ephemeral.replaceIndex >= 0) {
+    const target = slotUnit(state, ephemeral.replaceIndex);
+    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
+    box.append(el('h3', { text: tr('replaceConfirm') }));
+    box.append(el('p', { text: tr('confirmReplaceBody') }));
+    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
+    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
+    body.append(box);
+  } else if (allowReplace && emptySlots(state).length === 0) {
+    body.append(el('p', { text: tr('fullBoard') }));
+    body.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
+  } else {
+    body.append(el('p', { class: 'muted', text: tr('placeHint') }));
+  }
+  body.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
+  section.append(body);
   return section;
 }
 
@@ -2426,7 +2436,7 @@ export function renderBuildPanel(container, state, api) {
   const showProgress = role === 'overlay' ? modalHere : !(overlayMounted && modalWanted);
 
   const root = el('section', {
-    class: `ff-build panel${state.phase === 'draft' ? ' is-draft' : ''}${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
+    class: `ff-build panel${state.phase === 'draft' ? ' is-draft' : ''}${state.phase === 'placing' ? ' is-placing' : ''}${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
     'data-testid': 'build-panel',
     'data-ff-build': '1',
     'data-phase': state.phase || '',

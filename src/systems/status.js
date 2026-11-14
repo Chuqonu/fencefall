@@ -398,7 +398,10 @@ function drainUnpaid(status) {
 }
 
 function damageOptions(status) {
-  return {sourceId: status.sourceId ?? null, type: status.type, crit: false, dot: true};
+  const type = status.type;
+  const options = {sourceId: status.sourceId ?? null, type, crit: false, dot: true};
+  if (type === 'burn' || type === 'poison') options.towerType = type;
+  return options;
 }
 
 function payDot(state, enemy, status, dps, damageCallback) {

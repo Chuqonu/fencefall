@@ -35,7 +35,8 @@ const local = {
   codexTab: 'towers',
   flash: null,
   focus: null,
-  screen: null
+  screen: null,
+  endlessDismissed: null
 };
 
 const META_CSS = `
@@ -457,6 +458,7 @@ function renderResults(ctx, root) {
   card.append(line(ctx, t(api, 'fence'), fenceText, 'result-fence'));
   if (run && Number.isFinite(run.seed)) card.append(line(ctx, t(api, 'seed'), String(run.seed >>> 0), 'result-seed'));
   card.append(line(ctx, t(api, 'currency'), num(profile.currency, lang), 'result-wallet'));
+  appendEndlessOffer(ctx, card);
   root.append(card);
 
   const actions = h(doc, 'div', {className: 'meta-actions'});
@@ -1554,6 +1556,13 @@ function equippedBonusPhrase(ctx, key, value) {
     const label = ctx.lang === 'zh' ? '栅栏' : 'Fence HP';
     return `${label} ${shown}`;
   }
+  const heroLabel = {
+    damage: ['Hero damage', '英雄伤害'],
+    haste: ['Hero attack speed', '英雄攻击速度'],
+    range: ['Hero range', '英雄射程'],
+    critChance: ['Hero crit chance', '英雄暴击率'],
+  }[key];
+  if (heroLabel) return `${ctx.lang === 'zh' ? heroLabel[1] : heroLabel[0]} ${shown}`;
   return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
@@ -1657,12 +1666,69 @@ function dotText(ctx, effect) {
   return parts.join(' · ') || '—';
 }
 
+const MECHANIC_LABELS = {
+  projectile: ['Projectile', '投射'],
+  crit: ['Crit', '暴击'],
+  pierce: ['Pierce', '穿透'],
+  splash: ['Splash', '溅射'],
+  burn: ['Burn', '燃烧'],
+  slow: ['Slow', '减速'],
+  chain: ['Chain', '连锁'],
+  poison: ['Poison', '毒素'],
+  aura: ['Aura', '光环'],
+  stun: ['Stun', '眩晕'],
+  execute: ['Execute', '处决'],
+};
+
 function mechanicText(mechanic, lang) {
-  if (typeof mechanic === 'string') return mechanic;
+  if (typeof mechanic === 'string') {
+    const pair = MECHANIC_LABELS[mechanic];
+    if (pair) return lang === 'zh' ? pair[1] : pair[0];
+    return mechanic;
+  }
   if (!mechanic || typeof mechanic !== 'object') return '';
   const name = textOf(mechanic.name ?? mechanic.id, lang);
   const description = textOf(mechanic.description, lang);
   return description || name;
+}
+
+function appendEndlessOffer(ctx, card) {
+  const {doc, api, lang, run} = ctx;
+  const settlement = run?.settlement && typeof run.settlement === 'object' ? run.settlement : null;
+  const outcome = settlement?.result || run?.phase;
+  if (!run || run.phase !== 'victory' || run.endless === true || outcome !== 'victory') return;
+  if (local.endlessDismissed === run.runId) return;
+  card.append(h(doc, 'p', {
+    'data-testid': 'endless-offer',
+    text: tx(api, lang, 'endlessOffer',
+      'Enter endless? The victory reward is already saved.',
+      '进入无尽？胜利报酬已经保存。')
+  }));
+  card.append(h(doc, 'p', {
+    'data-testid': 'endless-note',
+    text: tx(api, lang, 'endlessNote',
+      'Endless does not pay the main reward again.',
+      '无尽不会再次发放主线报酬。')
+  }));
+  const enter = button(ctx, {
+    action: 'endless',
+    testid: 'btn-results-endless',
+    label: tx(api, lang, 'endlessEnter', 'Enter endless', '进入无尽'),
+    primary: true
+  });
+  listen(enter, () => act(ctx, 'endless'));
+  const stay = button(ctx, {
+    action: 'endlessStay',
+    testid: 'btn-endless-stay',
+    label: tx(api, lang, 'endlessStay', 'Not now', '暂不进入')
+  });
+  listen(stay, () => {
+    local.endlessDismissed = run.runId;
+    ctx.rerender();
+  });
+  const row = h(doc, 'div', {className: 'meta-actions'});
+  row.append(enter, stay);
+  card.append(row);
 }
 
 function pressureText(ctx, entry) {

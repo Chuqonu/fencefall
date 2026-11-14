@@ -189,6 +189,7 @@ export function damageEnemy(state, enemy, amount, options = {}) {
     y: enemy.y,
     damage: dealt,
     crit: !!opts.crit,
+    execute: opts.execute === true,
     attack: opts.type || 'hit',
     towerType: opts.towerType || null
   });
@@ -273,11 +274,16 @@ function firstHit(state, projectile, x1, y1, x2, y2) {
   return best;
 }
 
+function executeApplies(projectile, enemy) {
+  const mechanics = projectile?.mechanics || [];
+  return mechanics.includes('execute') && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= EXECUTE_THRESHOLD;
+}
+
 function impactDamage(projectile, enemy) {
   let amount = finite(projectile.damage, 0);
   if (projectile.crit) amount *= Math.max(1, finite(projectile.critMultiplier, 1));
   const mechanics = projectile.mechanics || [];
-  if (mechanics.includes('execute') && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= EXECUTE_THRESHOLD) {
+  if (executeApplies(projectile, enemy)) {
     amount *= EXECUTE_MULTIPLIER;
   }
   if (mechanics.includes('fence_focus')) {
@@ -368,6 +374,7 @@ function applySplash(state, projectile, primary) {
       sourceId: projectile.sourceId,
       type: 'splash',
       crit: false,
+      execute: executeApplies(projectile, enemy),
       towerType: projectile.towerType
     });
     applyPayload(enemy, projectile);
@@ -391,6 +398,7 @@ function resolveHit(state, projectile, enemy) {
     sourceId: projectile.sourceId,
     type: attack,
     crit: !!projectile.crit,
+    execute: executeApplies(projectile, enemy),
     towerType: projectile.towerType
   });
   applyPayload(enemy, projectile);

@@ -552,7 +552,13 @@ function createAudio(options) {
     });
   }
 
-  function playBoss(delay) {
+  function playBoss(desc, delay) {
+    if (desc && desc.approach === true) {
+      return safe(() => layers(
+        tone({ freq: 220, dur: 0.08, type: 'sine', gain: 0.04, delay }),
+        tone({ freq: 330, dur: 0.08, type: 'sine', gain: 0.04, delay: delay + 0.09 }),
+      ));
+    }
     return safe(() => layers(
       tone({ freq: 110, dur: 0.2, type: 'triangle', gain: 0.05, slide: -24, delay }),
       tone({ freq: 164, dur: 0.16, type: 'sine', gain: 0.03, delay: delay + 0.08 }),
@@ -572,7 +578,7 @@ function createAudio(options) {
       case 'defeat': return playDefeat();
       case 'ui': return playUi(desc, delay);
       case 'status': return playStatus(desc, delay);
-      case 'boss': return playBoss(delay);
+      case 'boss': return playBoss(desc, delay);
       default: return false;
     }
   }
@@ -678,6 +684,7 @@ const slotGeometry = __ff_m0["slotGeometry"];
 const advance = __ff_m1["advance"];
 const createProfile = __ff_m1["createProfile"];
 const createRun = __ff_m1["createRun"];
+const enterEndless = __ff_m1["enterEndless"];
 const exportRun = __ff_m1["exportRun"];
 const integrationInfo = __ff_m1["integrationInfo"];
 const prepare = __ff_m1["prepare"];
@@ -715,7 +722,7 @@ const rendererMod = __ff_m15;
 
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover']);
+const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless']);
 __ff_exports["ACTIONS"] = ACTIONS;
 
 
@@ -924,6 +931,14 @@ async function createController(options = {}) {
       ui.screen = 'results';
       saveRun();
       return settleTerminal();
+    }
+    if (action === 'endless') {
+      if (!run) return {ok:false, reason:'no-run'};
+      const outcome = enterEndless(run);
+      if (!outcome.ok) return outcome;
+      ui.screen = 'battle';
+      saveRun();
+      return {ok:true};
     }
     if (action === 'speed') {
       if (!run) return {ok:false, reason:'no-run'};
@@ -1943,7 +1958,7 @@ const RAW_RECIPES = [
     { en: 'Burst a burning splash, then let that flame jump to a neighbor. Unlike Cinder, the splash grows from 36 to 40, the burn rises from 4 damage per second for 2.6s to 6 for 2.8s, and the hit also jumps once. Unlike Arc, it chains to only 1 extra enemy within 78 instead of 2 within 80, but both the splash and that jump burn.', zh: '炸开一片燃烧溅射，再让火焰跳到旁边的敌人。和烬火不同，溅射从 36 扩大到 40，燃烧从每秒 4 点、持续 2.6 秒提高到每秒 6 点、持续 2.8 秒，并且命中后再跳跃一次。和弧雷不同，它只连锁 1 名额外敌人、距离 78，而不是 2 名、距离 80，但溅射和这一跳都会燃烧。' },
     { damage: 10, interval: 1.15, range: 245, projectileSpeed: 340, splash: 40, chain: 1, chainRange: 78, burn: { dps: 6, duration: 2.8 }, mechanics: ['splash', 'chain', 'burn'] }),
   recipe('blight', ['fire', 'poison'],
-    { en: 'Blight', zh: '疫焚' },
+    { en: 'Plaguefire', zh: '疫焚' },
     { en: 'Wash a crowd in a burning splash that also stacks poison. Unlike Cinder, the splash grows from 36 to 50 and also stacks poison, while the burn falls from 4 damage per second for 2.6s to 3 for 3s and the hit drops from 8 to 6. Unlike the poison tower Blight, poison is no longer single-target: everyone in the splash takes 2 damage per second for 4.5s instead of 2.4 for 4s, still up to 3 stacks, and they burn as well.', zh: '用会叠加毒素的燃烧溅射洗过一群敌人。和烬火不同，溅射从 36 扩大到 50，并会叠加毒素；燃烧从每秒 4 点、持续 2.6 秒降为每秒 3 点、持续 3 秒，直接伤害从 8 降到 6。和瘴毒不同，毒素不再是单体：溅射内的每个敌人受到每秒 2 点毒素、持续 4.5 秒，而不是每秒 2.4 点、持续 4 秒，层数仍最多 3 层，并且同时燃烧。' },
     { damage: 6, interval: 1.28, range: 240, projectileSpeed: 280, splash: 50, burn: { dps: 3, duration: 3 }, poison: { dps: 2, duration: 4.5, maxStacks: 3 }, mechanics: ['splash', 'burn', 'poison'] }),
   recipe('pyre', ['fire', 'support'],
@@ -2742,6 +2757,7 @@ __ff_exports["simulate"] = simulate;
 __ff_exports["setSpeed"] = setSpeed;
 __ff_exports["takeEvents"] = takeEvents;
 __ff_exports["exportRun"] = exportRun;
+__ff_exports["enterEndless"] = enterEndless;
 const __ff_m0 = __ff_load("src/shared.js");
 const __ff_m1 = __ff_load("src/systems/movement.js");
 const __ff_m2 = __ff_load("src/systems/combat.js");
@@ -2941,6 +2957,16 @@ function exportRun(state) {
   out.events = [];
   out.accumulator = 0;
   return out;
+}
+
+function enterEndless(state) {
+  if (!state || typeof state !== 'object') return {ok: false, reason: 'bad-phase'};
+  if (state.endless === true) return {ok: false, reason: 'already'};
+  if (state.phase !== 'victory') return {ok: false, reason: 'bad-phase'};
+  state.endless = true;
+  state.phase = 'playing';
+  state.paused = false;
+  return {ok: true};
 }
 
 };
@@ -5419,6 +5445,8 @@ function describeFeedback(event) {
     points: readPoints(event),
     time: finite(event.time) ?? 0,
     cue,
+    approach: type === 'boss' && event.warning === true,
+    execute: event.execute === true,
   };
 }
 
@@ -5823,6 +5851,7 @@ function createEffects() {
       color,
       scale,
       crit,
+      execute: false,
       channel,
       amount,
       vy: -22,
@@ -5856,6 +5885,8 @@ function createEffects() {
         desc.crit ? 0.62 : 0.5,
         seed,
       );
+      const floater = floaters[floaters.length - 1];
+      if (floater && desc.execute === true) floater.execute = true;
       return;
     }
     if (desc.heal != null && desc.heal > 0) {
@@ -6039,6 +6070,7 @@ function createEffects() {
   }
 
   function spawnBoss(desc, seed) {
+    if (desc.approach) return;
     const point = visualPoint(desc);
     if (!point) return;
     pushRing(point.x, point.y, 12, 18, PALETTES.boss.hot, 0.46);
@@ -6474,6 +6506,11 @@ function createEffects() {
     const x = reduced ? floater.originX : floater.x;
     const y = reduced ? floater.originY : floater.y;
     drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
+    if (floater.execute === true && alpha >= 0.02) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ff3a32';
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+    }
   }
 
   function drawReducedMark(ctx, particle, alpha) {
@@ -6852,13 +6889,15 @@ function runner(step, attack) {
     fillEllipse(grid, 0, leftY, 1, 1, 'h');
     fillEllipse(grid, 17, rightY, 1, 1, 'h');
     seam(grid, 8, 11, 3);
-    const knee = step ? 2 : -2;
+    // Walk frames open and close the stride. Attack keeps the shorter plant.
+    const knee = attack ? -2 : (step ? 2 : -4);
+    const plant = attack ? 0 : (step ? -1 : 1);
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
+    limb(grid, 6 + knee, 18, 6 + plant, 22, 1, 0, 'o');
     limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12, 22, 1, 0, 'o');
-    fillEllipse(grid, 6, 22, 1, 1, 'o');
-    fillEllipse(grid, 12, 22, 1, 1, 'o');
+    limb(grid, 12 - knee, 18, 12 - plant, 22, 1, 0, 'o');
+    fillEllipse(grid, 6 + plant, 22, 1, 1, 'o');
+    fillEllipse(grid, 12 - plant, 22, 1, 1, 'o');
     eraseEllipse(grid, 9, 20, 1, 3);
   });
 }
@@ -11617,6 +11656,7 @@ function damageEnemy(state, enemy, amount, options = {}) {
     y: enemy.y,
     damage: dealt,
     crit: !!opts.crit,
+    execute: opts.execute === true,
     attack: opts.type || 'hit',
     towerType: opts.towerType || null
   });
@@ -11701,11 +11741,16 @@ function firstHit(state, projectile, x1, y1, x2, y2) {
   return best;
 }
 
+function executeApplies(projectile, enemy) {
+  const mechanics = projectile?.mechanics || [];
+  return mechanics.includes('execute') && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= EXECUTE_THRESHOLD;
+}
+
 function impactDamage(projectile, enemy) {
   let amount = finite(projectile.damage, 0);
   if (projectile.crit) amount *= Math.max(1, finite(projectile.critMultiplier, 1));
   const mechanics = projectile.mechanics || [];
-  if (mechanics.includes('execute') && enemy.maxHp > 0 && enemy.hp / enemy.maxHp <= EXECUTE_THRESHOLD) {
+  if (executeApplies(projectile, enemy)) {
     amount *= EXECUTE_MULTIPLIER;
   }
   if (mechanics.includes('fence_focus')) {
@@ -11796,6 +11841,7 @@ function applySplash(state, projectile, primary) {
       sourceId: projectile.sourceId,
       type: 'splash',
       crit: false,
+      execute: executeApplies(projectile, enemy),
       towerType: projectile.towerType
     });
     applyPayload(enemy, projectile);
@@ -11819,6 +11865,7 @@ function resolveHit(state, projectile, enemy) {
     sourceId: projectile.sourceId,
     type: attack,
     crit: !!projectile.crit,
+    execute: executeApplies(projectile, enemy),
     towerType: projectile.towerType
   });
   applyPayload(enemy, projectile);
@@ -14731,7 +14778,10 @@ function drainUnpaid(status) {
 }
 
 function damageOptions(status) {
-  return {sourceId: status.sourceId ?? null, type: status.type, crit: false, dot: true};
+  const type = status.type;
+  const options = {sourceId: status.sourceId ?? null, type, crit: false, dot: true};
+  if (type === 'burn' || type === 'poison') options.towerType = type;
+  return options;
 }
 
 function payDot(state, enemy, status, dps, damageCallback) {
@@ -15760,10 +15810,13 @@ const translate = __ff_m5["t"];
  * renderBuildPanel(container, state, api) rebuilds only the given container.
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
- * while playing. A draft overlay keeps three short choice cards and does not
- * include the 10-slot rearrange grid. Each card is the choice: tap the card,
- * there is no confirm or cancel under it. A mark and a meter show the power:
- * damage, attack speed, and range, or the one stat a hero upgrade changes.
+ * while playing. While placing, the five-column slot row and cancel sit above
+ * the unit description. That description, the stats, and the replace copy
+ * scroll in a short body so the slots stay on screen. A draft overlay keeps
+ * three short choice cards and does not include the 10-slot rearrange grid.
+ * Each card is the choice: tap the card, there is no confirm or cancel under
+ * it. A mark and a meter show the power: damage, attack speed, and range, or
+ * the one stat a hero upgrade changes.
  * A tower card says whether that base type is already on the board. Merge confirmation, when
  * a preview is open, shows the result name and rank, then at most two more lines.
  * It does not paste the catalog essay. Confirm and cancel stay 44px buttons.
@@ -15831,6 +15884,9 @@ const CSS = `
 .ff-build .ff-field.is-owned{color:#a5b8be}
 .ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
 .ff-build.is-draft .ff-draft-merge .btn{width:100%}
+.ff-build.is-placing .ff-place-row{grid-template-columns:repeat(5,minmax(0,1fr))}
+.ff-build.is-placing .ff-place-body{overflow:auto;max-height:6.5rem}
+.ff-build.is-placing .ff-place-row .btn,.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -17784,7 +17840,6 @@ function renderDraft(state, lang, tr, idSuffix) {
 function renderPlacing(state, lang, tr) {
   const section = el('section', { 'data-testid': 'build-placing' });
   section.append(el('h2', { class: 'ff-title', text: tr('chooseSlot') }));
-  section.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
   const pending = state.pendingUnit;
   const unit = pending?.unit;
   if (!unit) {
@@ -17797,20 +17852,8 @@ function renderPlacing(state, lang, tr) {
     return section;
   }
   const allowReplace = pending.replace === true || emptySlots(state).length === 0;
-  section.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
-    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
-    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
-    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
-    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
-    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
-  ));
+  // Slot buttons and cancel stay above the long description.
   if (ephemeral.replaceIndex >= 0) {
-    const target = slotUnit(state, ephemeral.replaceIndex);
-    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
-    box.append(el('h3', { text: tr('replaceConfirm') }));
-    box.append(el('p', { text: tr('confirmReplaceBody') }));
-    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
-    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
     const actions = el('div', { class: 'ff-actions' });
     actions.append(button({
       primary: true,
@@ -17825,22 +17868,15 @@ function renderPlacing(state, lang, tr) {
       'data-testid': 'replace-cancel',
       text: tr('cancel'),
     }));
-    box.append(actions);
-    section.append(box);
+    section.append(actions);
   } else {
-    if (allowReplace && emptySlots(state).length === 0) {
-      section.append(el('p', { text: tr('fullBoard') }));
-      section.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
-    } else {
-      section.append(el('p', { class: 'muted', text: tr('placeHint') }));
-    }
-    const list = el('div', { class: 'grid ff-slots', 'data-testid': 'place-grid' });
+    const list = el('div', { class: 'grid ff-slots ff-place-row', 'data-testid': 'place-grid' });
     for (let index = 0; index < 10; index += 1) {
       const slot = slotAt(state, index) || { index, unit: null };
       const occupant = slot.unit;
       if (!occupant) {
         list.append(button({
-          class: 'slot-btn',
+          class: 'slot-btn empty-slot',
           primary: true,
           'data-action': 'place',
           'data-index': String(index),
@@ -17859,7 +17895,7 @@ function renderPlacing(state, lang, tr) {
         continue;
       }
       list.append(button({
-        class: 'slot-btn',
+        class: 'slot-btn occupied-slot',
         'data-intent': 'arm-replace',
         'data-index': String(index),
         'data-testid': `replace-slot-${index}`,
@@ -17874,6 +17910,30 @@ function renderPlacing(state, lang, tr) {
     'data-testid': 'cancel-placement',
     text: tr('cancelPlacement'),
   }));
+  const body = el('div', { class: 'ff-place-body' });
+  body.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
+    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
+    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
+    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
+    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
+    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
+  ));
+  if (ephemeral.replaceIndex >= 0) {
+    const target = slotUnit(state, ephemeral.replaceIndex);
+    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
+    box.append(el('h3', { text: tr('replaceConfirm') }));
+    box.append(el('p', { text: tr('confirmReplaceBody') }));
+    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
+    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
+    body.append(box);
+  } else if (allowReplace && emptySlots(state).length === 0) {
+    body.append(el('p', { text: tr('fullBoard') }));
+    body.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
+  } else {
+    body.append(el('p', { class: 'muted', text: tr('placeHint') }));
+  }
+  body.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
+  section.append(body);
   return section;
 }
 
@@ -18182,7 +18242,7 @@ function renderBuildPanel(container, state, api) {
   const showProgress = role === 'overlay' ? modalHere : !(overlayMounted && modalWanted);
 
   const root = el('section', {
-    class: `ff-build panel${state.phase === 'draft' ? ' is-draft' : ''}${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
+    class: `ff-build panel${state.phase === 'draft' ? ' is-draft' : ''}${state.phase === 'placing' ? ' is-placing' : ''}${reducedMotion(state, safeApi) ? ' is-reduced' : ''}`,
     'data-testid': 'build-panel',
     'data-ff-build': '1',
     'data-phase': state.phase || '',
@@ -18278,7 +18338,8 @@ const local = {
   codexTab: 'towers',
   flash: null,
   focus: null,
-  screen: null
+  screen: null,
+  endlessDismissed: null
 };
 
 const META_CSS = `
@@ -18700,6 +18761,7 @@ function renderResults(ctx, root) {
   card.append(line(ctx, t(api, 'fence'), fenceText, 'result-fence'));
   if (run && Number.isFinite(run.seed)) card.append(line(ctx, t(api, 'seed'), String(run.seed >>> 0), 'result-seed'));
   card.append(line(ctx, t(api, 'currency'), num(profile.currency, lang), 'result-wallet'));
+  appendEndlessOffer(ctx, card);
   root.append(card);
 
   const actions = h(doc, 'div', {className: 'meta-actions'});
@@ -19797,6 +19859,13 @@ function equippedBonusPhrase(ctx, key, value) {
     const label = ctx.lang === 'zh' ? '栅栏' : 'Fence HP';
     return `${label} ${shown}`;
   }
+  const heroLabel = {
+    damage: ['Hero damage', '英雄伤害'],
+    haste: ['Hero attack speed', '英雄攻击速度'],
+    range: ['Hero range', '英雄射程'],
+    critChance: ['Hero crit chance', '英雄暴击率'],
+  }[key];
+  if (heroLabel) return `${ctx.lang === 'zh' ? heroLabel[1] : heroLabel[0]} ${shown}`;
   return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
@@ -19900,12 +19969,69 @@ function dotText(ctx, effect) {
   return parts.join(' · ') || '—';
 }
 
+const MECHANIC_LABELS = {
+  projectile: ['Projectile', '投射'],
+  crit: ['Crit', '暴击'],
+  pierce: ['Pierce', '穿透'],
+  splash: ['Splash', '溅射'],
+  burn: ['Burn', '燃烧'],
+  slow: ['Slow', '减速'],
+  chain: ['Chain', '连锁'],
+  poison: ['Poison', '毒素'],
+  aura: ['Aura', '光环'],
+  stun: ['Stun', '眩晕'],
+  execute: ['Execute', '处决'],
+};
+
 function mechanicText(mechanic, lang) {
-  if (typeof mechanic === 'string') return mechanic;
+  if (typeof mechanic === 'string') {
+    const pair = MECHANIC_LABELS[mechanic];
+    if (pair) return lang === 'zh' ? pair[1] : pair[0];
+    return mechanic;
+  }
   if (!mechanic || typeof mechanic !== 'object') return '';
   const name = textOf(mechanic.name ?? mechanic.id, lang);
   const description = textOf(mechanic.description, lang);
   return description || name;
+}
+
+function appendEndlessOffer(ctx, card) {
+  const {doc, api, lang, run} = ctx;
+  const settlement = run?.settlement && typeof run.settlement === 'object' ? run.settlement : null;
+  const outcome = settlement?.result || run?.phase;
+  if (!run || run.phase !== 'victory' || run.endless === true || outcome !== 'victory') return;
+  if (local.endlessDismissed === run.runId) return;
+  card.append(h(doc, 'p', {
+    'data-testid': 'endless-offer',
+    text: tx(api, lang, 'endlessOffer',
+      'Enter endless? The victory reward is already saved.',
+      '进入无尽？胜利报酬已经保存。')
+  }));
+  card.append(h(doc, 'p', {
+    'data-testid': 'endless-note',
+    text: tx(api, lang, 'endlessNote',
+      'Endless does not pay the main reward again.',
+      '无尽不会再次发放主线报酬。')
+  }));
+  const enter = button(ctx, {
+    action: 'endless',
+    testid: 'btn-results-endless',
+    label: tx(api, lang, 'endlessEnter', 'Enter endless', '进入无尽'),
+    primary: true
+  });
+  listen(enter, () => act(ctx, 'endless'));
+  const stay = button(ctx, {
+    action: 'endlessStay',
+    testid: 'btn-endless-stay',
+    label: tx(api, lang, 'endlessStay', 'Not now', '暂不进入')
+  });
+  listen(stay, () => {
+    local.endlessDismissed = run.runId;
+    ctx.rerender();
+  });
+  const row = h(doc, 'div', {className: 'meta-actions'});
+  row.append(enter, stay);
+  card.append(row);
 }
 
 function pressureText(ctx, entry) {

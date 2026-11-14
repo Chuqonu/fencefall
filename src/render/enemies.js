@@ -271,13 +271,15 @@ function runner(step, attack) {
     fillEllipse(grid, 0, leftY, 1, 1, 'h');
     fillEllipse(grid, 17, rightY, 1, 1, 'h');
     seam(grid, 8, 11, 3);
-    const knee = step ? 2 : -2;
+    // Walk frames open and close the stride. Attack keeps the shorter plant.
+    const knee = attack ? -2 : (step ? 2 : -4);
+    const plant = attack ? 0 : (step ? -1 : 1);
     limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6, 22, 1, 0, 'o');
+    limb(grid, 6 + knee, 18, 6 + plant, 22, 1, 0, 'o');
     limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12, 22, 1, 0, 'o');
-    fillEllipse(grid, 6, 22, 1, 1, 'o');
-    fillEllipse(grid, 12, 22, 1, 1, 'o');
+    limb(grid, 12 - knee, 18, 12 - plant, 22, 1, 0, 'o');
+    fillEllipse(grid, 6 + plant, 22, 1, 1, 'o');
+    fillEllipse(grid, 12 - plant, 22, 1, 1, 'o');
     eraseEllipse(grid, 9, 20, 1, 3);
   });
 }

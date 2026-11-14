@@ -494,10 +494,6 @@ img, svg, video { max-width: 100%; height: auto; }
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
-  .shell.is-draft [data-ui="overlay"] {
-    max-height: min(38vh, 250px);
-  }
 }
 
 [data-ui="overlay"],
@@ -642,7 +638,6 @@ img, svg, video { max-width: 100%; height: auto; }
     text-overflow: ellipsis;
   }
   .meter-track { height: 8px; }
-  .hud-stats { gap: 2px 8px; }
 }
 
 @media (max-height: 520px) {

@@ -532,7 +532,13 @@ export function createAudio(options) {
     });
   }
 
-  function playBoss(delay) {
+  function playBoss(desc, delay) {
+    if (desc && desc.approach === true) {
+      return safe(() => layers(
+        tone({ freq: 220, dur: 0.08, type: 'sine', gain: 0.04, delay }),
+        tone({ freq: 330, dur: 0.08, type: 'sine', gain: 0.04, delay: delay + 0.09 }),
+      ));
+    }
     return safe(() => layers(
       tone({ freq: 110, dur: 0.2, type: 'triangle', gain: 0.05, slide: -24, delay }),
       tone({ freq: 164, dur: 0.16, type: 'sine', gain: 0.03, delay: delay + 0.08 }),
@@ -552,7 +558,7 @@ export function createAudio(options) {
       case 'defeat': return playDefeat();
       case 'ui': return playUi(desc, delay);
       case 'status': return playStatus(desc, delay);
-      case 'boss': return playBoss(delay);
+      case 'boss': return playBoss(desc, delay);
       default: return false;
     }
   }

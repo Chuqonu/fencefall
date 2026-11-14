@@ -463,6 +463,8 @@ export function describeFeedback(event) {
     points: readPoints(event),
     time: finite(event.time) ?? 0,
     cue,
+    approach: type === 'boss' && event.warning === true,
+    execute: event.execute === true,
   };
 }
 
@@ -867,6 +869,7 @@ export function createEffects() {
       color,
       scale,
       crit,
+      execute: false,
       channel,
       amount,
       vy: -22,
@@ -900,6 +903,8 @@ export function createEffects() {
         desc.crit ? 0.62 : 0.5,
         seed,
       );
+      const floater = floaters[floaters.length - 1];
+      if (floater && desc.execute === true) floater.execute = true;
       return;
     }
     if (desc.heal != null && desc.heal > 0) {
@@ -1083,6 +1088,7 @@ export function createEffects() {
   }
 
   function spawnBoss(desc, seed) {
+    if (desc.approach) return;
     const point = visualPoint(desc);
     if (!point) return;
     pushRing(point.x, point.y, 12, 18, PALETTES.boss.hot, 0.46);
@@ -1518,6 +1524,11 @@ export function createEffects() {
     const x = reduced ? floater.originX : floater.x;
     const y = reduced ? floater.originY : floater.y;
     drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
+    if (floater.execute === true && alpha >= 0.02) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ff3a32';
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+    }
   }
 
   function drawReducedMark(ctx, particle, alpha) {
