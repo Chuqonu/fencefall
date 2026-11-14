@@ -9,6 +9,8 @@
  * from ingestEvents; this module never reads or drains state.events.
  * Changing runId clears leftover VFX, then replays events ingested since the
  * previous draw so a restart frame does not drop its own feedback.
+ * A live burn, poison, or slow tints that sprite warm, green, or cold.
+ * A bilingual director or wave hint is drawn in the top margin.
  */
 
 import {drawWorld} from './world.js';
@@ -52,6 +54,12 @@ const ELEMENT_ALIAS = {
 };
 
 const STATUS_RANK = {stun: 0, burn: 1, poison: 2, slow: 3, brittle: 4};
+const STATUS_TINT = {burn: '#e25a2a', poison: '#6aaa3a', slow: '#9ed8ea'};
+const TINT_ALPHA = 0.55;
+const HINT_BAND = 42;
+const HINT_MAX_LINES = 3;
+const HINT_CHAR_LIMIT = 220;
+let tintSurface = null;
 
 function finite(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -643,6 +651,239 @@ function enemyCueLayout(anchor) {
   };
 }
 
+function statusLive(enemy, type) {
+  const source = Array.isArray(enemy?.statuses) ? enemy.statuses : [];
+  for (let i = 0; i < source.length; i++) {
+    const status = source[i];
+    if (!status || status.type !== type) continue;
+    if (Number.isFinite(status.remaining) && status.remaining <= 0) continue;
+    return true;
+  }
+  return false;
+}
+
+// One hue on the body. Burn wins, then poison, then slow. Pips still list the rest.
+function statusTintColor(enemy) {
+  if (statusLive(enemy, 'burn')) return STATUS_TINT.burn;
+  if (statusLive(enemy, 'poison')) return STATUS_TINT.poison;
+  if (statusLive(enemy, 'slow')) return STATUS_TINT.slow;
+  return null;
+}
+
+function alphaCanvas(width, height) {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  try {
+    if (typeof OffscreenCanvas === 'function') {
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext('2d');
+      if (ctx) return {canvas, ctx};
+    }
+  } catch {
+    /* OffscreenCanvas can exist but refuse a 2d context. */
+  }
+  try {
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) return {canvas, ctx};
+    }
+  } catch {
+    /* Headless hosts fall back to a flat wash. */
+  }
+  return null;
+}
+
+function scratchFor(width, height) {
+  if (tintSurface && tintSurface.canvas.width >= width && tintSurface.canvas.height >= height) return tintSurface;
+  const next = alphaCanvas(Math.max(64, width), Math.max(80, height));
+  if (!next) return null;
+  tintSurface = next;
+  return tintSurface;
+}
+
+function washStatus(ctx, left, top, width, height, color) {
+  ctx.save();
+  ctx.globalAlpha = 0.34;
+  ctx.fillStyle = color;
+  ctx.fillRect(left, top, width, height);
+  ctx.restore();
+}
+
+// Recolor sprite pixels only, then blend them back so the drawing stays visible.
+function drawStatusTint(ctx, enemy, anchor, color, time) {
+  const width = anchor.size.width;
+  const height = anchor.size.height;
+  if (!(width > 0) || !(height > 0)) return;
+  const left = Math.round(anchor.x - width / 2);
+  const top = Math.round(anchor.y - height);
+  const surface = scratchFor(width, height);
+  if (!surface || typeof ctx.drawImage !== 'function') {
+    washStatus(ctx, left, top, width, height, color);
+    return;
+  }
+  const scratch = surface.ctx;
+  try {
+    scratch.setTransform(1, 0, 0, 1, 0, 0);
+    scratch.globalAlpha = 1;
+    scratch.globalCompositeOperation = 'source-over';
+    scratch.clearRect(0, 0, width, height);
+    drawEnemy(scratch, enemy, width / 2, height, {time, scale: 1, flash: 0});
+    scratch.globalCompositeOperation = 'source-atop';
+    scratch.fillStyle = color;
+    scratch.fillRect(0, 0, width, height);
+    scratch.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.globalAlpha = TINT_ALPHA;
+    ctx.drawImage(surface.canvas, 0, 0, width, height, left, top, width, height);
+    ctx.restore();
+  } catch {
+    washStatus(ctx, left, top, width, height, color);
+  }
+}
+
+function languageTag(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const tag = value.toLowerCase();
+  if (tag.startsWith('zh')) return 'zh';
+  if (tag.startsWith('en')) return 'en';
+  return null;
+}
+
+function activeLanguage(state, ui) {
+  const doc = globalThis.document?.documentElement?.lang;
+  return languageTag(ui?.language)
+    || languageTag(ui?.settings?.language)
+    || languageTag(doc)
+    || languageTag(state?.profileSnapshot?.settings?.language)
+    || 'en';
+}
+
+function bilingualHint(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const en = typeof value.en === 'string' ? value.en.trim() : '';
+  const zh = typeof value.zh === 'string' ? value.zh.trim() : '';
+  if (!en || !zh) return null;
+  return {en, zh};
+}
+
+function fieldHint(state) {
+  if (!state || typeof state !== 'object') return null;
+  return bilingualHint(state.director?.playerHint) || bilingualHint(state.systems?.waves?.current?.hint);
+}
+
+function textWidth(ctx, text) {
+  if (ctx && typeof ctx.measureText === 'function') {
+    try {
+      const width = ctx.measureText(String(text)).width;
+      if (Number.isFinite(width) && width > 0) return width;
+    } catch {
+      /* Estimate when the context cannot measure. */
+    }
+  }
+  let width = 0;
+  for (const ch of Array.from(String(text))) width += ch.charCodeAt(0) > 127 ? 11 : 6;
+  return width;
+}
+
+function shrinkToWidth(ctx, word, maxWidth, lines) {
+  let rest = word;
+  while (rest && textWidth(ctx, rest) > maxWidth) {
+    let fit = '';
+    for (const ch of Array.from(rest)) {
+      const next = fit + ch;
+      if (textWidth(ctx, next) > maxWidth) break;
+      fit = next;
+    }
+    if (!fit) {
+      const first = Array.from(rest)[0] || '';
+      if (!first) break;
+      lines.push(first);
+      rest = Array.from(rest).slice(1).join('');
+      continue;
+    }
+    lines.push(fit);
+    rest = Array.from(rest).slice(Array.from(fit).length).join('');
+  }
+  return rest;
+}
+
+function wrapHintLines(ctx, text, maxWidth) {
+  const lines = [];
+  const limited = Array.from(String(text)).slice(0, HINT_CHAR_LIMIT).join('');
+  for (const paragraph of limited.split('\n')) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    let line = shrinkToWidth(ctx, words[0], maxWidth, lines);
+    for (let i = 1; i < words.length; i++) {
+      const next = line ? `${line} ${words[i]}` : words[i];
+      if (textWidth(ctx, next) <= maxWidth) line = next;
+      else {
+        if (line) lines.push(line);
+        line = shrinkToWidth(ctx, words[i], maxWidth, lines);
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function ellipsize(ctx, line, maxWidth) {
+  const mark = '…';
+  let out = line;
+  while (out && textWidth(ctx, `${out}${mark}`) > maxWidth) out = Array.from(out).slice(0, -1).join('');
+  return `${out}${mark}`;
+}
+
+function drawFieldHint(ctx, state, ui) {
+  const hint = fieldHint(state);
+  if (!hint || typeof ctx.fillText !== 'function') return;
+  const text = hint[activeLanguage(state, ui)];
+  if (!text) return;
+  const maxWidth = ARENA.width - 16;
+  ctx.save();
+  try {
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    let lines = wrapHintLines(ctx, text, maxWidth);
+    if (lines.length > HINT_MAX_LINES) {
+      lines = lines.slice(0, HINT_MAX_LINES);
+      lines[HINT_MAX_LINES - 1] = ellipsize(ctx, lines[HINT_MAX_LINES - 1], maxWidth);
+    }
+    if (!lines.length) return;
+    const lineHeight = 13;
+    const blockWidth = Math.min(maxWidth, Math.max(...lines.map((line) => textWidth(ctx, line))));
+    const bandHeight = Math.min(HINT_BAND, lines.length * lineHeight + 6);
+    const x = Math.round((ARENA.width - blockWidth) / 2);
+    const y = 3;
+    if (typeof ctx.beginPath === 'function' && typeof ctx.rect === 'function' && typeof ctx.clip === 'function') {
+      ctx.beginPath();
+      ctx.rect(0, 0, ARENA.width, HINT_BAND);
+      ctx.clip();
+    }
+    ctx.fillStyle = 'rgba(8, 14, 16, 0.78)';
+    ctx.fillRect(x - 4, 1, Math.ceil(blockWidth) + 8, bandHeight - 1);
+    for (let i = 0; i < lines.length; i++) {
+      const lx = x;
+      const ly = y + i * lineHeight;
+      ctx.fillStyle = '#0c1216';
+      ctx.fillText(lines[i], lx - 1, ly);
+      ctx.fillText(lines[i], lx + 1, ly);
+      ctx.fillText(lines[i], lx, ly - 1);
+      ctx.fillText(lines[i], lx, ly + 1);
+      ctx.fillStyle = '#f4efe2';
+      ctx.fillText(lines[i], lx, ly);
+    }
+  } catch {
+    /* Hint text is optional. A missing text API must not blank the field. */
+  } finally {
+    ctx.restore();
+  }
+}
+
 function enemyFlash(enemy, hits, now, duration) {
   let best = 0;
   const radius = (finite(enemy.radius) ?? 14) + 8;
@@ -910,6 +1151,10 @@ export function createRenderer(canvas) {
       anchors[i] = anchor;
       const flash = enemyFlash(enemy, hits, now, flashSpan);
       isolate(ctx, () => drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash}));
+      if (!enemy.dead && flash <= 0.4) {
+        const tint = statusTintColor(enemy);
+        if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
+      }
     }
 
     for (let index = 0; index < 10; index++) {
@@ -970,6 +1215,7 @@ export function createRenderer(canvas) {
     if (selected >= 0) strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
 
     isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
+    drawFieldHint(ctx, state, ui);
   }
 
   function draw(state, ui) {

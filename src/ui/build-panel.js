@@ -5,7 +5,8 @@
  * data-ui="overlay" shows the modal step: draft, placement, or merge confirmation.
  * data-ui="panel" shows inspection. Move and the slot grid stay on the panel
  * while playing. A draft overlay keeps three short choice cards and does not
- * include the 10-slot rearrange grid. Merge preview stays available there as a
+ * include the 10-slot rearrange grid. A tower card says whether that base type
+ * is already on the board. Merge preview stays available there as a
  * short pair list, then the confirm step.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
@@ -49,6 +50,9 @@ const CSS = `
 .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
 .ff-build.is-draft .ff-choice .btn{min-height:44px;margin-top:4px}
+.ff-build.is-draft .ff-field{align-self:flex-start;font-size:12px;line-height:1.2;padding:1px 6px}
+.ff-build .ff-field.is-new{border-color:#e0c17a;color:#e0c17a}
+.ff-build .ff-field.is-owned{color:#a5b8be}
 .ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
 .ff-build.is-draft .ff-draft-merge .btn{width:100%}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
@@ -158,6 +162,8 @@ const EXTRA = {
     currentStats: 'Stats',
     nextStats: 'After this choice',
     draftWaiting: 'The three choices stay available until you pick one.',
+    draftOnField: 'Already on the field',
+    draftNewType: 'Not on the field yet',
     mergeReview: 'Review the merge, then confirm or cancel. Both units stay if you cancel.',
     lostOnReplace: 'Removed tower',
     chooseEmpty: 'Empty slots are ready for placement.',
@@ -261,6 +267,8 @@ const EXTRA = {
     currentStats: '属性',
     nextStats: '选择之后',
     draftWaiting: '在你做出选择之前，三张卡都会保留。',
+    draftOnField: '场上已有',
+    draftNewType: '场上还没有',
     mergeReview: '先查看合成结果，再确认或取消。取消会保留双方。',
     lostOnReplace: '被移除的塔',
     chooseEmpty: '空位可以直接放置。',
@@ -1653,6 +1661,40 @@ function renderDraftMerge(state, lang, tr, ui) {
   return wrap;
 }
 
+function draftBaseType(option) {
+  if (!option || typeof option !== 'object') return '';
+  if (option.kind === 'hero_upgrade') return '';
+  if (option.kind && option.kind !== 'tower') return '';
+  const type = typeof option.type === 'string' ? option.type.trim() : '';
+  if (!type || type === 'hero') return '';
+  return type;
+}
+
+function boardHasBaseType(state, type) {
+  if (!type) return false;
+  for (let index = 0; index < 10; index += 1) {
+    const unit = slotUnit(state, index);
+    if (!unit || isHero(unit) || unit.kind === 'hybrid') continue;
+    if (unit.type === type) return true;
+  }
+  return false;
+}
+
+function draftFieldLabel(state, option, lang, tr) {
+  const type = draftBaseType(option);
+  if (!type) return null;
+  const onField = boardHasBaseType(state, type);
+  const key = onField ? 'draftOnField' : 'draftNewType';
+  let text = tr(key);
+  if (typeof text !== 'string' || text === '' || text === key) {
+    const fallback = lang === 'zh'
+      ? { draftOnField: '场上已有', draftNewType: '场上还没有' }
+      : { draftOnField: 'Already on the field', draftNewType: 'Not on the field yet' };
+    text = fallback[key];
+  }
+  return { onField, type, text };
+}
+
 function renderDraft(state, lang, tr, idSuffix, ui) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
@@ -1669,16 +1711,27 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
   options.forEach((option, index) => {
     const name = draftOptionName(option, lang, tr);
     const offer = compactOffer(state, option, lang, tr);
+    const field = draftFieldLabel(state, option, lang, tr);
     const effectId = `ff-draft-effect-${idSuffix}-${index}`;
     const statText = offer.stats.join(' · ');
     const card = el('article', { class: 'card ff-choice', 'data-testid': `draft-card-${index}` });
     card.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
+    if (field) {
+      card.append(el('p', {
+        class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
+        'data-testid': `draft-choice-${index}-field`,
+        'data-on-field': field.onField ? 'true' : 'false',
+        'data-type': field.type,
+        text: field.text,
+      }));
+    }
     card.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
     if (statText) {
       card.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
     }
     const actionLabel = option?.kind === 'hero_upgrade' ? tr('chooseUpgrade') : (option?.replace ? tr('replace') : tr('select'));
     const described = statText ? `${offer.blurb}. ${statText}` : offer.blurb;
+    const spoken = field ? `${name}. ${field.text}. ${described}. ${actionLabel}` : `${name}. ${described}. ${actionLabel}`;
     card.append(button({
       primary: true,
       'data-action': 'chooseDraft',
@@ -1690,7 +1743,7 @@ function renderDraft(state, lang, tr, idSuffix, ui) {
       'data-option-id': option?.id || '',
       'data-testid': `draft-choice-${index}`,
       'aria-describedby': effectId,
-      'aria-label': `${name}. ${described}. ${actionLabel}`,
+      'aria-label': spoken,
       text: actionLabel,
     }));
     list.append(el('li', {}, card));

@@ -2,6 +2,7 @@
  * Battlefield backdrop, logical 360×640.
  * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
  * then the ground both defender rows stand on, with exactly two rows of five slots.
+ * Fence art follows hp/maxHp: intact above about 60%, cracked below that, failing below about 30%.
  * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
  * Animation uses the `time` argument.
@@ -12,6 +13,11 @@ import { ARENA, slotGeometry } from '../shared.js';
 const W = ARENA.width;
 const H = ARENA.height;
 const PICKETS = 30;
+// Shared fence stages, as fractions of maxHp. Cracks open through the first line.
+// Boards, posts, and the rail give way through the second. Ruin is the last sliver.
+const FENCE_CRACKED = 0.6;
+const FENCE_FAILING = 0.3;
+const FENCE_RUIN = 0.12;
 const BREAK_SEQUENCE = Object.freeze([
   0, 29, 2, 27, 5, 24, 8, 21, 1, 28, 4, 25, 11, 18, 7, 22,
   10, 19, 3, 26, 6, 23, 9, 20, 12, 17, 13, 16, 14, 15
@@ -136,12 +142,18 @@ function readAlpha(ctx) {
   return Number.isFinite(ctx.globalAlpha) ? ctx.globalAlpha : 1;
 }
 
+function wearOf(index) {
+  return BREAK_RANK[index] / (PICKETS - 1);
+}
+
 function breakAt(index) {
-  return 0.88 * (1 - BREAK_RANK[index] / 29);
+  const wear = wearOf(index);
+  return FENCE_FAILING * (1 - wear * wear);
 }
 
 function crackAt(index) {
-  return Math.min(0.98, breakAt(index) + 0.14);
+  const wear = wearOf(index);
+  return FENCE_CRACKED - FENCE_FAILING * wear * wear * wear;
 }
 
 function fenceRatio(state) {
@@ -155,13 +167,13 @@ function fenceRatio(state) {
 }
 
 function woodKit(ratio) {
-  if (ratio > 0.72) {
+  if (ratio > FENCE_CRACKED) {
     return { light: '#e6d2a4', mid: '#c4a06a', dark: '#8d6840', edge: '#4e3820', iron: '#d5dde0', ironDark: '#6e7c86', strap: '#9aa8ae' };
   }
-  if (ratio > 0.4) {
+  if (ratio > FENCE_FAILING) {
     return { light: '#c4a882', mid: '#8d6a46', dark: '#5c4330', edge: '#2e2218', iron: '#b4bcc0', ironDark: '#556066', strap: '#7a868c' };
   }
-  if (ratio > 0.15) {
+  if (ratio > FENCE_RUIN) {
     return { light: '#8a6850', mid: '#5c4034', dark: '#3a2822', edge: '#1a1210', iron: '#80888c', ironDark: '#3e484c', strap: '#5a6468' };
   }
   return { light: '#6a4038', mid: '#3a2420', dark: '#241614', edge: '#100c0a', iron: '#5c6064', ironDark: '#2a3034', strap: '#3a4044' };
@@ -497,13 +509,13 @@ function drawPicket(ctx, index, ratio, kit) {
   const top = 430 + jog;
   const base = 466;
   if (broken) {
-    if (((index * 5 + 3) % 4) === 0 || (ratio <= 0.08 && (index % 2) === 0)) {
+    if (((index * 5 + 3) % 4) === 0 || (ratio <= FENCE_RUIN && (index % 2) === 0)) {
       ctx.fillStyle = kit.edge;
       ctx.fillRect(x + 2, 462, 2, 3);
       ctx.fillRect(x + 5, 460, 1, 4);
       return false;
     }
-    const stump = (ratio <= 0.08 ? 4 + (index % 3) : 8 + (index % 5) * 3);
+    const stump = (ratio <= FENCE_RUIN ? 4 + (index % 3) : 8 + (index % 5) * 3);
     const y = base - stump;
     ctx.fillStyle = kit.edge;
     ctx.fillRect(x, y, 8, stump);
@@ -535,10 +547,15 @@ function drawPicket(ctx, index, ratio, kit) {
   ctx.fillRect(x + 3, 450, 2, 2);
   if (ratio <= crackAt(index)) {
     ctx.fillStyle = '#1a100c';
+    ctx.fillRect(x + 3, top + 6, 1, 5);
     ctx.fillRect(x + 2, top + 12, 1, 7);
     ctx.fillRect(x + 3, top + 18, 1, 6);
+    if (ratio <= (FENCE_CRACKED + FENCE_FAILING) / 2) {
+      ctx.fillRect(x + 5, top + 8, 1, 6);
+      ctx.fillRect(x + 4, top + 14, 1, 5);
+    }
   }
-  if (ratio < 0.45 && (index % 3) === 0) {
+  if (ratio <= FENCE_FAILING && (index % 3) === 0) {
     ctx.fillStyle = '#2a1612';
     ctx.fillRect(x + 1, 456, 6, 4);
   }
@@ -556,16 +573,16 @@ function drawWire(ctx, intact, kit, ratio) {
       ctx.fillRect(x + 2, top - 1, 1, 1);
       ctx.fillRect(x + 4, top - 1, 1, 1);
       if (intact[i + 1]) ctx.fillRect(x + 7, 426, 7, 1);
-    } else if (ratio > 0.1) {
+    } else if (ratio > FENCE_RUIN) {
       ctx.fillRect(x + 1, 436 + (i % 3) * 2, 6, 1);
     }
   }
 }
 
 function postFalls(x, ratio) {
-  if (x < 20 || x > 340) return ratio <= 0.42;
+  if (x < 20 || x > 340) return ratio <= FENCE_FAILING;
   if (x === 174) return ratio <= 0;
-  return ratio <= 0.2;
+  return ratio <= FENCE_RUIN;
 }
 
 function drawPost(ctx, x, ratio, kit) {
@@ -588,14 +605,18 @@ function drawPost(ctx, x, ratio, kit) {
   ctx.fillRect(x, 446, 8, 4);
   ctx.fillStyle = kit.ironDark;
   ctx.fillRect(x + 1, 447, 6, 1);
-  if (ratio < 0.35) {
+  if (ratio <= FENCE_CRACKED) {
     ctx.fillStyle = '#1a100c';
     ctx.fillRect(x + 3, 430, 1, 12);
+    if (ratio <= FENCE_FAILING) {
+      ctx.fillRect(x + 4, 434, 1, 10);
+      ctx.fillRect(x + 2, 438, 1, 6);
+    }
   }
 }
 
 function drawRubble(ctx, kit, ratio) {
-  if (ratio > 0.08) return;
+  if (ratio > FENCE_RUIN) return;
   ctx.fillStyle = kit.mid;
   ctx.fillRect(36, 456, 26, 3);
   ctx.fillRect(48, 453, 4, 3);
@@ -617,9 +638,9 @@ function drawSleeper(ctx, ratio, kit) {
   ctx.fillRect(0, y + 1, W, 2);
   ctx.fillStyle = kit.light;
   ctx.fillRect(0, y, W, 1);
-  if (ratio <= 0.34) {
+  if (ratio <= FENCE_FAILING) {
     for (let i = 0; i < PICKETS; i++) {
-      if (ratio > breakAt(i) * 0.45) continue;
+      if (ratio > breakAt(i)) continue;
       ctx.fillStyle = '#1a1612';
       ctx.fillRect(i * 12 + 4, y + 1, 6, 4);
     }
@@ -641,14 +662,14 @@ function drawFence(ctx, ratio) {
 }
 
 function drawBanner(ctx, ratio, time, reduced, phase) {
-  if (ratio < 0.18 || postFalls(174, ratio)) return;
+  if (ratio < FENCE_RUIN || postFalls(174, ratio)) return;
   const wave = reduced ? 0 : (Math.sin(time * 2.2) > 0 ? 1 : 0);
   const y = 416 + wave;
   ctx.fillStyle = '#6e5432';
   ctx.fillRect(178, 414, 2, 34);
-  const torn = ratio < 0.58;
+  const torn = ratio <= FENCE_CRACKED;
   const clothW = torn ? 11 : 15;
-  ctx.fillStyle = ratio < 0.4 ? '#7a3030' : '#9a3a3a';
+  ctx.fillStyle = ratio <= FENCE_FAILING ? '#7a3030' : '#9a3a3a';
   ctx.fillRect(180, y, clothW, 9);
   ctx.fillStyle = '#6e2424';
   ctx.fillRect(180, y + 8, clothW, 1);
@@ -661,7 +682,7 @@ function drawBanner(ctx, ratio, time, reduced, phase) {
     ctx.fillRect(180 + clothW, y + 5, 2, 2);
     ctx.fillRect(180 + clothW - 1, y + 7, 3, 2);
   }
-  if (phase === 'victory' && ratio > 0.35) {
+  if (phase === 'victory' && ratio > FENCE_FAILING) {
     ctx.fillStyle = '#f0cb72';
     ctx.fillRect(182, y + 1, 1, 1);
     ctx.fillRect(188, y + 1, 1, 1);
@@ -669,7 +690,7 @@ function drawBanner(ctx, ratio, time, reduced, phase) {
 }
 
 function drawEmbers(ctx, ratio, time, reduced) {
-  if (ratio > 0.62) return;
+  if (ratio > FENCE_FAILING) return;
   const base = readAlpha(ctx);
   for (let i = 0; i < PICKETS; i++) {
     if (ratio > breakAt(i) || (i % 3) !== 0) continue;

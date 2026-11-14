@@ -259,7 +259,12 @@ img, svg, video { max-width: 100%; height: auto; }
 .nav-scroll { flex: 1 1 12rem; }
 
 .top-tools { flex: 0 1 auto; }
-.hud-controls { flex-wrap: wrap; }
+.hud-controls { flex-wrap: wrap; order: 3; }
+
+/* Flattened on wide screens so the status line stays under the controls.
+   On a phone the box is real and the message overlays it. */
+.hud-main { display: contents; }
+.hud-message { order: 4; }
 
 .shell-body {
   min-width: 0;
@@ -433,6 +438,25 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 
 .hud-message:empty { display: none; }
+
+/* Long merge copy scrolls inside the meter block. It must not lengthen the
+   phone footer: that height comes straight out of the field, and at 390px
+   the frame needs to stay near 340px wide. */
+@media (max-width: 899px) {
+  .hud-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .hud-message:not(:empty) {
+    max-height: 2.8em;
+    margin: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}
 
 [data-ui="overlay"],
 [data-ui="menu"] {

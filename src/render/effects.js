@@ -8,14 +8,15 @@
  *
  * Event names: shot, hit, kill, fence_hit, merge, draft, victory, defeat, ui.
  * Optional fields: x, y, targetX, targetY, damage, crit, towerType, rank, splash,
- * chain, points, stacks, slot/slotIndex/fromIndex/toIndex, time.
+ * chain, pierce, attack, points, stacks, slot/slotIndex/fromIndex/toIndex, time.
  * Missing fields are skipped. emit() copies payload after `type`, so a payload
  * `type` of bolt/fire/frost/lightning/poison/support/hero/burn/slow/stun/brittle
  * is recovered as shot, hit, or status when position or damage is present.
  * Reduced motion keeps markers, rings at their start size, crits, and numbers,
  * and drops traveling debris.
- * A shot is a short arrow leaving the defender. An impact is a starburst with
- * a damage number. A fence hit is a red bite in the fence rail with its own number.
+ * A plain shot is a short arrow. A pierce shot is a thin needle along the aim.
+ * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
+ * stay starbursts with a damage number. A fence hit is a red bite in the rail.
  */
 import { ARENA, slotGeometry } from '../shared.js';
 
@@ -244,6 +245,52 @@ function readCount(value, max) {
   return Math.max(0, Math.min(max, Math.round(n)));
 }
 
+function deliveryName(value) {
+  const name = normName(value);
+  if (name === 'pierce') return 'pierce';
+  if (name === 'splash' || name === 'aoe') return 'splash';
+  if (name === 'chain') return 'chain';
+  return '';
+}
+
+// One event draws one shape. Attack wins, then a single mechanic field or tag.
+// Bolt, fire, and lightning are the base pierce, splash, and chain towers.
+function readDelivery(event, type) {
+  const named = deliveryName(event.attack) || deliveryName(event.impact) || deliveryName(event.impactType);
+  if (named) return named;
+  let pierce = readCount(event.pierce, 8) > 0;
+  const splashN = finite(event.splash);
+  let splash = event.splash === true || (splashN != null && splashN > 0);
+  let chain = readCount(event.chain, 8) > 0;
+  const tags = readTags(event);
+  for (let i = 0; i < tags.length; i++) {
+    const flag = deliveryName(tags[i]);
+    if (flag === 'pierce') pierce = true;
+    else if (flag === 'splash') splash = true;
+    else if (flag === 'chain') chain = true;
+  }
+  if (!pierce && !splash && Array.isArray(event.points) && event.points.length > 0) chain = true;
+  const flags = (pierce ? 1 : 0) + (splash ? 1 : 0) + (chain ? 1 : 0);
+  if (flags === 1) {
+    if (pierce) return 'pierce';
+    if (splash) return 'splash';
+    return 'chain';
+  }
+  if (flags > 1) {
+    if (type === 'shot' && pierce) return 'pierce';
+    if (splash && type !== 'shot') return 'splash';
+    if (chain) return 'chain';
+    if (splash) return 'splash';
+    return 'pierce';
+  }
+  if (type !== 'shot' && type !== 'hit') return '';
+  const element = normName(event.towerType || event.unitType || event.sourceType || event.attackerType || '');
+  if (element === 'bolt') return 'pierce';
+  if (element === 'fire') return 'splash';
+  if (element === 'lightning') return 'chain';
+  return '';
+}
+
 function readElement(event, hint, feedbackType) {
   const statusName = normName(event.status) || normName(event.statusType);
   if (feedbackType === 'status' && statusName) return statusName;
@@ -403,6 +450,8 @@ export function describeFeedback(event) {
     rank: readRank(event),
     splash: readSplash(event),
     chain: readCount(event.chain, 8),
+    pierce: readCount(event.pierce, 8),
+    delivery: readDelivery(event, type),
     stacks: readCount(event.stacks, 8),
     points: readPoints(event),
     time: finite(event.time) ?? 0,
@@ -561,6 +610,102 @@ export function createEffects() {
       maxLife: life,
       motionOnly: false,
     });
+  }
+
+  // Pierce is a 1px shaft with a tip. It runs backward through the origin,
+  // so it does not read as the fletched arrow used for a plain shot.
+  function pushNeedle(x, y, ux, uy, length, palette, crit, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if ((ux | 0) === 0 && (uy | 0) === 0) return;
+    pushParticle({
+      kind: 'needle',
+      x: Math.round(x),
+      y: Math.round(y),
+      ux: ux | 0,
+      uy: uy | 0,
+      length: Math.max(10, Math.min(18, length | 0)),
+      shaft: palette.hot,
+      head: crit ? '#ffe56a' : palette.core,
+      edge: palette.dim,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  // Splash is a hollow ring. The radius stays small so one burst is a few pixels.
+  function pushBurst(x, y, radius, palette, life) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    pushParticle({
+      kind: 'burst',
+      x: Math.round(x),
+      y: Math.round(y),
+      radius: Math.max(5, Math.min(9, radius | 0)),
+      color: palette.hot,
+      core: palette.core,
+      edge: palette.mid,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  function pushJump(points, palette, life) {
+    if (!points || points.length < 2) return;
+    const clean = [];
+    for (let i = 0; i < points.length && clean.length < 4; i++) {
+      const point = points[i];
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+      clean.push({ x: point.x, y: point.y });
+    }
+    if (clean.length < 2) return;
+    pushParticle({
+      kind: 'jump',
+      x: clean[0].x,
+      y: clean[0].y,
+      points: clean,
+      color: palette.core,
+      edge: palette.hot,
+      life,
+      maxLife: life,
+      motionOnly: false,
+    });
+  }
+
+  // Two hard kinks, at least 5px off the straight line, so a jump is not a needle.
+  function kinkedJump(x0, y0, x1, y1) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (!(dist >= 8)) {
+      return [
+        { x: x1 - 9, y: y1 + 3 },
+        { x: x1 - 3, y: y1 - 4 },
+        { x: x1 + 3, y: y1 + 2 },
+        { x: x1 + 9, y: y1 - 7 },
+      ];
+    }
+    const px = -dy / dist;
+    const py = dx / dist;
+    const amp = Math.min(9, Math.max(5, dist * 0.18));
+    return [
+      { x: x0, y: y0 },
+      { x: x0 + dx * 0.33 + px * amp, y: y0 + dy * 0.33 + py * amp },
+      { x: x0 + dx * 0.66 - px * amp, y: y0 + dy * 0.66 - py * amp },
+      { x: x1, y: y1 },
+    ];
+  }
+
+  function aimedJump(x, y, ux, uy) {
+    const px = -uy;
+    const py = ux;
+    const len = 12;
+    return [
+      { x, y },
+      { x: x + ux * 4 + px * 4, y: y + uy * 4 + py * 4 },
+      { x: x + ux * 8 - px * 4, y: y + uy * 8 - py * 4 },
+      { x: x + ux * len, y: y + uy * len },
+    ];
   }
 
   function pushImpact(x, y, arm, palette, crit, life) {
@@ -729,23 +874,59 @@ export function createEffects() {
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
     const aim = shotOctant(desc, point);
-    pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, desc.crit ? 0.2 : 0.16);
+    const life = desc.crit ? 0.2 : 0.16;
+    if (desc.delivery === 'pierce') {
+      pushNeedle(point.x, point.y, aim.x, aim.y, desc.crit ? 16 : 13, palette, desc.crit, life);
+      return;
+    }
+    if (desc.delivery === 'splash') {
+      pushBurst(point.x, point.y, 6, palette, life);
+      return;
+    }
+    if (desc.delivery === 'chain') {
+      pushJump(aimedJump(point.x, point.y, aim.x, aim.y), palette, life);
+      return;
+    }
+    pushStreak(point.x, point.y, aim.x, aim.y, desc.crit ? 14 : 10, palette, desc.crit, life);
   }
 
   function spawnHit(desc, seed) {
     const point = visualPoint(desc);
     if (!point) return;
     const palette = paletteFor(desc.element, desc.behavior);
-    if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
-    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
-    pushImpact(point.x, point.y, desc.crit ? 6 : 4, palette, desc.crit, desc.crit ? 0.28 : 0.2);
-    if (desc.points.length && (desc.behavior === 'lightning' || desc.chain > 0)) {
-      const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : 1, 3);
-      for (let i = 0; i < hops; i++) {
-        const hop = desc.points[i];
-        pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, desc.behavior === 'lightning' ? 10 : 4, seed + i * 9);
+    if (desc.delivery === 'pierce') {
+      const aim = shotOctant(desc, point);
+      pushNeedle(point.x, point.y, aim.x, aim.y, desc.crit ? 16 : 14, palette, desc.crit, 0.22);
+    } else if (desc.delivery === 'splash') {
+      const radius = desc.splash > 0 ? desc.splash : 12;
+      pushRing(point.x, point.y, radius, desc.splash > 0 ? 10 : 16, palette.mid, 0.28, 2);
+      pushBurst(point.x, point.y, 7, palette, 0.24);
+    } else if (desc.delivery === 'chain') {
+      if (desc.points.length) {
+        const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : desc.points.length, 3);
+        let prev = point;
+        for (let i = 0; i < hops; i++) {
+          const hop = desc.points[i];
+          pushJump(kinkedJump(prev.x, prev.y, hop.x, hop.y), palette, 0.18);
+          prev = hop;
+        }
+      } else if (desc.target) {
+        pushJump(kinkedJump(point.x, point.y, desc.target.x, desc.target.y), palette, 0.18);
+      } else {
+        pushJump(kinkedJump(point.x, point.y, point.x, point.y), palette, 0.18);
+      }
+    } else {
+      if (desc.splash > 0) pushRing(point.x, point.y, desc.splash, 10, palette.mid, 0.28, 2);
+      pushImpact(point.x, point.y, desc.crit ? 6 : 4, palette, desc.crit, desc.crit ? 0.28 : 0.2);
+      if (desc.points.length && (desc.behavior === 'lightning' || desc.chain > 0)) {
+        const hops = Math.min(desc.points.length, desc.chain > 0 ? desc.chain : 1, 3);
+        for (let i = 0; i < hops; i++) {
+          const hop = desc.points[i];
+          pushArc(point.x, point.y, hop.x, hop.y, palette.core, 0.12, desc.behavior === 'lightning' ? 10 : 4, seed + i * 9);
+        }
       }
     }
+    if (desc.crit) pushRing(point.x, point.y, 8, 28, '#ffe56a', 0.26, 1);
     showNumber(desc, point.x, point.y, seed, palette);
     if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
   }
@@ -1010,6 +1191,70 @@ export function createEffects() {
     ctx.fillRect(bx - px * 2, by - py * 2, 1, 1);
   }
 
+  function drawNeedle(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
+    const ux = particle.ux | 0;
+    const uy = particle.uy | 0;
+    if (ux === 0 && uy === 0) return;
+    const px = -uy;
+    const py = ux;
+    const len = particle.length | 0;
+    const back = 5;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.shaft;
+    for (let i = -back; i <= len - 2; i++) ctx.fillRect(ox + ux * i, oy + uy * i, 1, 1);
+    ctx.fillStyle = particle.head;
+    ctx.fillRect(ox + ux * len, oy + uy * len, 1, 1);
+    ctx.fillRect(ox + ux * (len - 1) + px, oy + uy * (len - 1) + py, 1, 1);
+    ctx.fillRect(ox + ux * (len - 1) - px, oy + uy * (len - 1) - py, 1, 1);
+    ctx.fillStyle = particle.edge;
+    ctx.fillRect(ox - ux * back + px, oy - uy * back + py, 1, 1);
+    ctx.fillRect(ox - ux * back - px, oy - uy * back - py, 1, 1);
+  }
+
+  function drawBurst(ctx, particle, alpha) {
+    if (alpha < 0.02) return;
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
+    const radius = Math.max(5, particle.radius | 0);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.edge || particle.color;
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      ctx.fillRect(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius), 1, 1);
+    }
+    ctx.fillStyle = particle.color;
+    const inner = Math.max(3, radius - 3);
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + 0.4;
+      ctx.fillRect(Math.round(cx + Math.cos(angle) * inner), Math.round(cy + Math.sin(angle) * inner), 1, 1);
+    }
+    ctx.fillStyle = particle.core || particle.color;
+    ctx.fillRect(cx, cy - radius - 2, 1, 2);
+    ctx.fillRect(cx, cy + radius + 1, 1, 2);
+    ctx.fillRect(cx - radius - 2, cy, 2, 1);
+    ctx.fillRect(cx + radius + 1, cy, 2, 1);
+  }
+
+  function drawJump(ctx, particle, alpha) {
+    if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    for (let i = 1; i < particle.points.length; i++) {
+      const a = particle.points[i - 1];
+      const b = particle.points[i];
+      drawSegment(ctx, a.x, a.y, b.x, b.y);
+    }
+    if (particle.points.length >= 3) {
+      const a = particle.points[1];
+      const b = particle.points[2];
+      ctx.fillStyle = particle.edge || particle.color;
+      drawSegment(ctx, a.x + 1, a.y, b.x + 1, b.y - 1);
+    }
+  }
+
   function drawImpact(ctx, particle, alpha) {
     if (alpha < 0.02) return;
     const cx = Math.round(particle.x);
@@ -1224,6 +1469,15 @@ export function createEffects() {
         break;
       case 'streak':
         drawStreak(ctx, particle, alpha);
+        break;
+      case 'needle':
+        drawNeedle(ctx, particle, alpha);
+        break;
+      case 'burst':
+        drawBurst(ctx, particle, alpha);
+        break;
+      case 'jump':
+        drawJump(ctx, particle, alpha);
         break;
       case 'impact':
         drawImpact(ctx, particle, alpha);

@@ -17,10 +17,14 @@
  * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?}`.
  * Hero levels live at `hero.upgrades[upgradeId]` (finite number) with `spec.cap`.
  * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
- * Empty board slots produce placeable tower cards. A full board offers three
+ * Empty board slots produce placeable tower cards. When empty slots remain, a
+ * base type is still absent from the board, and two placeable tower cards are
+ * offered, one of those cards is a missing base type. That swap does not roll
+ * RNG again, so the same seed and board stay stable. A full board offers three
  * uncapped hero upgrades, or those upgrades plus `replace: true` tower cards
- * when fewer than three upgrades remain. Replacement never targets the hero
- * and `placePending` requires `{replace: true}` for an occupied slot.
+ * when fewer than three upgrades remain — never a surprise tower. Replacement
+ * never targets the hero and `placePending` requires `{replace: true}` for an
+ * occupied slot.
  * Phase `draft` / `placing` freezes simulation. Explicit `paused` and
  * `hiddenPaused` are left unchanged.
  *
@@ -67,7 +71,8 @@ export function generateDraft(state) {
     }
   }
   picked = picked.slice(0, 3);
-  return picked.length === 3 ? shuffle(state, picked) : picked;
+  if (picked.length !== 3) return picked;
+  return shuffle(state, preferMissingType(state, picked));
 }
 
 export function updateDrafts(state) {
@@ -441,6 +446,37 @@ function uniqueCards(cards) {
     out.push(card);
   }
   return out;
+}
+
+function presentBaseTypes(state) {
+  const present = new Set();
+  for (const slot of state.slots || []) {
+    const type = slot?.unit?.type;
+    if (typeof type === 'string' && BASE_TYPES.includes(type)) present.add(type);
+  }
+  return present;
+}
+
+// Swap one owned tower for a missing base type. Reading the shuffled cards
+// only — no extra random() call — so later combat rolls stay on the same stream.
+function preferMissingType(state, picked) {
+  if (countEmpty(state) <= 0) return picked;
+  const present = presentBaseTypes(state);
+  const missing = catalogTowerTypes().filter(type => !present.has(type));
+  if (missing.length === 0) return picked;
+  const towerIndexes = [];
+  for (let i = 0; i < picked.length; i += 1) {
+    const card = picked[i];
+    if (card && card.kind === 'tower' && card.replace !== true) towerIndexes.push(i);
+  }
+  if (towerIndexes.length < 2) return picked;
+  if (towerIndexes.some(index => !present.has(picked[index].type))) return picked;
+  const used = new Set(picked.map(card => card && card.id));
+  const type = missing.find(candidate => !used.has(`tower:${candidate}`));
+  if (!type) return picked;
+  const next = picked.slice();
+  next[towerIndexes[towerIndexes.length - 1]] = towerCard(type, false);
+  return next;
 }
 
 function selectThree(state, cards) {

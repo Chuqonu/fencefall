@@ -123,13 +123,13 @@ export function mountShell(root, api) {
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
   const live = el('p', { class: 'sr-only', 'aria-live': 'polite', 'data-testid': 'hud-live' });
-  hud.append(
+  const hudMain = el('div', { class: 'hud-main' });
+  hudMain.append(
     el('div', { class: 'hud-meters' }, [fenceMeter, xpMeter]),
     stats,
-    controls,
-    message,
-    live
+    message
   );
+  hud.append(hudMain, controls, live);
 
   const overlayRoot = el('div', {
     class: 'overlay-root',

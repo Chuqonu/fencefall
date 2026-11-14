@@ -78,6 +78,9 @@ const META_CSS = `
 .meta-panel textarea{min-height:128px;resize:vertical}
 .meta-badges{display:flex;flex-wrap:wrap;gap:6px}
 .meta-board{display:flex;flex-direction:column;gap:6px}
+.meta-beats{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;counter-reset:beat}
+.meta-beats li{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;padding:8px 12px;border-radius:10px;background:#24362a;border:1px solid #3f6b45}
+.meta-beats li::before{counter-increment:beat;content:counter(beat);flex:0 0 28px;width:28px;height:28px;border-radius:999px;background:#2a4038;color:#f0cb72;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .meta-fence{min-height:28px;border-radius:6px;background:#9b7951;color:#1a120c;font-weight:700;display:flex;align-items:center;justify-content:center}
 .meta-slotrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .meta-slot{min-height:44px;border:1px solid #687c80;background:#223743;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
@@ -359,7 +362,9 @@ function renderSettings(ctx, root) {
 
 function renderHowto(ctx, root) {
   const {doc, api, lang} = ctx;
-  root.append(pageHead(ctx, 'meta-howto', t(api, 'howto')));
+  const head = pageHead(ctx, 'meta-howto', t(api, 'howto'));
+  head.append(howtoBeats(ctx));
+  root.append(head);
   root.append(h(doc, 'p', {text: tx(api, lang, 'helpRole',
     'You plan, build, and decide. Towers and the hero attack on their own. There are no active combat abilities and no direct hero control.',
     '你负责规划、建造和抉择。防御塔与英雄会自动攻击。没有主动战斗技能，也不能直接操纵英雄作战。')}));
@@ -367,13 +372,13 @@ function renderHowto(ctx, root) {
   const topics = [
     ['help-fence', 'fence', 'helpFence',
       'Enemies enter from the top and attack only the shared fence. Defenders have no health. The run ends when fence HP reaches zero.',
-      '敌人从上方进入，并且只攻击共享的篱笆。防御单位没有生命值。篱笆生命降到零时，本局结束。'],
+      '敌人从上方进入，并且只攻击共享的栅栏。防御单位没有生命值。栅栏生命降到零时，本局结束。'],
     ['help-placement', 'place', 'helpPlacement',
       'Defenders fill two rows of five slots. The run starts with one hero in the rear center. That hero stays independent and is never merged, replaced, or sold. During a paused planning phase, tap a unit, then tap the destination. Empty slots can take a tower. Moving the hero only changes its slot.',
       '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于后排正中。英雄始终独立，不能被合并、替换或出售。在暂停的规划阶段，先点选单位，再点目标槽位。空槽可以放置防御塔。移动英雄只改变它所在的槽位。'],
     ['help-range', 'range', 'helpRange',
       'A defender attacks any enemy inside a circle centered on its slot, across the whole field. There are no lanes. Rear-row ranges reach threats in front of the fence. Select a defender during battle to see its range.',
-      '防御者以自己的槽位为圆心，攻击范围内的任何敌人，覆盖整个战场。战场没有分路。后排的射程能够打到篱笆前的威胁。战斗中点选防御者即可看到范围。'],
+      '防御者以自己的槽位为圆心，攻击范围内的任何敌人，覆盖整个战场。战场没有分路。后排的射程能够打到栅栏前的威胁。战斗中点选防御者即可看到范围。'],
     ['help-draft', 'chooseOneOfThree', 'helpDraft',
       'Kills fill the draft meter. Each draft pauses the battle and offers exactly three choices: a new tower or a hero upgrade. Placement is a separate tap. Canceling placement keeps those same three choices. A full board still offers hero upgrades or an explicit replacement, and replacement never takes the hero.',
       '击杀会填满选卡进度。每次选卡都暂停战斗，并给出恰好三个选项：新的防御塔或英雄升级。放置需要再点一次槽位。取消放置会保留同一组三个选项。格子满了仍然会提供英雄升级或明确的替换，替换不会动到英雄。'],
@@ -389,6 +394,25 @@ function renderHowto(ctx, root) {
     card.append(h(doc, 'h3', {text: t(api, titleKey)}), h(doc, 'p', {text: tx(api, lang, bodyKey, en, zh)}));
     root.append(card);
   }
+}
+
+function howtoBeats(ctx) {
+  const {doc, api, lang} = ctx;
+  const list = h(doc, 'ol', {
+    className: 'meta-beats',
+    'data-testid': 'howto-beats'
+  });
+  list.setAttribute('aria-label', t(api, 'howto'));
+  const beats = [
+    ['howto-beat-place', 'howtoBeatPlace', "Place the hero's allies.", '放置英雄的友军。'],
+    ['howto-beat-draft', 'howtoBeatDraft', 'Take a three-choice draft.', '进行三选一整备。'],
+    ['howto-beat-merge', 'howtoBeatMerge', 'Merge the same type, or a known pair.', '合成同种，或已知的一对。'],
+    ['howto-beat-fence', 'howtoBeatFence', 'Protect the one shared fence.', '守住那一道共用栅栏。']
+  ];
+  for (const [testid, key, en, zh] of beats) {
+    list.append(h(doc, 'li', {'data-testid': testid, text: tx(api, lang, key, en, zh)}));
+  }
+  return list;
 }
 
 function renderResults(ctx, root) {
@@ -417,7 +441,7 @@ function renderResults(ctx, root) {
   card.append(line(ctx, t(api, 'kills'), formatMaybe(pickNumber(settlement, 'kills', run, 'kills'), lang), 'result-kills'));
   card.append(line(ctx, t(api, 'wave'), formatMaybe(pickNumber(settlement, 'wave', run, 'wave'), lang), 'result-wave'));
   card.append(line(ctx, t(api, 'damageDealt'), formatMaybe(run?.stats?.damage, lang), 'result-damage'));
-  card.append(line(ctx, tx(api, lang, 'fenceDamage', 'Fence damage', '篱笆承受伤害'), formatMaybe(run?.stats?.fenceDamage, lang), 'result-fence-damage'));
+  card.append(line(ctx, tx(api, lang, 'fenceDamage', 'Fence damage', '栅栏承受伤害'), formatMaybe(run?.stats?.fenceDamage, lang), 'result-fence-damage'));
   card.append(line(ctx, t(api, 'mergesMade'), formatMaybe(run?.stats?.merges, lang), 'result-merges'));
   card.append(line(ctx, t(api, 'crit'), formatMaybe(run?.stats?.crits, lang), 'result-crits'));
   const fenceText = run?.fence ? `${num(run.fence.hp, lang, 0)} / ${num(run.fence.maxHp, lang, 0)}` : '—';
@@ -699,7 +723,7 @@ function renderEnemies(ctx) {
     if (Number.isFinite(enemy.xp)) card.append(line(ctx, t(api, 'xp'), num(enemy.xp, lang)));
     card.append(h(doc, 'p', {className: 'muted meta-mini', text: tx(api, lang, 'enemyFenceOnly',
       'This enemy attacks the fence only.',
-      '这种敌人只攻击篱笆。')}));
+      '这种敌人只攻击栅栏。')}));
     wrap.append(card);
   }
   return wrap;
@@ -806,7 +830,7 @@ function boardDiagram(ctx) {
     role: 'img',
     'aria-label': tx(api, lang, 'helpBoard',
       'Enemies move down toward a fence. Behind it are two rows of five slots. The hero begins in the rear center.',
-      '敌人向下接近篱笆。篱笆后是两行、每行五个槽位。英雄从后排正中开始。')
+      '敌人向下接近栅栏。栅栏后是两行、每行五个槽位。英雄从后排正中开始。')
   });
   board.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'enemyApproach', 'Enemies approach from above.', '敌人从上方接近。')}));
   board.append(h(doc, 'div', {className: 'meta-fence', text: t(api, 'fence')}));
@@ -1501,9 +1525,9 @@ function bonusLabel(ctx, key) {
     range: ['range', 'Range', '射程'],
     critChance: ['crit', 'Crit chance', '暴击率'],
     crit: ['crit', 'Crit', '暴击'],
-    fence: ['fence', 'Fence HP', '篱笆生命'],
+    fence: ['fence', 'Fence HP', '栅栏生命'],
     reward: ['rewardMultiplier', 'Reward', '奖励'],
-    vitality: ['vitality', 'Fence HP', '篱笆生命'],
+    vitality: ['vitality', 'Fence HP', '栅栏生命'],
     splash: ['splash', 'Splash', '溅射'],
     chain: ['chain', 'Chain', '连锁'],
     chainRange: ['chainRange', 'Chain range', '连锁范围'],

@@ -10,13 +10,19 @@
  * Event names match the effects module: shot, hit, kill, fence_hit, merge,
  * draft, victory, defeat, ui, plus optional status and boss cues.
  * Shot, hit, merge, draft, fence damage, victory, and defeat each use a
- * different contour. Tower identity uses towerType
+ * different contour. Repeated shot tones stay under a fence hit, a merge,
+ * a draft opening, a victory, and a defeat. Tower identity uses towerType
  * (bolt, fire, frost, lightning, poison, support, hero).
  */
 import { collectFeedback } from './render/effects.js';
 
 const MASTER = 0.28;
 const MAX_VOICES = 16;
+// Lightning noise (0.07) is the loudest shot layer. SHOT_BED keeps a shot, and
+// every repeat, under draft (0.03), merge (0.042), victory and defeat (0.048), and a fence hit (0.072).
+const SHOT_BED = 0.2;
+const SHOT_REPEAT_WINDOW = 1.35;
+const SHOT_REPEAT_STEPS = Object.freeze([1, 0.58, 0.42]);
 
 const AUDIO_LIMITS = Object.freeze({
   shot: 3,
@@ -127,6 +133,8 @@ export function createAudio() {
   let noiseBuffer = null;
   const voices = [];
   const lastAt = new Map();
+  let shotStamp = -1;
+  let shotRun = 0;
 
   function desiredGain() {
     return enabled && context && context.state === 'running' ? MASTER : 0;
@@ -317,49 +325,64 @@ export function createAudio() {
     return played;
   }
 
+  function shotRepeatStep() {
+    let now = 0;
+    try {
+      if (context && Number.isFinite(context.currentTime)) now = context.currentTime;
+    } catch { now = 0; }
+    const elapsed = shotStamp < 0 ? Infinity : now - shotStamp;
+    if (!(elapsed >= 0) || elapsed > SHOT_REPEAT_WINDOW) shotRun = 0;
+    else shotRun += 1;
+    shotStamp = now;
+    return SHOT_REPEAT_STEPS[Math.min(shotRun, SHOT_REPEAT_STEPS.length - 1)];
+  }
+
   function playShot(desc, delay) {
     const freq = wobble(pitchFor(desc), desc.time);
     const behavior = desc.behavior;
+    // First shot in a lull uses SHOT_BED. Repeats step down so a firing line stays quieter than the accents.
+    const bed = SHOT_BED * shotRepeatStep();
+    const g = (gain) => gain * bed;
     return safe(() => {
       if (behavior === 'fire') {
         return layers(
-          noise({ dur: 0.09, gain: 0.06, band: 420, q: 0.6, delay }),
-          tone({ freq, dur: 0.08, type: 'sawtooth', gain: 0.03, slide: -50, delay }),
+          noise({ dur: 0.09, gain: g(0.06), band: 420, q: 0.6, delay }),
+          tone({ freq, dur: 0.08, type: 'sawtooth', gain: g(0.03), slide: -50, delay }),
         );
       }
       if (behavior === 'frost') {
         return layers(
-          tone({ freq, dur: 0.07, type: 'sine', gain: 0.045, slide: 180, delay }),
-          tone({ freq: clampFreq(freq * 1.5), dur: 0.05, type: 'triangle', gain: 0.02, delay: delay + 0.02 }),
+          tone({ freq, dur: 0.07, type: 'sine', gain: g(0.045), slide: 180, delay }),
+          tone({ freq: clampFreq(freq * 1.5), dur: 0.05, type: 'triangle', gain: g(0.02), delay: delay + 0.02 }),
         );
       }
       if (behavior === 'lightning') {
         return layers(
-          noise({ dur: 0.045, gain: 0.07, band: 2200, q: 0.85, delay }),
-          tone({ freq, dur: 0.04, type: 'square', gain: 0.03, slide: -700, delay }),
+          noise({ dur: 0.045, gain: g(0.07), band: 2200, q: 0.85, delay }),
+          tone({ freq, dur: 0.04, type: 'square', gain: g(0.03), slide: -700, delay }),
         );
       }
       if (behavior === 'poison') {
         return layers(
-          tone({ freq, dur: 0.1, type: 'triangle', gain: 0.05, slide: -36, delay }),
-          noise({ dur: 0.08, gain: 0.028, band: 280, q: 1.1, delay }),
+          tone({ freq, dur: 0.1, type: 'triangle', gain: g(0.05), slide: -36, delay }),
+          noise({ dur: 0.08, gain: g(0.028), band: 280, q: 1.1, delay }),
         );
       }
       if (behavior === 'support') {
         return layers(
-          tone({ freq: 660, dur: 0.055, type: 'sine', gain: 0.038, slide: 50, delay }),
-          tone({ freq: 990, dur: 0.06, type: 'triangle', gain: 0.02, delay: delay + 0.018 }),
+          tone({ freq: 660, dur: 0.055, type: 'sine', gain: g(0.038), slide: 50, delay }),
+          tone({ freq: 990, dur: 0.06, type: 'triangle', gain: g(0.02), delay: delay + 0.018 }),
         );
       }
       if (behavior === 'hero') {
         return layers(
-          tone({ freq, dur: 0.06, type: 'triangle', gain: 0.05, slide: 70, delay }),
-          noise({ dur: 0.03, gain: 0.028, band: 1400, q: 1.6, delay }),
+          tone({ freq, dur: 0.06, type: 'triangle', gain: g(0.05), slide: 70, delay }),
+          noise({ dur: 0.03, gain: g(0.028), band: 1400, q: 1.6, delay }),
         );
       }
       return layers(
-        tone({ freq, dur: 0.045, type: 'square', gain: 0.042, slide: -110, delay }),
-        noise({ dur: 0.03, gain: 0.026, band: behavior === 'brittle' ? 700 : 1600, q: 1.3, delay }),
+        tone({ freq, dur: 0.045, type: 'square', gain: g(0.042), slide: -110, delay }),
+        noise({ dur: 0.03, gain: g(0.026), band: behavior === 'brittle' ? 700 : 1600, q: 1.3, delay }),
       );
     });
   }
@@ -528,6 +551,8 @@ export function createAudio() {
     enabled = false;
     voices.length = 0;
     lastAt.clear();
+    shotStamp = -1;
+    shotRun = 0;
     const ctx = context;
     context = null;
     master = null;
