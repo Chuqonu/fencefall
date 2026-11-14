@@ -2,7 +2,7 @@
 
 The user supplied the design below and explicitly authorized autonomous implementation in Cursor, a new folder/repository, and pushing the project to GitHub. This supersedes all earlier Emberline proposals. Make routine choices, implement, test, play, balance, and iterate without returning merely a plan. Do not enable additional billed usage or purchase services.
 
-MODEL PREFERENCE: The user explicitly requires Extra High reasoning throughout. Keep Cursor and every Grok worker on Extra High (`xhigh`); do not lower reasoning effort for speed. Parallel independent agents are authorized, including the local Grok Build CLI using existing account allowance.
+MODEL PREFERENCE: The user explicitly requires Extra High reasoning AND Fast throughout. Keep Cursor on Grok 4.7 Extra High Fast and every local worker on `grok-4.7-build-fast` with `xhigh`; do not lower reasoning or turn off Fast. Parallel independent agents are authorized, including the local Grok Build CLI using existing account allowance.
 
 ## Non-negotiable user design
 
