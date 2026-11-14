@@ -1,6 +1,6 @@
 /**
  * Original enemy sprites. Bottom-center anchor, logical pixels.
- * Job 12 can replace this file; the exports stay drawEnemy and enemySize.
+ * Shipping sprites after the enemy-art job timed out. Exports stay drawEnemy and enemySize.
  */
 const PALETTES = {
   shambler:{'.':'#6d6458','o':'#8c8374','#':'#3d3832','e':'#d7c36a','s':'#2a2622'},

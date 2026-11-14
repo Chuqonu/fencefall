@@ -34,11 +34,11 @@ Each build also runs an in-script bundler self-test and loads the bundled `src/e
 
 ### CI
 
-`.github/workflows/ci.yml` checks out the repo, selects Node 22, then runs `npm ci`, `npm test`, and `npm run build`. Permissions are `contents: read`. There is no deploy job and no secret.
+GitHub Actions is optional. The example is `docs/ci.example.yml`: Node 22, `npm ci`, `npm test`, `npm run build`, `contents: read`, no deploy and no secrets. Copy that file to `.github/workflows/ci.yml` only from a login that can update workflow files. The token used for this private repo can push source and `dist/`, and GitHub rejects workflow paths from it. `package-lock.json` is committed, so `npm ci` can run once the workflow is installed by hand.
 
 ### Integrator notes
 
-1. **`npm ci` cannot succeed in this checkpoint.** `package.json` has zero dependencies and the tree has no `package-lock.json`. Commit a lockfile before relying on CI (`npm install --package-lock-only --ignore-scripts` is enough while the dependency list stays empty). This worker did not run that command.
+1. `package-lock.json` is present and the dependency list is empty. `npm ci` is valid after the workflow file is copied into place.
 2. Do not add an esbuild devDependency for the current build script.
 3. Re-run `npm run build` after the other workers land. `dist/` from this workspace only packages files present at build time.
 4. Keep browser runtime imports relative to the repo. `src/boot.js` remains the page entry unless `index.html` points elsewhere.
@@ -64,8 +64,8 @@ Not run: browser, `npm test`, `npm ci`, phone or desktop layout, balance, git, o
 
 限制：不支持顶层 `await`；`import()` 只能是静态字符串；`import.meta.url` 变成 `document.baseURI`；具名导入在依赖模块执行完后拷贝一次，不是完整的 ESM 活绑定。`export function` 会在导入之前挂上，因此函数声明之间的循环调用可用，构建会警告循环。循环里过早读取 `const` 与真正的 ESM 不一致。
 
-CI 在 Node 22 上执行 `npm ci`、`npm test`、`npm run build`，只读权限，不部署，不含密钥。
+GitHub Actions 是可选的。示例在 `docs/ci.example.yml`：Node 22、`npm ci`、`npm test`、`npm run build`，只读权限，不部署，不含密钥。当前推送令牌可以推送源码和 `dist/`，但不能创建 `.github/workflows`。需要 CI 时，用有 workflow 权限的登录把示例复制到 `.github/workflows/ci.yml`。`package-lock.json` 已经提交，依赖列表为空，复制之后 `npm ci` 可以运行。
 
-集成时必须先提交 `package-lock.json`，否则 `npm ci` 会失败。当前 `package.json` 没有依赖，也没有锁文件。本工人没有执行 `npm install`。集成其他模块后要重新构建。本目录里的 `dist/` 只代表脚手架。
+集成其他模块后要重新构建。
 
 本工人实际跑过 `node --check scripts/build.mjs`、`node scripts/build.mjs --self-test-only` 和 `node scripts/build.mjs --exec`。没有跑浏览器、`npm test`、`npm ci` 或联网安装。

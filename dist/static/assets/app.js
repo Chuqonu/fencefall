@@ -1059,7 +1059,7 @@ async function createController(options = {}) {
   }
 
   const api = {
-    getState:() => run,
+    getState:() => run || storedRun,
     getProfile:() => profile,
     t:translate,
     act,
@@ -5587,7 +5587,7 @@ __ff_exports["enemySize"] = enemySize;
 __ff_exports["drawEnemy"] = drawEnemy;
 /**
  * Original enemy sprites. Bottom-center anchor, logical pixels.
- * Job 12 can replace this file; the exports stay drawEnemy and enemySize.
+ * Shipping sprites after the enemy-art job timed out. Exports stay drawEnemy and enemySize.
  */
 const PALETTES = {
   shambler:{'.':'#6d6458','o':'#8c8374','#':'#3d3832','e':'#d7c36a','s':'#2a2622'},
@@ -13437,6 +13437,7 @@ const EXTRA = {
     range: 'Range',
     attackSpeed: 'Attack speed',
     crit: 'Critical',
+    critDamage: 'Crit damage',
     rank: 'Rank',
     hero: 'Hero',
     towers: 'Tower',
@@ -13539,6 +13540,7 @@ const EXTRA = {
     range: '射程',
     attackSpeed: '攻速',
     crit: '暴击',
+    critDamage: '暴击伤害',
     rank: '阶',
     hero: '英雄',
     towers: '塔',
@@ -14379,6 +14381,11 @@ function effectObjectLines(record, lang, tr) {
   const lines = [];
   for (const [key, raw] of Object.entries(effect)) {
     if (!finite(raw) || Number(raw) === 0) continue;
+    if (key === 'critMultiplier') {
+      const number = Number(raw);
+      lines.push(`${tr('critDamage')} ${number > 0 ? '+' : ''}${fmtNum(number, lang)}×`);
+      continue;
+    }
     const label = tr(keyMap[key] || key);
     const number = Number(raw);
     const fractional = Math.abs(number) <= 1 && key !== 'range' && key !== 'interval' && key !== 'projectileSpeed' && key !== 'chain' && key !== 'pierce';
@@ -14412,6 +14419,11 @@ function deltaLines(before, after, lang, tr) {
   const rightInterval = Number(after.interval) || 0;
   if (leftInterval > 0 && rightInterval > 0 && Math.abs(leftInterval - rightInterval) > 1e-6) {
     lines.push(`${tr('attackSpeed')} ${fmtNum(1 / leftInterval, lang)}${perSecond(lang)} → ${fmtNum(1 / rightInterval, lang)}${perSecond(lang)}`);
+  }
+  const leftCrit = Number(before.critMultiplier) || 0;
+  const rightCrit = Number(after.critMultiplier) || 0;
+  if (leftCrit > 0 && rightCrit > 0 && Math.abs(leftCrit - rightCrit) > 1e-6) {
+    lines.push(`${tr('critDamage')} ${fmtNum(leftCrit, lang)}× → ${fmtNum(rightCrit, lang)}×`);
   }
   return lines;
 }

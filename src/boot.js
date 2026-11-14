@@ -461,7 +461,7 @@ export async function createController(options = {}) {
   }
 
   const api = {
-    getState:() => run,
+    getState:() => run || storedRun,
     getProfile:() => profile,
     t:translate,
     act,
