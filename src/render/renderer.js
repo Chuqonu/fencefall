@@ -1256,6 +1256,7 @@ export function createRenderer(canvas) {
     }
     if (hover >= 0 && hover !== selected) {
       const intent = ui.hoverIntent;
+      const box = slotBox(slots[hover], hover);
       const dropColor = intent === 'empty'
         ? '#7ecea0'
         : intent === 'merge'
@@ -1263,7 +1264,15 @@ export function createRenderer(canvas) {
           : intent === 'illegal'
             ? '#e7a08a'
             : 'rgba(198, 214, 210, 0.9)';
-      strokeSlot(ctx, slotBox(slots[hover], hover), dropColor, intent ? 3 : 1);
+      if (intent === 'empty' || intent === 'merge' || intent === 'illegal') {
+        ctx.fillStyle = intent === 'empty'
+          ? 'rgba(126, 206, 160, 0.34)'
+          : intent === 'merge'
+            ? 'rgba(240, 203, 114, 0.34)'
+            : 'rgba(231, 160, 138, 0.34)';
+        ctx.fillRect(box.left, box.top, box.width, box.height);
+      }
+      strokeSlot(ctx, box, dropColor, intent ? 4 : 1);
     }
     if (selected >= 0) {
       strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);

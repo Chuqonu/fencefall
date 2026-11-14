@@ -171,7 +171,8 @@ export function mountShell(root, api) {
     if (dead || event.button !== 0) return;
     pointer = {
       id: event.pointerId,
-      index: indexFromClient(event.clientX, event.clientY),
+      type: event.pointerType || 'mouse',
+      index: indexFromClient(event.clientX, event.clientY, event.pointerType),
       x: event.clientX,
       y: event.clientY,
       active: false
@@ -189,7 +190,7 @@ export function mountShell(root, api) {
     const unit = state && validSlot(start, state) ? state.slots[start]?.unit : null;
     if (!unit) return;
     pointer.active = true;
-    const hover = indexFromClient(event.clientX, event.clientY);
+    const hover = indexFromClient(event.clientX, event.clientY, pointer.type);
     const kind = dropKind(state, start, hover);
     showGhost(event.clientX, event.clientY, unit, kind);
     api.act('hover', { index: hover, intent: kind === 'empty' || kind === 'merge' || kind === 'illegal' ? kind : '' });
@@ -198,13 +199,14 @@ export function mountShell(root, api) {
   function onPointerUp(event) {
     if (dead) return;
     if (pointer && pointer.id !== event.pointerId) return;
-    const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY);
+    const pointerType = pointer?.type || event.pointerType;
+    const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY, pointerType);
     const dragging = Boolean(pointer?.active);
     pointer = null;
     suppressClick = true;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => { suppressClick = false; }, 400);
-    const end = indexFromClient(event.clientX, event.clientY);
+    const end = indexFromClient(event.clientX, event.clientY, pointerType);
     if (dragging) finishDrag(start, end);
     else {
       hideGhost();
@@ -576,6 +578,7 @@ export function mountShell(root, api) {
   }
 
   function showGhost(x, y, unit, kind) {
+    const place = ghostClearOfDetails(x, y);
     ghost.hidden = false;
     ghost.classList.toggle('is-illegal', kind === 'illegal');
     ghost.classList.toggle('is-empty', kind === 'empty');
@@ -584,8 +587,17 @@ export function mountShell(root, api) {
       ? 'H'
       : String(unit?.type || unit?.kind || '').slice(0, 4);
     setText(ghost, label);
-    ghost.style.left = `${x}px`;
-    ghost.style.top = `${y}px`;
+    ghost.style.left = `${place.x}px`;
+    ghost.style.top = `${place.y}px`;
+  }
+
+  function ghostClearOfDetails(x, y) {
+    const box = detailsButton.getBoundingClientRect();
+    if (!(box.width >= 44) || !(box.height >= 44)) return { x, y };
+    const half = 22;
+    const overlaps = x + half > box.left && x - half < box.right && y + half > box.top && y - half < box.bottom;
+    if (!overlaps) return { x, y };
+    return { x, y: Math.min(y, box.top - 8 - half) };
   }
 
   function hideGhost() {
@@ -646,13 +658,33 @@ export function mountShell(root, api) {
     snapGhost(from);
   }
 
-  function indexFromClient(clientX, clientY) {
+  function indexFromClient(clientX, clientY, pointerType) {
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return -1;
-    const x = ((clientX - rect.left) / rect.width) * ARENA.width;
-    const y = ((clientY - rect.top) / rect.height) * ARENA.height;
-    if (x < 0 || y < 0 || x >= ARENA.width || y >= ARENA.height) return -1;
-    return hitSlot(x, y);
+    const touch = pointerType === 'touch' || pointerType === 'pen';
+    const slopCss = touch ? 28 : 8;
+    const slopX = (slopCss / rect.width) * ARENA.width;
+    const slopY = (slopCss / rect.height) * ARENA.height;
+    let x = ((clientX - rect.left) / rect.width) * ARENA.width;
+    let y = ((clientY - rect.top) / rect.height) * ARENA.height;
+    if (x < -slopX || y < -slopY || x >= ARENA.width + slopX || y >= ARENA.height + slopY) return -1;
+    x = Math.max(0, Math.min(ARENA.width - 0.01, x));
+    y = Math.max(0, Math.min(ARENA.height - 0.01, y));
+    const direct = hitSlot(x, y);
+    if (direct >= 0) return direct;
+    let best = -1;
+    let bestDist = touch ? 32 : 12;
+    for (let index = 0; index < 10; index += 1) {
+      const slot = slotGeometry(index);
+      const dx = Math.max(slot.left - x, 0, x - (slot.left + slot.width));
+      const dy = Math.max(slot.top - y, 0, y - (slot.top + slot.height));
+      const dist = Math.hypot(dx, dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = index;
+      }
+    }
+    return best;
   }
 
   function destroy() {

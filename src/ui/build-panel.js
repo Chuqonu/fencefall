@@ -73,6 +73,9 @@ const CSS = `
 .ff-build .ff-pips{letter-spacing:1px}
 .ff-build .ff-message{padding:8px;border:1px solid #e7a08a;background:#3a2a22}
 .ff-build .ff-mechs{display:flex;flex-wrap:wrap;gap:4px;margin:0;padding:0;list-style:none}
+@media (max-width:899px){
+  .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+}
 @media (max-width:360px){
   .ff-build{font-size:14px}
   .ff-build .ff-slots{gap:4px}
