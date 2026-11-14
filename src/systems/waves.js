@@ -212,7 +212,7 @@ const PHASES = [
     from: 654,
     until: 772,
     every: 16,
-    name: {en: 'Siege', zh: '围篱'},
+    name: {en: 'Siege', zh: '围攻'},
     rotate: [
       [
         {kind: 'armored', count: 2, interval: 12},

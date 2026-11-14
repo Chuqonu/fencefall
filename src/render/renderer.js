@@ -45,6 +45,7 @@ const PALETTE = {
   lightning: {main: '#ffe14a', core: '#fffceb', edge: '#7a6220'},
   poison: {main: '#6aaa3a', core: '#d8f0a0', edge: '#243814'},
   support: {main: '#f0d78a', core: '#fff8de', edge: '#6a5830'},
+  hero: {main: '#c44a56', core: '#fff0c0', edge: '#3c1018'},
 };
 
 const ELEMENT_ALIAS = {
@@ -54,6 +55,7 @@ const ELEMENT_ALIAS = {
   lightning: 'lightning', shock: 'lightning', spark: 'lightning', chain: 'lightning',
   poison: 'poison', toxin: 'poison',
   support: 'support', heal: 'support', aura: 'support',
+  hero: 'hero',
 };
 
 const STATUS_RANK = {stun: 0, burn: 1, poison: 2, slow: 3, brittle: 4};
@@ -209,6 +211,19 @@ function elementsOf(projectile) {
   }
   if (!out.length) out.push('bolt');
   return out;
+}
+
+function projectileInk(projectile) {
+  const elements = elementsOf(projectile);
+  const kind = elements[0];
+  const color = PALETTE[kind] || PALETTE.bolt;
+  const accent = PALETTE[elements[1]] || color;
+  return {kind, color, accent};
+}
+
+export function projectileColors(projectile) {
+  const ink = projectileInk(projectile || {});
+  return {kind: ink.kind, main: ink.color.main, core: ink.color.core, edge: ink.color.edge};
 }
 
 function measureEnemy(enemy) {
@@ -427,10 +442,10 @@ function drawStatuses(ctx, enemy, anchorX, y) {
 function drawProjectile(ctx, projectile, target, reduced) {
   const x = Math.round(projectile.x);
   const y = Math.round(projectile.y);
-  const elements = elementsOf(projectile);
-  const kind = elements[0];
-  const color = PALETTE[kind] || PALETTE.bolt;
-  const accent = PALETTE[elements[1]] || color;
+  const ink = projectileInk(projectile);
+  const kind = ink.kind;
+  const color = ink.color;
+  const accent = ink.accent;
   let dx = finite(projectile.vx) ?? 0;
   let dy = finite(projectile.vy) ?? 0;
   if (dx === 0 && dy === 0 && target && Number.isFinite(target.x) && Number.isFinite(target.y)) {

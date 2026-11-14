@@ -6511,7 +6511,7 @@ function createEffects() {
     const anchorX = x;
     const anchorY = y - (channel === 'fence' ? 20 : 12);
     const amount = Number(String(text).replace('+', '')) || 0;
-    const recent = findFloater(anchorX, anchorY, channel, crit);
+    const recent = findFloater(anchorX, anchorY, channel, crit, color);
     if (recent) {
       recent.amount = (recent.amount || 0) + amount;
       const merged = formatDamage(recent.amount);
@@ -6543,10 +6543,11 @@ function createEffects() {
     });
   }
 
-  function findFloater(x, y, channel, crit) {
+  function findFloater(x, y, channel, crit, color) {
     for (let i = floaters.length - 1; i >= 0; i--) {
       const floater = floaters[i];
       if (floater.channel !== channel || floater.crit !== crit) continue;
+      if (color && floater.color !== color) continue;
       if (floater.maxLife - floater.life > 0.12) continue;
       const ax = floater.anchorX ?? floater.originX;
       const ay = floater.anchorY ?? floater.originY;
@@ -6559,8 +6560,9 @@ function createEffects() {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
       const lift = desc.crit ? 16 : 4;
+      const nx = desc.behavior === 'poison' ? x + 12 : desc.behavior === 'fire' ? x - 6 : x;
       pushFloater(
-        x, y - lift, text,
+        nx, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
         desc.crit ? 3 : 2,
         desc.crit,
@@ -7892,6 +7894,7 @@ function drawEnemy(ctx, enemy, x, y, {time = 0, scale = 1, flash = 0} = {}) {
 };
 __ff_factories["src/render/renderer.js"] = function(__ff_exports, __ff_load) {
 "use strict";
+__ff_exports["projectileColors"] = projectileColors;
 __ff_exports["createRenderer"] = createRenderer;
 const __ff_m0 = __ff_load("src/render/world.js");
 const __ff_m1 = __ff_load("src/render/defenders.js");
@@ -7957,6 +7960,7 @@ const PALETTE = {
   lightning: {main: '#ffe14a', core: '#fffceb', edge: '#7a6220'},
   poison: {main: '#6aaa3a', core: '#d8f0a0', edge: '#243814'},
   support: {main: '#f0d78a', core: '#fff8de', edge: '#6a5830'},
+  hero: {main: '#c44a56', core: '#fff0c0', edge: '#3c1018'},
 };
 
 const ELEMENT_ALIAS = {
@@ -7966,6 +7970,7 @@ const ELEMENT_ALIAS = {
   lightning: 'lightning', shock: 'lightning', spark: 'lightning', chain: 'lightning',
   poison: 'poison', toxin: 'poison',
   support: 'support', heal: 'support', aura: 'support',
+  hero: 'hero',
 };
 
 const STATUS_RANK = {stun: 0, burn: 1, poison: 2, slow: 3, brittle: 4};
@@ -8121,6 +8126,19 @@ function elementsOf(projectile) {
   }
   if (!out.length) out.push('bolt');
   return out;
+}
+
+function projectileInk(projectile) {
+  const elements = elementsOf(projectile);
+  const kind = elements[0];
+  const color = PALETTE[kind] || PALETTE.bolt;
+  const accent = PALETTE[elements[1]] || color;
+  return {kind, color, accent};
+}
+
+function projectileColors(projectile) {
+  const ink = projectileInk(projectile || {});
+  return {kind: ink.kind, main: ink.color.main, core: ink.color.core, edge: ink.color.edge};
 }
 
 function measureEnemy(enemy) {
@@ -8339,10 +8357,10 @@ function drawStatuses(ctx, enemy, anchorX, y) {
 function drawProjectile(ctx, projectile, target, reduced) {
   const x = Math.round(projectile.x);
   const y = Math.round(projectile.y);
-  const elements = elementsOf(projectile);
-  const kind = elements[0];
-  const color = PALETTE[kind] || PALETTE.bolt;
-  const accent = PALETTE[elements[1]] || color;
+  const ink = projectileInk(projectile);
+  const kind = ink.kind;
+  const color = ink.color;
+  const accent = ink.accent;
   let dx = finite(projectile.vx) ?? 0;
   let dy = finite(projectile.vy) ?? 0;
   if (dx === 0 && dy === 0 && target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
@@ -14605,13 +14623,13 @@ const equipmentNames = {
   runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
   survey_bead: {en: 'Survey Bead', zh: '测距珠'},
   bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
-  fence_nails: {en: 'Fence Nails', zh: '篱钉'},
+  fence_nails: {en: 'Fence Nails', zh: '栅栏钉'},
   ward_planks: {en: 'Ward Planks', zh: '护栏板'},
   bastion_mail: {en: 'Bastion Mail', zh: '堡垒甲'}
 };
 
 const rawEquipment = [
-  gear('splinter_bow', 'weapon', 65, {damage: 0.06}, 'A short bow cut from fallen fence wood.', '用倒下的篱木削成的短弓。'),
+  gear('splinter_bow', 'weapon', 65, {damage: 0.06}, 'A short bow cut from fallen fence wood.', '用倒下的栅栏木削成的短弓。'),
   gear('hawk_brace', 'weapon', 160, {damage: 0.04, critChance: 0.04, range: 16}, 'A watcher\'s brace that steadies aim.', '稳固瞄准的哨兵护腕。'),
   gear('stormglass_edge', 'weapon', 320, {damage: 0.10, critChance: 0.05, haste: 0.04}, 'A thin glass edge that snaps the arm forward.', '带动挥击的薄璃刃。'),
   gear('runner_charm', 'charm', 55, {haste: 0.06}, 'A light charm worn by runners on the wall.', '墙头奔行者佩的轻护符。'),
@@ -14619,7 +14637,7 @@ const rawEquipment = [
   gear('bounty_seal', 'charm', 280, {reward: 0.10, critChance: 0.02}, 'Runs that start with this charm equipped pay a larger purse. Difficulty still multiplies the total.', '开局就装备此护符的对局会提高赏金，难度倍率仍会计入。'),
   gear('fence_nails', 'armor', 45, {fence: 30}, 'Extra nails driven into the fence before the fight.', '战前多钉进栅栏的钉子。'),
   gear('ward_planks', 'armor', 130, {fence: 60, damage: 0.02}, 'Spare planks braced behind the weak posts.', '撑在薄弱木桩后的备用板。'),
-  gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守篱人穿的叠片甲。')
+  gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守栅栏的人穿的叠片甲。')
 ];
 
 const equipmentRecord = {};
@@ -15822,7 +15840,7 @@ const PHASES = [
     from: 654,
     until: 772,
     every: 16,
-    name: {en: 'Siege', zh: '围篱'},
+    name: {en: 'Siege', zh: '围攻'},
     rotate: [
       [
         {kind: 'armored', count: 2, interval: 12},

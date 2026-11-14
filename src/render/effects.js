@@ -846,7 +846,7 @@ export function createEffects() {
     const anchorX = x;
     const anchorY = y - (channel === 'fence' ? 20 : 12);
     const amount = Number(String(text).replace('+', '')) || 0;
-    const recent = findFloater(anchorX, anchorY, channel, crit);
+    const recent = findFloater(anchorX, anchorY, channel, crit, color);
     if (recent) {
       recent.amount = (recent.amount || 0) + amount;
       const merged = formatDamage(recent.amount);
@@ -878,10 +878,11 @@ export function createEffects() {
     });
   }
 
-  function findFloater(x, y, channel, crit) {
+  function findFloater(x, y, channel, crit, color) {
     for (let i = floaters.length - 1; i >= 0; i--) {
       const floater = floaters[i];
       if (floater.channel !== channel || floater.crit !== crit) continue;
+      if (color && floater.color !== color) continue;
       if (floater.maxLife - floater.life > 0.12) continue;
       const ax = floater.anchorX ?? floater.originX;
       const ay = floater.anchorY ?? floater.originY;
@@ -894,8 +895,9 @@ export function createEffects() {
     if (desc.damage != null && desc.damage > 0) {
       const text = formatDamage(desc.damage);
       const lift = desc.crit ? 16 : 4;
+      const nx = desc.behavior === 'poison' ? x + 12 : desc.behavior === 'fire' ? x - 6 : x;
       pushFloater(
-        x, y - lift, text,
+        nx, y - lift, text,
         desc.crit ? '#ffe56a' : palette.hot,
         desc.crit ? 3 : 2,
         desc.crit,

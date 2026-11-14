@@ -132,13 +132,13 @@ const equipmentNames = {
   runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
   survey_bead: {en: 'Survey Bead', zh: '测距珠'},
   bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
-  fence_nails: {en: 'Fence Nails', zh: '篱钉'},
+  fence_nails: {en: 'Fence Nails', zh: '栅栏钉'},
   ward_planks: {en: 'Ward Planks', zh: '护栏板'},
   bastion_mail: {en: 'Bastion Mail', zh: '堡垒甲'}
 };
 
 const rawEquipment = [
-  gear('splinter_bow', 'weapon', 65, {damage: 0.06}, 'A short bow cut from fallen fence wood.', '用倒下的篱木削成的短弓。'),
+  gear('splinter_bow', 'weapon', 65, {damage: 0.06}, 'A short bow cut from fallen fence wood.', '用倒下的栅栏木削成的短弓。'),
   gear('hawk_brace', 'weapon', 160, {damage: 0.04, critChance: 0.04, range: 16}, 'A watcher\'s brace that steadies aim.', '稳固瞄准的哨兵护腕。'),
   gear('stormglass_edge', 'weapon', 320, {damage: 0.10, critChance: 0.05, haste: 0.04}, 'A thin glass edge that snaps the arm forward.', '带动挥击的薄璃刃。'),
   gear('runner_charm', 'charm', 55, {haste: 0.06}, 'A light charm worn by runners on the wall.', '墙头奔行者佩的轻护符。'),
@@ -146,7 +146,7 @@ const rawEquipment = [
   gear('bounty_seal', 'charm', 280, {reward: 0.10, critChance: 0.02}, 'Runs that start with this charm equipped pay a larger purse. Difficulty still multiplies the total.', '开局就装备此护符的对局会提高赏金，难度倍率仍会计入。'),
   gear('fence_nails', 'armor', 45, {fence: 30}, 'Extra nails driven into the fence before the fight.', '战前多钉进栅栏的钉子。'),
   gear('ward_planks', 'armor', 130, {fence: 60, damage: 0.02}, 'Spare planks braced behind the weak posts.', '撑在薄弱木桩后的备用板。'),
-  gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守篱人穿的叠片甲。')
+  gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守栅栏的人穿的叠片甲。')
 ];
 
 const equipmentRecord = {};
