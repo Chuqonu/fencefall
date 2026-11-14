@@ -330,11 +330,14 @@ img, svg, video { max-width: 100%; height: auto; }
     max-height: none;
     padding-block: 4px;
   }
-  .shell-body { grid-template-rows: minmax(0, 1fr); }
+  .shell-body {
+    position: relative;
+    grid-template-rows: minmax(0, 1fr);
+  }
   .panel-wrap {
     display: none;
     position: absolute;
-    z-index: 28;
+    z-index: 2;
     left: 8px;
     right: 8px;
     bottom: 8px;
