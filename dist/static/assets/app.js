@@ -1042,7 +1042,7 @@ async function createController(options = {}) {
     ui.mergeFrom = -1;
     ui.selectedSlot = to;
     saveRun();
-    return merged;
+    return {...merged, description: preview.description};
   }
 
   function chooseDraft(index) {
@@ -1185,6 +1185,10 @@ async function createController(options = {}) {
       outcome = {ok:false, reason:'error'};
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
+    else if (action === 'dragDrop' && outcome.description) {
+      const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
+      ui.message = leadSentence(outcome.description, lang);
+    }
     else if (action === 'mergePreview' || (action === 'selectSlot' && ui.mergePreview)) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
       const described = ui.mergePreview?.description;
@@ -1219,6 +1223,13 @@ async function createController(options = {}) {
     integration:() => ({engine:integrationInfo(), modules:Object.fromEntries(Object.entries(MODULES).map(([key, value]) => [key, !!value]))}),
   };
   return api;
+}
+
+function leadSentence(description, lang) {
+  const text = description && (description[lang] || description.en);
+  if (typeof text !== 'string') return '';
+  const sentence = text.split(/(?<=[。！？.!?])\s*/)[0] || text;
+  return sentence.trim();
 }
 
 function copyValue(value) {
