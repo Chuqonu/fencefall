@@ -15601,7 +15601,9 @@ const formatNumber = __ff_m5["formatNumber"];
  * while playing. A draft overlay keeps three short choice cards and does not
  * include the 10-slot rearrange grid. A tower card says whether that base type
  * is already on the board. Merge preview stays available there as a
- * short pair list, then the confirm step.
+ * short pair list, then the confirm step. That confirm step shows the result
+ * name and rank, then at most two more lines. It does not paste the catalog essay.
+ * Confirm and cancel stay 44px buttons.
  * A container without data-ui shows the modal and the inspection together.
  * Buttons call api.act. This module does not write run or profile state.
  * Clicks on its own controls stop at this panel so a parent bubble listener
@@ -15632,6 +15634,7 @@ const CSS = `
 .ff-build .btn:focus-visible{outline:2px solid #f1eee2;outline-offset:2px}
 .ff-build .ff-actions{display:flex;flex-wrap:wrap;gap:8px}
 .ff-build .ff-actions .btn{flex:1 1 140px}
+.ff-build .ff-merge .ff-actions .btn{flex:1 1 140px;min-width:44px;min-height:44px;height:44px}
 .ff-build .card>.btn,.ff-build .ff-choice .btn{width:100%}
 .ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
@@ -16739,8 +16742,32 @@ function messageLines(ui, lang, tr) {
   return lines;
 }
 
-function renderMessages(ui, lang, tr) {
-  const lines = messageLines(ui, lang, tr);
+function normalizeCopy(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function catalogEssay(type, kind, lang) {
+  if (!type) return '';
+  const recipe = recipeById(type);
+  const tower = towerRecord(type);
+  const source = (kind === 'hybrid' || recipe) && recipe ? recipe.description : tower?.description;
+  return normalizeCopy(localizeSafe(source, lang));
+}
+
+function lineIsCatalogEssay(line, ui, lang) {
+  const text = normalizeCopy(line);
+  if (!text) return false;
+  const described = normalizeCopy(localizeSafe(ui?.mergePreview?.description, lang));
+  if (described && text === described) return true;
+  if (described && text.length > 140 && (text.includes(described) || described.includes(text))) return true;
+  const result = ui?.mergePreview?.result || ui?.mergePreview?.unit;
+  const essay = result?.type ? catalogEssay(result.type, result.kind, lang) : '';
+  return !!(essay && essay.length > 40 && text.includes(essay));
+}
+
+function renderMessages(ui, lang, tr, options = {}) {
+  let lines = messageLines(ui, lang, tr);
+  if (options.omitEssays) lines = lines.filter((line) => !lineIsCatalogEssay(line, ui, lang));
   if (!lines.length) return null;
   return el('div', { class: 'ff-message', role: 'status', 'aria-live': 'polite', 'data-testid': 'panel-message', text: lines.join(' ') });
 }
@@ -16983,6 +17010,40 @@ function renderRearrange(state, ui, lang, tr, showHeroBadge) {
   return wrap;
 }
 
+function clipMergeLine(text, lang) {
+  const max = lang === 'zh' ? 28 : 48;
+  const value = normalizeCopy(text);
+  if (!value) return '';
+  if (value.length <= max) return value;
+  return `${value.slice(0, Math.max(1, max - 1)).trim()}…`;
+}
+
+function mergeExtraLines(state, result, from, to, lang, tr) {
+  const lines = [];
+  const left = slotUnit(state, from);
+  const right = slotUnit(state, to);
+  const side = (unit, index) => {
+    if (!unit) return tr('emptySlot');
+    const rank = Number(unit.rank) || 1;
+    const rankBit = rank > 1 ? ` ${tr('rank')} ${fmtNum(rank, lang)}` : '';
+    return `${index + 1} ${unitLabel(unit, lang, tr)}${rankBit}`;
+  };
+  if (left || right) lines.push(clipMergeLine(`${side(left, from)} + ${side(right, to)}`, lang));
+  if (result) {
+    const signature = signatureLine(safeStats(result, state), lang, tr);
+    if (signature) lines.push(clipMergeLine(signature, lang));
+  }
+  return lines.filter(Boolean).slice(0, 2);
+}
+
+function mergeActionButton(attrs, label) {
+  return button({
+    ...attrs,
+    class: 'ff-merge-btn',
+    style: 'min-height:44px;height:44px;min-width:44px',
+  }, label);
+}
+
 function renderMergeConfirm(state, ui, lang, tr) {
   const { from, to } = endpoints(ui);
   const card = el('article', {
@@ -16991,60 +17052,55 @@ function renderMergeConfirm(state, ui, lang, tr) {
     'data-from': String(from),
     'data-to': String(to),
   });
-  card.append(el('h2', { class: 'ff-title', text: tr('mergePreview') }));
-  card.append(el('p', { class: 'muted', text: tr('mergeReview') }));
-  const leftUnit = slotUnit(state, from);
-  const rightUnit = slotUnit(state, to);
-  const leftName = leftUnit ? `${unitLabel(leftUnit, lang, tr)} · ${tr('rank')} ${fmtNum(leftUnit.rank || 1, lang)}` : tr('emptySlot');
-  const rightName = rightUnit ? `${unitLabel(rightUnit, lang, tr)} · ${tr('rank')} ${fmtNum(rightUnit.rank || 1, lang)}` : tr('emptySlot');
-  card.append(el('p', { text: tr('ingredients') }));
-  card.append(el('p', { 'data-testid': 'merge-ingredients', text: `${leftName}  +  ${rightName}` }));
+  const finish = (includeConfirm) => {
+    const actions = el('div', { class: 'ff-actions ff-merge-actions' });
+    if (includeConfirm) {
+      actions.append(mergeActionButton({
+        primary: true,
+        'data-action': 'mergeConfirm',
+        'data-from': String(from),
+        'data-to': String(to),
+        'data-testid': 'merge-confirm',
+      }, tr('mergeConfirm')));
+    }
+    actions.append(mergeActionButton({
+      'data-action': 'mergeCancel',
+      'data-testid': 'merge-cancel',
+    }, tr('mergeCancel')));
+    card.append(actions);
+    return card;
+  };
   if (!validSlot(from) || !validSlot(to) || from === to) {
     card.append(el('p', { 'data-testid': 'merge-reason', text: tr('invalidMerge') }));
-    card.append(button({ 'data-action': 'mergeCancel', 'data-testid': 'merge-cancel', text: tr('mergeCancel') }));
-    return card;
+    return finish(false);
   }
   const preview = safePreview(state, from, to);
   const stored = ui.mergePreview && typeof ui.mergePreview === 'object' ? ui.mergePreview : null;
-  const description = localizeSafe(preview.description, lang)
-    || localizeSafe(stored?.description, lang)
-    || '';
-  if (preview.ok) {
-    const result = preview.result || stored?.result || stored?.unit || null;
-    const recipe = result ? recipeById(result.type) : null;
-    const recipeText = localizeSafe(recipe?.description, lang);
-    let blurb = description || recipeText;
-    if (!blurb && result && leftUnit && result.type === leftUnit.type) blurb = tr('sameTypeMerge');
-    if (!blurb && result && result.kind === 'hybrid') blurb = tr('hybridMerge');
-    card.append(el('p', { text: `${tr('youGain')} · ${result ? unitLabel(result, lang, tr) : ''} ${result ? rankPips(result.rank) : ''}`.trim() }));
-    if (blurb) card.append(el('p', { 'data-testid': 'merge-result-description', text: blurb }));
-    if (recipe?.parents?.length) {
-      const parents = recipe.parents.map((type) => towerName(type, lang, tr)).join(' + ');
-      card.append(el('p', { class: 'muted', text: `${tr('recipes')} · ${parents}` }));
-    }
-    const resultStats = result ? safeStats(result, state) : null;
-    card.append(el('h3', { text: tr('effect') }));
-    card.append(statList(resultStats, lang, tr, 'merge-result'));
-    const actions = el('div', { class: 'ff-actions' });
-    actions.append(button({
-      primary: true,
-      'data-action': 'mergeConfirm',
-      'data-from': String(from),
-      'data-to': String(to),
-      'data-testid': 'merge-confirm',
-      text: tr('mergeConfirm'),
-    }));
-    actions.append(button({
-      'data-action': 'mergeCancel',
-      'data-testid': 'merge-cancel',
-      text: tr('mergeCancel'),
-    }));
-    card.append(actions);
-    return card;
+  if (!preview.ok) {
+    card.append(el('p', { 'data-testid': 'merge-reason', text: reasonText(preview.reason || stored?.reason, lang, tr) }));
+    return finish(false);
   }
-  card.append(el('p', { 'data-testid': 'merge-reason', text: reasonText(preview.reason || stored?.reason, lang, tr) }));
-  card.append(button({ 'data-action': 'mergeCancel', 'data-testid': 'merge-cancel', text: tr('mergeCancel') }));
-  return card;
+  const result = preview.result || stored?.result || stored?.unit || null;
+  const name = result ? unitLabel(result, lang, tr) : tr('merge');
+  const rank = Number(result?.rank) || 1;
+  const heading = el('h2', { class: 'ff-title', 'data-testid': 'merge-result-name' });
+  heading.append(el('span', { text: name }));
+  heading.append(el('span', {
+    class: 'ff-pips',
+    'data-testid': 'merge-result-rank',
+    text: ` · ${tr('rank')} ${fmtNum(rank, lang)} ${rankPips(rank)}`,
+  }));
+  card.append(heading);
+  const extra = el('div', { 'data-testid': 'merge-preview-lines' });
+  const lines = mergeExtraLines(state, result, from, to, lang, tr);
+  lines.forEach((text, index) => {
+    extra.append(el('p', {
+      'data-testid': index === 0 ? 'merge-ingredients' : 'merge-result-description',
+      text,
+    }));
+  });
+  card.append(extra);
+  return finish(true);
 }
 
 function draftIntro(lang) {
@@ -17757,7 +17813,7 @@ function renderBuildPanel(container, state, api) {
     role: 'region',
     'aria-label': tr('buildPanelLabel'),
   });
-  const messages = renderMessages(ui, lang, tr);
+  const messages = renderMessages(ui, lang, tr, { omitEssays: role === 'overlay' });
   if (messages) root.append(messages);
   if (showProgress) {
     root.append(el('p', { class: 'muted', 'data-testid': 'xp-progress', text: progressText(state, tr, lang) }));
