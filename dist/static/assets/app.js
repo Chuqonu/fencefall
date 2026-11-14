@@ -7239,6 +7239,7 @@ const slotGeometry = __ff_m5["slotGeometry"];
  * Changing runId clears leftover VFX, then replays events ingested since the
  * previous draw so a restart frame does not drop its own feedback.
  * A live stun, burn, poison, or slow tints that sprite. Stun wins, then burn, then poison, then slow.
+ * A plate walker keeps two steel shoulders, still visible when a tint covers the body.
  * A bilingual director or wave hint is drawn in the top margin.
  * The selected defender shows its rank just above the sprite.
  */
@@ -7924,6 +7925,20 @@ function statusTintColor(enemy) {
   return null;
 }
 
+function drawPlateShoulders(ctx, anchor) {
+  const width = anchor.size.width;
+  const height = anchor.size.height;
+  if (!(width > 4) || !(height > 6)) return;
+  const left = Math.round(anchor.x - width / 2);
+  const top = Math.round(anchor.y - height);
+  const y = top + 3;
+  ctx.fillStyle = '#e7f1ff';
+  ctx.fillRect(left + 1, y, 3, 1);
+  ctx.fillRect(left + 1, y, 1, 3);
+  ctx.fillRect(left + width - 4, y, 3, 1);
+  ctx.fillRect(left + width - 2, y, 1, 3);
+}
+
 function drawStunFrame(ctx, anchor) {
   const width = anchor.size.width;
   const height = anchor.size.height;
@@ -8470,6 +8485,7 @@ function createRenderer(canvas) {
         if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
         if (statusLive(enemy, 'stun')) isolate(ctx, () => drawStunFrame(ctx, anchor));
       }
+      if (!enemy.dead && Number(enemy.armor) >= 0.5) isolate(ctx, () => drawPlateShoulders(ctx, anchor));
     }
 
     for (let index = 0; index < 10; index++) {
@@ -12982,7 +12998,7 @@ function describeEffect(effect) {
   }
   if (effect.critChance) {
     const pct = Math.round(effect.critChance * 100);
-    en.push(`Each rank adds ${pct}% critical hit chance.`);
+    en.push(`Each rank adds ${pct}% to the hero's critical hit chance.`);
     zh.push(`每级使英雄的暴击率 +${pct}%。`);
   }
   if (effect.critMultiplier) {
@@ -12992,13 +13008,13 @@ function describeEffect(effect) {
   if (effect.pierce) {
     const n = effect.pierce;
     const noun = n === 1 ? 'enemy' : 'enemies';
-    en.push(`Each rank lets one shot pierce ${n} extra ${noun}.`);
-    zh.push(`每级使一次射击额外穿透 ${n} 个敌人。`);
+    en.push(`Each rank lets the hero's shot pierce ${n} extra ${noun}.`);
+    zh.push(`每级使英雄的射击额外穿透 ${n} 个敌人。`);
   }
   if (effect.poison) {
     const p = effect.poison;
-    en.push(`Each rank adds ${p.dps} poison damage per second for ${p.duration}s. Hits refresh; they do not stack.`);
-    zh.push(`每级附加每秒 ${p.dps} 点毒素，持续 ${p.duration} 秒；命中刷新，不叠加。`);
+    en.push(`Each rank adds ${p.dps} poison damage per second to the hero's hits for ${p.duration}s. Hits refresh; they do not stack.`);
+    zh.push(`每级使英雄的命中附加每秒 ${p.dps} 点毒素，持续 ${p.duration} 秒；命中刷新，不叠加。`);
   }
   if (!en.length) {
     en.push('Passive improvement to the hero.');

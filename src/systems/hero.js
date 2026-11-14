@@ -73,7 +73,7 @@ function describeEffect(effect) {
   }
   if (effect.critChance) {
     const pct = Math.round(effect.critChance * 100);
-    en.push(`Each rank adds ${pct}% critical hit chance.`);
+    en.push(`Each rank adds ${pct}% to the hero's critical hit chance.`);
     zh.push(`每级使英雄的暴击率 +${pct}%。`);
   }
   if (effect.critMultiplier) {
@@ -83,13 +83,13 @@ function describeEffect(effect) {
   if (effect.pierce) {
     const n = effect.pierce;
     const noun = n === 1 ? 'enemy' : 'enemies';
-    en.push(`Each rank lets one shot pierce ${n} extra ${noun}.`);
-    zh.push(`每级使一次射击额外穿透 ${n} 个敌人。`);
+    en.push(`Each rank lets the hero's shot pierce ${n} extra ${noun}.`);
+    zh.push(`每级使英雄的射击额外穿透 ${n} 个敌人。`);
   }
   if (effect.poison) {
     const p = effect.poison;
-    en.push(`Each rank adds ${p.dps} poison damage per second for ${p.duration}s. Hits refresh; they do not stack.`);
-    zh.push(`每级附加每秒 ${p.dps} 点毒素，持续 ${p.duration} 秒；命中刷新，不叠加。`);
+    en.push(`Each rank adds ${p.dps} poison damage per second to the hero's hits for ${p.duration}s. Hits refresh; they do not stack.`);
+    zh.push(`每级使英雄的命中附加每秒 ${p.dps} 点毒素，持续 ${p.duration} 秒；命中刷新，不叠加。`);
   }
   if (!en.length) {
     en.push('Passive improvement to the hero.');
