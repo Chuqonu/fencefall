@@ -9,17 +9,8 @@ import {renderBuildPanel} from '../src/ui/build-panel.js';
 
 const source = readFileSync(fileURLToPath(new URL('../src/ui/build-panel.js', import.meta.url)), 'utf8');
 
-test('placing layout markers stay in the build panel', () => {
-  for (const token of ['is-placing', 'ff-place-row', 'ff-place-body', 'ff-meter']) {
-    assert.equal(source.includes(token), true, token);
-  }
-  assert.match(source, /is-draft/);
-  assert.match(source, /is-reduced/);
-  assert.match(source, /\.ff-build\.is-placing \.ff-place-row\{[^}]*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
-  assert.match(source, /\.ff-build\.is-placing \.ff-place-row \.btn\{[^}]*flex-direction:\s*column/);
-  assert.match(source, /\.ff-build\.is-placing \.ff-place-row \.btn small\{[^}]*white-space:\s*normal/);
-  assert.match(source, /\.ff-build\.is-placing \.ff-place-body\{[^}]*overflow:\s*auto[^}]*max-height:\s*6\.5rem/);
-  assert.match(source, /class:\s*'grid ff-slots ff-place-row'/);
+test('placement is performed on the canvas without a duplicate grid', () => {
+  assert.doesNotMatch(source,/class:\s*'grid ff-slots ff-place-row'/);
 });
 
 function createFakeDocument() {
@@ -201,35 +192,11 @@ test('a placing render keeps the place grid above the description', () => {
   assert.ok(root, 'build panel rendered');
   assert.match(root.className, /\bis-placing\b/);
   const grid = container.querySelector('[data-testid="place-grid"]');
-  assert.ok(grid, 'place grid exists');
-  assert.match(grid.className, /\bgrid\b/);
-  assert.match(grid.className, /\bff-slots\b/);
-  assert.match(grid.className, /\bff-place-row\b/);
-  const body = container.querySelector('.ff-place-body');
-  const cancel = container.querySelector('[data-testid="cancel-placement"]');
-  assert.ok(body);
-  assert.ok(cancel);
-  assert.ok(orderIndex(root, grid) < orderIndex(root, body));
-  assert.ok(orderIndex(root, cancel) < orderIndex(root, body));
-  assert.equal(body.contains(container.querySelector('[data-testid="pending-stats"]')), true);
-  assert.equal(body.contains(container.querySelector('[data-testid="pending-name"]')), true);
-  const title = container.querySelector('[data-testid="placing-title"]');
-  assert.ok(title);
-  assert.equal(container.querySelector('[data-testid="placing-name"]')?.textContent, 'Rivet');
-  assert.match(container.querySelector('.ff-place-signature')?.textContent || '', /Pierce/);
-  assert.ok(orderIndex(root, title) < orderIndex(root, grid));
-  assert.equal(container.querySelector('[data-testid="xp-progress"]'), null);
-  assert.ok(container.querySelector('[data-testid="place-slot-0"]'));
-  assert.ok(container.querySelector('.empty-slot'));
-  assert.ok(container.querySelector('[data-testid="place-blocked-2"]'));
-  const front = container.querySelector('[data-testid="place-slot-0"]');
-  const rear = container.querySelector('[data-testid="place-slot-5"]');
-  const words = (node) => (node?.childNodes || []).map((child) => child.textContent).join(' ');
-  assert.match(words(front), /Front row/);
-  assert.equal(front.getAttribute('data-row'), 'front');
-  assert.match(words(rear), /Rear row/);
-  assert.equal(rear.getAttribute('data-row'), 'rear');
-  assert.equal(words(front).includes('Empty slot'), false);
+  assert.equal(grid,null);
+  assert.ok(container.querySelector('[data-testid="cancel-placement"]'));
+  assert.equal(container.querySelector('[data-testid="placing-name"]').textContent,'Rivet');
+  assert.match(container.querySelector('.ff-place-signature').textContent,/Pierce/);
+  assert.equal(container.querySelector('[data-testid="place-slot-0"]'),null);
 });
 
 test('Chinese placement names the front and rear rows', () => {
@@ -246,8 +213,8 @@ test('Chinese placement names the front and rear rows', () => {
   state.pendingUnit = {unit: createUnit(state, 'bolt', 1), replace: false};
   renderBuildPanel(container, state, {getUI() { return {screen: 'battle'}; }});
   const words = (id) => (container.querySelector(`[data-testid="${id}"]`)?.childNodes || []).map((child) => child.textContent).join(' ');
-  assert.match(words('place-slot-0'), /前排/);
-  assert.match(words('place-slot-5'), /后排/);
+  assert.ok(container.querySelector('[data-testid="cancel-placement"]'));
+  assert.equal(container.querySelector('[data-testid="place-grid"]'),null);
   assert.equal(container.querySelector('[data-testid="placing-name"]')?.textContent, '穿钉');
   assert.match(container.querySelector('.ff-place-signature')?.textContent || '', /穿透/);
   assert.equal(words('place-slot-0').includes('空位'), false);

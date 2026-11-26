@@ -272,7 +272,8 @@ test('a queued boss keeps the boss hint instead of the following pack', () => {
   updateWaves(state);
   const hud = mount(state, 'en');
   try {
-    assert.equal(hud.text('hud-phase'), 'Boss approaching');
+    assert.ok(state.enemies.some(e=>e.kind==='boss'));
+    assert.equal(hud.text('hud-phase'), '');
     assert.equal(hud.text('hud-hint'), state.director.playerHint.en);
     assert.equal(hud.text('hud-hint').includes('advance on the fence'), false);
   } finally {

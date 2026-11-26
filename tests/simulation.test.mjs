@@ -396,7 +396,7 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(state.slots[2].unit.id, heroId);
     assert.equal(state.slots[2].unit.kind, 'hero');
     assert.equal(state.xp, 0);
-    assert.equal(state.nextDraftXp, 8);
+    assert.equal(state.nextDraftXp, 6);
     assert.equal(state.slots.filter(slot => slot.unit).length, 1);
     const bad = applyHeroUpgrade(state, 'not-a-real-upgrade');
     assert.equal(bad.ok, false);
@@ -866,7 +866,7 @@ describe('simulation', {concurrency: 1}, () => {
         enemy.y = 24;
         enemy.attacking = false;
       }
-      if (setup === 'overkill') state.fence.hp = 5;
+      if (setup === 'overkill') { state.surge.charges=0; state.fence.hp=5; }
       const hp0 = state.fence.hp;
       const damage0 = state.stats.fenceDamage;
       repeat(120, () => updateCombat(state, STEP));

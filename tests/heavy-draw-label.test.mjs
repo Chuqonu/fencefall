@@ -87,10 +87,10 @@ function effectText(lang, upgradeId, cap) {
 }
 
 test('Heavy Draw names the hero crit multiplier instead of crit damage', () => {
-  const english = effectText('en', 'lethality', 3);
-  const chinese = effectText('zh', 'lethality', 3);
-  assert.equal(english, 'Hero crit multiplier +0.4');
-  assert.equal(chinese, '英雄的暴击倍率 +0.4');
+  const english = effectText('en', 'volley', 2);
+  const chinese = effectText('zh', 'volley', 2);
+  assert.equal(english, 'Hero · Multishot +1 · Level 1/2');
+  assert.equal(chinese, '英雄 · 齐射 +1 · 等级 1/2');
   assert.equal(english.includes('Crit damage'), false);
   assert.equal(chinese.includes('暴击伤害'), false);
 });
@@ -98,15 +98,15 @@ test('Heavy Draw names the hero crit multiplier instead of crit damage', () => {
 test('Focus names the hero crit chance', () => {
   const english = effectText('en', 'focus', 4);
   const chinese = effectText('zh', 'focus', 4);
-  assert.equal(english, 'Hero crit chance +8% · Level 1/4');
-  assert.equal(chinese, '英雄的暴击率 +8% · 等级 1/4');
+  assert.equal(english, 'Hero crit chance +10% · Level 1/3');
+  assert.equal(chinese, '英雄的暴击率 +10% · 等级 1/3');
 });
 
 test('Barbed Quills names 毒素 on the Chinese effect line', () => {
-  const english = effectText('en', 'barbed', 3);
-  const chinese = effectText('zh', 'barbed', 3);
-  assert.equal(english, 'Hero · Poison 6/s for 3s · Level 1/3');
-  assert.equal(chinese, '毒素 6/秒，3 秒 · 等级 1/3');
+  const english = effectText('en', 'shrapnel', 3);
+  const chinese = effectText('zh', 'shrapnel', 3);
+  assert.equal(english, 'Hero · Burn 4/s · Level 1/3');
+  assert.equal(chinese, '英雄 · 燃烧 4/秒 · 等级 1/3');
   assert.equal(chinese.includes('中毒'), false);
 });
 
@@ -132,13 +132,13 @@ function boltDraft(lang) {
   return findByTestId(container, 'draft-choice-0-effect')?.textContent || '';
 }
 
-test('a bolt draft card marks 11 as one shot without overflowing the line', () => {
+test('a bolt draft card marks 13 as one shot without overflowing the line', () => {
   const english = boltDraft('en');
   const chinese = boltDraft('zh');
-  assert.match(english, /11\/shot/);
-  assert.equal(english.includes('Damage 11'), false);
+  assert.match(english, /13\/shot/);
+  assert.equal(english.includes('Damage 13'), false);
   assert.ok(english.length <= 36, english);
-  assert.match(chinese, /11\/发/);
-  assert.equal(chinese.includes('伤害 11'), false);
+  assert.match(chinese, /13\/发/);
+  assert.equal(chinese.includes('伤害 13'), false);
   assert.ok(chinese.length <= 20, chinese);
 });

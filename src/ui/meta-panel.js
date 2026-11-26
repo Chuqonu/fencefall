@@ -7,7 +7,7 @@
  * the current level, or a function (level, profile). Bonus fractions are
  * damage, haste, critChance, and reward; range and fence are flat amounts.
  */
-import {localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
+import {t as translate,localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
 import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses, nextArmoryBuy} from '../systems/progression.js';
 import {TOWERS} from '../data/towers.js';
 import {RECIPES} from '../data/recipes.js';
@@ -21,9 +21,9 @@ const STYLE_ID = 'fencefall-meta-panel-styles';
 const SCREENS = new Set(['menu', 'armory', 'codex', 'settings', 'howto', 'results']);
 const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush'];
-const PERMANENT_ORDER = ['damage', 'haste', 'vitality'];
+const PERMANENT_ORDER = ['damage', 'haste', 'vitality','economy'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
-const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward']);
+const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage']);
 const PIXEL_KEYS = new Set(['range']);
 const FLAT_KEYS = new Set(['fence', 'vitality']);
 
@@ -1702,13 +1702,8 @@ function equippedBonusPhrase(ctx, key, value) {
   if (key === 'fence' || key === 'vitality') {
     return `${bonusLabel(ctx, 'fence')} ${shown}`;
   }
-  const heroLabel = {
-    damage: ['Hero damage', '英雄伤害'],
-    haste: ['Hero attack speed', '英雄攻击速度'],
-    range: ['Hero range', '英雄射程'],
-    critChance: ['Hero crit chance', '英雄暴击率'],
-  }[key];
-  if (heroLabel) return `${ctx.lang === 'zh' ? heroLabel[1] : heroLabel[0]} ${shown}`;
+  const teamKey={damage:'teamDamage',haste:'teamHaste',critChance:'teamCrit'}[key];
+  if (teamKey) return t(ctx.api,teamKey)+' '+shown;
   return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
@@ -1765,15 +1760,9 @@ function profileBonuses(profile) {
   }
 }
 
-function profileBonusLabel(ctx, key) {
-  const named = {
-    damage: ['Hero damage', '英雄伤害'],
-    haste: ['Hero attack speed', '英雄攻击速度'],
-    range: ['Hero range', '英雄射程'],
-    critChance: ['Hero crit chance', '英雄暴击率'],
-  }[key];
-  if (named) return ctx.lang === 'zh' ? named[1] : named[0];
-  return bonusLabel(ctx, key);
+function profileBonusLabel(ctx,key) {
+  const labels={damage:'teamDamage',haste:'teamHaste',critChance:'teamCrit'};
+  return labels[key]?t(ctx.api,labels[key]):bonusLabel(ctx,key);
 }
 
 function bonusLabel(ctx, key) {
@@ -1795,7 +1784,7 @@ function bonusLabel(ctx, key) {
     projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速']
   };
   const entry = labels[key];
-  if (!entry) return String(key);
+  if (!entry) return t(ctx.api,key);
   return tx(ctx.api, ctx.lang, entry[0], entry[1], entry[2]);
 }
 
@@ -1837,25 +1826,10 @@ function dotText(ctx, effect) {
   return parts.join(' · ') || '—';
 }
 
-const MECHANIC_LABELS = {
-  projectile: ['Projectile', '投射'],
-  crit: ['Crit', '暴击'],
-  pierce: ['Pierce', '穿透'],
-  splash: ['Splash', '溅射'],
-  burn: ['Burn', '燃烧'],
-  slow: ['Slow', '减速'],
-  chain: ['Chain', '连锁'],
-  poison: ['Poison', '毒素'],
-  aura: ['Aura', '光环'],
-  stun: ['Stun', '眩晕'],
-  execute: ['Execute', '处决'],
-};
-
 function mechanicText(mechanic, lang) {
   if (typeof mechanic === 'string') {
-    const pair = MECHANIC_LABELS[mechanic];
-    if (pair) return lang === 'zh' ? pair[1] : pair[0];
-    return mechanic;
+    const key='badge.'+mechanic, label=translate(lang,key);
+    return label===key ? translate(lang,mechanic) : label;
   }
   if (!mechanic || typeof mechanic !== 'object') return '';
   const name = textOf(mechanic.name ?? mechanic.id, lang);

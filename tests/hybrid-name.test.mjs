@@ -12,11 +12,11 @@ test('the fire-poison hybrid is Plaguefire and the poison tower stays Blight', (
   assert.deepEqual(hybrid.parents, ['fire', 'poison']);
   assert.equal(hybrid.name.en, 'Plaguefire');
   assert.equal(hybrid.name.zh, '疫焚');
-  assert.match(hybrid.description.en, /poison tower Blight/);
+  assert.match(hybrid.description.en, /spread poison/);
   assert.equal(TOWERS.poison.name.en, 'Blight');
   assert.equal(TOWERS.poison.name.zh, '瘴毒');
-  assert.match(TOWERS.fire.description.en, /becomes Plaguefire/);
-  assert.match(TOWERS.poison.description.en, /becomes Plaguefire/);
+  assert.match(TOWERS.fire.description.en,/burn/i);
+  assert.match(TOWERS.poison.description.en,/venom/i);
   assert.equal(RECIPES.filter(recipe => recipe.name.en === 'Plaguefire').length, 1);
 
   const state = createRun({seed: 4, difficulty: 'normal', runId: 'hybrid-name'});

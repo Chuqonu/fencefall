@@ -87,8 +87,8 @@ function render(lang, setup) {
 
 test('the hero card leads with the name and the range before the long note', () => {
   for (const [lang, name, lead] of [
-    ['en', 'Hero', 'Single-target shot · Range 430'],
-    ['zh', '英雄', '单体射击 · 射程 430'],
+    ['en', 'Hero', 'Single-target shot · Range 320'],
+    ['zh', '英雄', '单体射击 · 射程 320'],
   ]) {
     const nodes = render(lang, () => 2);
     const ids = nodes.map((node) => node.getAttribute('data-testid')).filter(Boolean);
@@ -105,8 +105,8 @@ test('the hero card leads with the name and the range before the long note', () 
 
 test('a tower card leads with its shot and the same range the ring uses', () => {
   for (const [lang, name, lead] of [
-    ['en', 'Cinder', 'Splash and burn 4/s · Range 240'],
-    ['zh', '烬火', '溅射燃烧 4/秒 · 射程 240'],
+    ['en', 'Cinder', 'Splash and burn 5/s · Range 280'],
+    ['zh', '烬火', '溅射燃烧 5/秒 · 射程 280'],
   ]) {
     const nodes = render(lang, (state) => {
       state.slots[0].unit = createUnit(state, 'fire', 1, 'tower');

@@ -88,8 +88,8 @@ function resultLine(lang) {
 test('a rank-2 bolt preview keeps pierce and shows the new damage per shot', () => {
   const english = resultLine('en');
   const chinese = resultLine('zh');
-  assert.equal(english, 'Pierce 1 extra enemy · 28.6/shot');
-  assert.equal(chinese, '穿透 额外 1 名敌人 · 28.6/发');
+  assert.equal(english, 'Pierce 1 extra enemy · 29.25/shot');
+  assert.equal(chinese, '穿透 额外 1 名敌人 · 29.25/发');
 });
 
 test('every same-type rank-up preview shows the new hit or an aura, without clipping', () => {

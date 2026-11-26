@@ -91,22 +91,22 @@ function heroCard(language, id) {
 
 test('the hero codex names damage and crit multiplier instead of raw keys', () => {
   const strike = pairs(heroCard('zh', 'strike')).join(' | ');
-  const lethality = pairs(heroCard('zh', 'lethality')).join(' | ');
-  const english = pairs(heroCard('en', 'lethality')).join(' | ');
-  assert.match(strike, /伤害 \+7/);
+  const lethality = pairs(heroCard('zh', 'focus')).join(' | ');
+  const english = pairs(heroCard('en', 'focus')).join(' | ');
+  assert.match(strike, /伤害 \+5/);
   assert.equal(strike.includes('damageAdd'), false);
-  assert.match(lethality, /暴击倍率 \+0\.4/);
+  assert.match(lethality, /暴击倍率 \+0\.3/);
   assert.equal(lethality.includes('critMultiplier'), false);
-  assert.match(english, /Crit multiplier \+0\.4/);
+  assert.match(english, /Crit multiplier \+0\.3/);
   assert.equal(english.includes('critMultiplier'), false);
 });
 
 test('Barbed Quills lists 6 poison damage per second for 3 seconds', () => {
-  const chinese = pairs(heroCard('zh', 'barbed')).join(' | ');
-  const english = pairs(heroCard('en', 'barbed')).join(' | ');
-  assert.match(chinese, /毒素 6\/秒，3 秒/);
+  const chinese = pairs(heroCard('zh', 'shrapnel')).join(' | ');
+  const english = pairs(heroCard('en', 'shrapnel')).join(' | ');
+  assert.match(chinese, /燃烧 4\/秒 · 2\.6 s/);
   assert.equal(chinese.includes('中毒'), false);
-  assert.match(english, /Poison 6\/s for 3s/);
+  assert.match(english, /Burn 4\/s · 2\.6 s/);
   assert.match(chinese, /等级上限 3/);
   assert.equal(chinese.includes('已满级'), false);
   assert.match(english, /Max level 3/);

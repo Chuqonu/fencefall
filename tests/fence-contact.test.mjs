@@ -9,7 +9,7 @@ import {ENEMIES} from '../src/data/enemies.js';
 import {spawnEnemy, updateMovement} from '../src/systems/movement.js';
 import {FENCE_REGEN_PER_SECOND, updateCombat} from '../src/systems/combat.js';
 
-const KINDS = Object.keys(ENEMIES);
+const KINDS = Object.keys(ENEMIES).filter(kind => !ENEMIES[kind].attackRange);
 const SHORTFALL = 2;
 const APPROACH = 24;
 const PROBE_HP = 80;

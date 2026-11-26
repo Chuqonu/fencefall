@@ -1,44 +1,3 @@
-// Equipment, permanent hero upgrades, and one-time run settlement.
-//
-// getProfileBonuses(profile) fields:
-//   damage, haste, critChance, reward — fractions (0.06 = +6%)
-//   range — additive logical pixels
-//   fence — additive starting fence HP
-// Apply damage / haste / range / critChance in getHeroStats only:
-//   damage *= (1 + damage); interval /= (1 + haste); range += range; critChance += critChance.
-// Add fence to fence.hp and fence.maxHp once when the run is created.
-// settleRun already multiplies payout by (1 + reward) from state.profileSnapshot.
-// Doing either step twice double-counts.
-//
-// Reward, before the difficulty multiplier:
-//   floor(min(time, timeCap) / secondsPerPoint)
-//   + floor(min(kills, killCap) / killsPerPoint)
-//   + floor(min(wave, waveCap)) * pointsPerWave
-//   + victoryBonus on victory
-//   Abandon keeps half of that progress (no victory bonus).
-//   Abandon pays 0 when time <= 0, or when time < 30 and kills < 3.
-// currency = round(points * DIFFICULTIES[difficulty].reward * (1 + snapshot.reward))
-// Caps stop an endless run from minting unbounded currency. A normal 12–16 min
-// clear sits under the time cap.
-//
-// Call settleRun only after phase is victory or defeat, or when the player
-// explicitly abandons. Any other phase settles as abandon and then locks.
-// Settlement is immutable. A second call returns the same object and does not pay.
-//
-// Save order: settleRun(profile, state), then saveProfile, then saveRun.
-// Profile-first keeps the currency if the run write fails. state.settlement,
-// profile.settledRuns, and profile.settlementLedger each stop a second payout.
-// settledRuns keeps paid ids (up to 2000, the profile save ceiling). The ledger
-// keeps full results for the newest 64 ids only. Dropping an id would let that
-// run pay again. A run with no id is locked on the run object. Buying equipment
-// does not equip it.
-// One owned item can be equipped in its own slot and replaces the previous one.
-// Permanent bonuses are per rank; price is costs[currentLevel] until cap.
-// Buy / equip / upgrade failures use reason:
-// invalidProfile, unknownItem, alreadyOwned, insufficientCurrency, notOwned,
-// unknownUpgrade, maxLevel. Success is {ok:true} and does not include reason.
-// Settlement result is victory, defeat, or abandon.
-
 import {DIFFICULTIES, clamp} from '../shared.js';
 
 export const PROGRESSION_RULES = Object.freeze({
@@ -60,73 +19,44 @@ export const PROGRESSION_RULES = Object.freeze({
 const EQUIP_SLOTS = ['weapon', 'charm', 'armor'];
 // Profile saves reject settledRuns longer than 2000. Stay under that ceiling.
 const PAID_RUN_LIMIT = 2000;
-const PERMANENT_KEYS = ['damage', 'haste', 'vitality'];
+const PERMANENT_KEYS = ['damage', 'haste', 'vitality','economy'];
 // After a loss, suggest the fence first when two buys cost the same.
 const NEXT_BUY_RANK = Object.freeze({
   vitality: 0,
   fence_nails: 1,
-  ward_planks: 2,
-  bastion_mail: 3,
+  vanguard_kit: 2,
+  surge_capacitor: 3,
   damage: 4,
   splinter_bow: 5,
-  hawk_brace: 6,
-  stormglass_edge: 7,
+  kinetic_core: 6,
+  prism_lens: 7,
   haste: 8,
   runner_charm: 9,
-  survey_bead: 10,
+  sun_spindle: 10,
   bounty_seal: 11,
 });
-const FRACTION_KEYS = ['damage', 'haste', 'critChance', 'reward'];
-const ABSOLUTE_KEYS = ['range', 'fence'];
-const OUTPUT_CAP_MILLI = Object.freeze({damage: 400, haste: 400, critChance: 200, reward: 250});
-const OUTPUT_CAP_ABS = Object.freeze({range: 64, fence: 220});
-
-function formatPercent(fraction) {
-  const tenths = Math.round(fraction * 1000) / 10;
-  return Number.isInteger(tenths) ? String(tenths) : tenths.toFixed(1);
+const BONUS_LABELS = {
+  damage:['team damage','全队伤害','%'],haste:['team attack speed','全队攻速','%'],critChance:['team crit chance','全队暴击率','%'],
+  reward:['reward','结算奖励','%'], hybridDamage:['hybrid damage','混合塔伤害','%'],fieldHp:['field HP','工事生命','%'],
+  fieldDiscount:['field discount','工事折扣','%'],rerollDiscount:['reroll discount','重随折扣','%'],
+  harvest:['harvest yield','辉穗收益','%'],surgePower:['surge power','冲击波威力','%'],
+  critKnockback:['critical knockback','暴击击退','px'],fence:['starting fence HP','开局栅栏生命',''],
+  thorns:['thorn damage','反伤',''],energy:['starting energy','初始辉光',''],energyRate:['energy per second','每秒辉光',''],
+  freeRerolls:['free rerolls','免费重随',''],surgeCharges:['surge charges','冲击波充能','']
+};
+const FRACTION_KEYS=Object.keys(BONUS_LABELS).filter(k=>BONUS_LABELS[k][2]==='%');
+const ABSOLUTE_KEYS=Object.keys(BONUS_LABELS).filter(k=>BONUS_LABELS[k][2]!=='%');
+function formatPercent(n) {return String(Math.round(n*1000)/10);}
+function equipmentDescription(en,zh,bonuses) {
+  const parts=Object.entries(bonuses).map(([k,v])=>{
+    const [a,b,unit]=BONUS_LABELS[k], magnitude='+'+(unit==='%'?formatPercent(v):v)+unit;
+    return [magnitude+' '+a,b+magnitude];
+  });
+  return {en:parts.map(p=>p[0]).join(', '),zh:parts.map(p=>p[1]).join('，')};
 }
-
-function equipmentDescription(flavorEn, flavorZh, bonuses) {
-  const en = [];
-  const zh = [];
-  if (bonuses.damage) {
-    en.push(`+${formatPercent(bonuses.damage)}% hero damage`);
-    zh.push(`英雄伤害+${formatPercent(bonuses.damage)}%`);
-  }
-  if (bonuses.critChance) {
-    en.push(`+${formatPercent(bonuses.critChance)}% hero crit chance`);
-    zh.push(`英雄暴击率+${formatPercent(bonuses.critChance)}%`);
-  }
-  if (bonuses.haste) {
-    en.push(`+${formatPercent(bonuses.haste)}% hero attack speed`);
-    zh.push(`英雄攻击速度+${formatPercent(bonuses.haste)}%`);
-  }
-  if (bonuses.range) {
-    en.push(`+${bonuses.range} hero range`);
-    zh.push(`英雄射程+${bonuses.range}`);
-  }
-  if (bonuses.fence) {
-    en.push(`+${bonuses.fence} starting fence HP`);
-    zh.push(`开局栅栏生命+${bonuses.fence}`);
-  }
-  if (bonuses.reward) {
-    en.push(`+${formatPercent(bonuses.reward)}% run rewards`);
-    zh.push(`结算奖励+${formatPercent(bonuses.reward)}%`);
-  }
-  return {
-    en: `${flavorEn} ${en.join(', ')}.`,
-    zh: `${flavorZh}${zh.join('，')}。`
-  };
-}
-
-function permanentDescription(flavorEn, flavorZh, bonuses, cap) {
-  const effect = equipmentDescription('', '', bonuses);
-  const enEffect = effect.en.replace(/\.$/, '').trim();
-  const zhEffect = effect.zh.replace(/。$/, '').trim();
-  return {
-    en: `${flavorEn} Each rank: ${enEffect}, up to rank ${cap}. Each rank costs more than the last.`,
-    zh: `${flavorZh}每一级：${zhEffect}，最高${cap}级。价格逐级上升。`
-  };
+function permanentDescription(en,zh,bonuses,cap) {
+  const effect=equipmentDescription(en,zh,bonuses);
+  return {en:effect.en+' per rank (max '+cap+').',zh:'每级'+effect.zh+'，最高 '+cap+' 级。'};
 }
 
 function gear(id, slot, cost, bonuses, flavorEn, flavorZh) {
@@ -141,29 +71,23 @@ function gear(id, slot, cost, bonuses, flavorEn, flavorZh) {
 }
 
 const equipmentNames = {
-  splinter_bow: {en: 'Splinter Bow', zh: '裂片弓'},
-  hawk_brace: {en: 'Hawk Brace', zh: '鹰眼护腕'},
-  stormglass_edge: {en: 'Stormglass Edge', zh: '风暴璃刃'},
-  runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
-  survey_bead: {en: 'Survey Bead', zh: '测距珠'},
-  bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
-  fence_nails: {en: 'Fence Nails', zh: '栅栏钉'},
-  ward_planks: {en: 'Ward Planks', zh: '护栏板'},
-  bastion_mail: {en: 'Bastion Mail', zh: '堡垒甲'}
+  splinter_bow:{en:'Splinter Bow',zh:'裂片弓'}, kinetic_core:{en:'Kinetic Core',zh:'动能弹芯'},
+  prism_lens:{en:'Prism Lens',zh:'棱镜核心'},runner_charm:{en:'Runner Charm',zh:'奔行护符'},
+  sun_spindle:{en:'Sun Spindle',zh:'辉光纺锤'},bounty_seal:{en:'Bounty Seal',zh:'赏金印'},
+  fence_nails:{en:'Fence Nails',zh:'栅栏钉'},vanguard_kit:{en:'Vanguard Kit',zh:'先锋工事箱'},
+  surge_capacitor:{en:'Surge Capacitor',zh:'脉冲电容'}
 };
-
 const rawEquipment = [
-  gear('splinter_bow', 'weapon', 65, {damage: 0.06}, 'A short bow cut from fallen fence wood.', '用倒下的栅栏木削成的短弓。'),
-  gear('hawk_brace', 'weapon', 160, {damage: 0.04, critChance: 0.04, range: 16}, 'A watcher\'s brace that steadies aim.', '稳固瞄准的哨兵护腕。'),
-  gear('stormglass_edge', 'weapon', 320, {damage: 0.10, critChance: 0.05, haste: 0.04}, 'A thin glass edge that snaps the arm forward.', '带动挥击的薄璃刃。'),
-  gear('runner_charm', 'charm', 55, {haste: 0.06}, 'A light charm worn by runners on the wall.', '墙头奔行者佩的轻护符。'),
-  gear('survey_bead', 'charm', 150, {range: 24, damage: 0.03}, 'A bead ground to measure the open field.', '用来丈量空地的测距珠。'),
-  gear('bounty_seal', 'charm', 280, {reward: 0.10, critChance: 0.02}, 'Runs that start with this charm equipped pay a larger purse. Difficulty still multiplies the total.', '开局就装备此护符的对局会提高赏金，难度倍率仍会计入。'),
-  gear('fence_nails', 'armor', 45, {fence: 30}, 'Extra nails driven into the fence before the fight.', '战前多钉进栅栏的钉子。'),
-  gear('ward_planks', 'armor', 130, {fence: 60, damage: 0.02}, 'Spare planks braced behind the weak posts.', '撑在薄弱木桩后的备用板。'),
-  gear('bastion_mail', 'armor', 260, {fence: 90, haste: 0.03}, 'Overlapping plates for the fence watch.', '守栅栏的人穿的叠片甲。')
+  gear('splinter_bow','weapon',60,{damage:0.06}),
+  gear('kinetic_core','weapon',150,{damage:0.05,critChance:0.04,critKnockback:8}),
+  gear('prism_lens','weapon',300,{damage:0.08,hybridDamage:0.14,freeRerolls:2}),
+  gear('runner_charm','charm',55,{haste:0.06}),
+  gear('sun_spindle','charm',145,{energy:35,harvest:0.2}),
+  gear('bounty_seal','charm',260,{reward:0.15,critChance:0.03,rerollDiscount:0.25}),
+  gear('fence_nails','armor',50,{fence:40,fieldHp:0.15}),
+  gear('vanguard_kit','armor',140,{fieldDiscount:0.15,fieldHp:0.25,thorns:5}),
+  gear('surge_capacitor','armor',280,{surgeCharges:1,surgePower:0.25})
 ];
-
 const equipmentRecord = {};
 for (const entry of rawEquipment) {
   entry.name = equipmentNames[entry.id];
@@ -183,9 +107,10 @@ function track(id, cap, costs, bonuses, name, flavorEn, flavorZh) {
 }
 
 const permanentRecord = {
-  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.02}, {en: 'Sharpened Instinct', zh: '锐化直觉'}, 'Training that stays between runs.', '跨对局保留的训练。'),
-  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.02}, {en: 'Quick Hands', zh: '迅捷手法'}, 'Repetition that shortens the gap between shots.', '缩短射击间隔的练习。'),
-  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 12}, {en: 'Deep Roots', zh: '深根'}, 'Deeper posts for the starting fence.', '把开局栅栏立得更深。')
+  economy:track('economy',5,[40,70,110,170,240],{energy:10,energyRate:0.25},{en:'Logistics',zh:'后勤补给'},'',''),
+  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.03}, {en: 'Sharpened Instinct', zh: '锐化直觉'}, 'Training that stays between runs.', '跨对局保留的训练。'),
+  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.03}, {en: 'Quick Hands', zh: '迅捷手法'}, 'Repetition that shortens the gap between shots.', '缩短射击间隔的练习。'),
+  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence:18,fieldHp:0.06}, {en: 'Deep Roots', zh: '深根'}, 'Deeper posts for the starting fence.', '把开局栅栏立得更深。')
 };
 
 function deepFreeze(value) {
@@ -250,34 +175,17 @@ function owns(profile, id) {
   return Array.isArray(profile.equipmentOwned) && profile.equipmentOwned.includes(id);
 }
 
-function zeroBonuses() {
-  return {damage: 0, haste: 0, range: 0, critChance: 0, fence: 0, reward: 0};
+function addSource(out,bonuses,times) {
+  for (const [key,value] of Object.entries(bonuses)) out[key]=Math.round(((out[key] || 0)+times*value)*10000)/10000;
 }
-
-function addSource(milli, absolute, bonuses, times) {
-  if (!bonuses || typeof bonuses !== 'object') return;
-  for (const key of FRACTION_KEYS) {
-    const value = bonuses[key];
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-      milli[key] += Math.round(value * 1000) * times;
-    }
-  }
-  for (const key of ABSOLUTE_KEYS) {
-    const value = bonuses[key];
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) absolute[key] += value * times;
-  }
-}
-
 function boundedLevel(value, cap) {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return 0;
   return Math.min(value, cap);
 }
 
 export function getProfileBonuses(profile) {
-  const bonuses = zeroBonuses();
+  const bonuses = {damage:0,haste:0,range:0,critChance:0,reward:0,fence:0};
   if (!isProfile(profile)) return bonuses;
-  const milli = {damage: 0, haste: 0, critChance: 0, reward: 0};
-  const absolute = {range: 0, fence: 0};
   const equipped = profile.equipped && typeof profile.equipped === 'object' ? profile.equipped : null;
   const seenItems = new Set();
   if (equipped) {
@@ -288,7 +196,7 @@ export function getProfileBonuses(profile) {
       const item = EQUIPMENT[id];
       if (!item || item.slot !== slot) continue;
       seenItems.add(id);
-      addSource(milli, absolute, item.bonuses, 1);
+      addSource(bonuses, item.bonuses, 1);
     }
   }
   const permanent = profile.permanent && typeof profile.permanent === 'object' ? profile.permanent : null;
@@ -297,15 +205,9 @@ export function getProfileBonuses(profile) {
       const spec = PERMANENT_UPGRADES[id];
       // Level is how many times this rank bonus has been bought. Count it once per rank.
       const level = boundedLevel(permanent[id], spec.cap);
-      if (level > 0) addSource(milli, absolute, spec.bonuses, level);
+      if (level > 0) addSource(bonuses, spec.bonuses, level);
     }
   }
-  bonuses.damage = Math.min(OUTPUT_CAP_MILLI.damage, milli.damage) / 1000;
-  bonuses.haste = Math.min(OUTPUT_CAP_MILLI.haste, milli.haste) / 1000;
-  bonuses.critChance = Math.min(OUTPUT_CAP_MILLI.critChance, milli.critChance) / 1000;
-  bonuses.reward = Math.min(OUTPUT_CAP_MILLI.reward, milli.reward) / 1000;
-  bonuses.range = Math.min(OUTPUT_CAP_ABS.range, absolute.range);
-  bonuses.fence = Math.min(OUTPUT_CAP_ABS.fence, absolute.fence);
   return bonuses;
 }
 

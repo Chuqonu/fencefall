@@ -1,3 +1,4 @@
+import {getProfileBonuses} from '../systems/progression.js';
 import {ARENA, BASE_TYPES, slotGeometry} from '../shared.js';
 import {RECIPES} from './recipes.js';
 import {getHeroStats} from '../systems/hero.js';
@@ -233,16 +234,15 @@ function heroStats(unit, state) {
 export function getUnitStats(unit, state) {
   if (!unit || typeof unit !== 'object') return inertStats();
   if (unit.kind === 'hero' || unit.type === 'hero') return heroStats(unit, state);
-  if (unit.kind === 'hybrid') {
-    const recipe = findRecipe(unit.type);
-    if (recipe) return scaleStats(recipe.stats, unit.rank);
-    if (TOWERS[unit.type]) return scaleStats(TOWERS[unit.type].stats, unit.rank);
-    return inertStats();
-  }
-  if (TOWERS[unit.type]) return scaleStats(TOWERS[unit.type].stats, unit.rank);
-  const recipe = findRecipe(unit.type);
-  if (recipe) return scaleStats(recipe.stats, unit.rank);
-  return inertStats();
+  const base=TOWERS[unit.type] || findRecipe(unit.type);
+  if (!base) return inertStats();
+  const stats=scaleStats(base.stats,unit.rank);
+  const bonus=state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot);
+  stats.damage*=1+(bonus.damage||0)+(unit.kind==='hybrid'?bonus.hybridDamage||0:0);
+  stats.interval/=1+(bonus.haste||0);
+  stats.critChance+=bonus.critChance||0;
+  if (bonus.critKnockback) stats.critKnockback=bonus.critKnockback;
+  return stats;
 }
 
 function deepFreeze(value) {

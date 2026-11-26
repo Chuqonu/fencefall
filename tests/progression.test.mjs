@@ -398,7 +398,7 @@ test('a full board with open hero upgrades offers three hero cards', () => {
 
 test('a full board with one upgrade left keeps that card and replace cards', () => {
   const state = createRun({seed: 19, difficulty: 'normal', runId: 'one-left'});
-  capHero(state, 'reach');
+  capHero(state, 'volley');
   fill(state);
   const ids = slotIds(state);
   openDraft(state);
@@ -406,7 +406,7 @@ test('a full board with one upgrade left keeps that card and replace cards', () 
   const heroes = state.draft.options.filter(card => card.kind === 'hero_upgrade');
   const towers = state.draft.options.filter(card => card.kind === 'tower');
   assert.equal(heroes.length, 1);
-  assert.equal(heroes[0].upgradeId, 'reach');
+  assert.equal(heroes[0].upgradeId, 'volley');
   assert.equal(towers.length, 2);
   assert.ok(towers.every(card => card.replace === true));
   const saved = clone(state.draft.options);
@@ -537,18 +537,18 @@ test('equipment and permanent purchases charge catalog prices and apply only whe
     assert.equal(spec.cost, spec.costs[0]);
     for (let i = 1; i < spec.costs.length; i += 1) assert.ok(spec.costs[i] > spec.costs[i - 1]);
   }
-  assert.equal(EQUIPMENT.splinter_bow.cost, 65);
+  assert.equal(EQUIPMENT.splinter_bow.cost, 60);
   assert.equal(EQUIPMENT.splinter_bow.bonuses.damage, 0.06);
-  assert.equal(EQUIPMENT.hawk_brace.cost, 160);
-  assert.equal(EQUIPMENT.hawk_brace.bonuses.damage, 0.04);
-  assert.equal(EQUIPMENT.hawk_brace.bonuses.critChance, 0.04);
-  assert.equal(EQUIPMENT.hawk_brace.bonuses.range, 16);
-  assert.equal(EQUIPMENT.fence_nails.cost, 45);
-  assert.equal(EQUIPMENT.fence_nails.bonuses.fence, 30);
-  assert.equal(EQUIPMENT.bounty_seal.cost, 280);
-  assert.equal(EQUIPMENT.bounty_seal.bonuses.reward, 0.1);
+  assert.equal(EQUIPMENT.kinetic_core.cost, 150);
+  assert.equal(EQUIPMENT.kinetic_core.bonuses.damage, 0.05);
+  assert.equal(EQUIPMENT.kinetic_core.bonuses.critChance, 0.04);
+  assert.equal(EQUIPMENT.kinetic_core.bonuses.critKnockback, 8);
+  assert.equal(EQUIPMENT.fence_nails.cost, 50);
+  assert.equal(EQUIPMENT.fence_nails.bonuses.fence, 40);
+  assert.equal(EQUIPMENT.bounty_seal.cost, 260);
+  assert.equal(EQUIPMENT.bounty_seal.bonuses.reward, 0.15);
   assert.deepEqual(PERMANENT_UPGRADES.damage.costs, [40, 70, 110, 170, 240]);
-  assert.equal(PERMANENT_UPGRADES.damage.bonuses.damage, 0.02);
+  assert.equal(PERMANENT_UPGRADES.damage.bonuses.damage, 0.03);
 
   const stray = createProfile();
   stray.equipped.weapon = 'splinter_bow';
@@ -557,23 +557,23 @@ test('equipment and permanent purchases charge catalog prices and apply only whe
   const profile = createProfile();
   profile.currency = EQUIPMENT.splinter_bow.cost - 1;
   assert.equal(buyEquipment(profile, 'splinter_bow').reason, 'insufficientCurrency');
-  assert.equal(profile.currency, 64);
+  assert.equal(profile.currency, 59);
   assert.deepEqual(profile.equipmentOwned, []);
   assert.equal(equipItem(profile, 'splinter_bow').reason, 'notOwned');
   assert.equal(buyEquipment(profile, 'missing-gear').reason, 'unknownItem');
   assert.equal(purchasePermanent(profile, 'missing-track').reason, 'unknownUpgrade');
 
-  const total = EQUIPMENT.splinter_bow.cost + EQUIPMENT.hawk_brace.cost + EQUIPMENT.fence_nails.cost + PERMANENT_UPGRADES.damage.costs[0];
+  const total = EQUIPMENT.splinter_bow.cost + EQUIPMENT.kinetic_core.cost + EQUIPMENT.fence_nails.cost + PERMANENT_UPGRADES.damage.costs[0];
   profile.currency = total;
   assert.equal(buyEquipment(profile, 'splinter_bow').ok, true);
-  assert.equal(profile.currency, total - 65);
+  assert.equal(profile.currency, total - 60);
   assert.equal(profile.equipped.weapon, null);
   assert.deepEqual(getProfileBonuses(profile), {damage: 0, haste: 0, range: 0, critChance: 0, fence: 0, reward: 0});
   assert.equal(equipItem(profile, 'splinter_bow').ok, true);
   assert.equal(getProfileBonuses(profile).damage, 0.06);
-  assert.equal(buyEquipment(profile, 'hawk_brace').ok, true);
-  assert.equal(equipItem(profile, 'hawk_brace').ok, true);
-  assert.equal(profile.equipped.weapon, 'hawk_brace');
+  assert.equal(buyEquipment(profile, 'kinetic_core').ok, true);
+  assert.equal(equipItem(profile, 'kinetic_core').ok, true);
+  assert.equal(profile.equipped.weapon, 'kinetic_core');
   assert.ok(profile.equipmentOwned.includes('splinter_bow'));
   assert.equal(buyEquipment(profile, 'fence_nails').ok, true);
   assert.equal(equipItem(profile, 'fence_nails').ok, true);
@@ -582,17 +582,17 @@ test('equipment and permanent purchases charge catalog prices and apply only whe
   assert.equal(profile.permanent.damage, 1);
   assert.equal(profile.currency, 0);
   assert.deepEqual(getProfileBonuses(profile), {
-    damage: 0.06,
+    damage: 0.08,
     haste: 0,
-    range: 16,
+    range: 0,
     critChance: 0.04,
-    fence: 30,
+    fence: 40, fieldHp: 0.15, critKnockback: 8,
     reward: 0
   });
   const geared = createRun({seed: 70, difficulty: 'normal', profile, runId: 'gear-hero'});
   const stats = getHeroStats(geared.slots[2].unit, geared);
-  assert.equal(stats.damage, Number((HERO_BASE.damage * 1.06).toFixed(4)));
-  assert.equal(stats.range, HERO_BASE.range + 16);
+  assert.equal(stats.damage, Number((HERO_BASE.damage * 1.08).toFixed(4)));
+  assert.equal(stats.range, HERO_BASE.range);
   assert.equal(stats.critChance, 0.12);
   assert.equal(buyEquipment(profile, 'splinter_bow').reason, 'alreadyOwned');
   assert.equal(purchasePermanent(profile, 'damage').reason, 'insufficientCurrency');
@@ -654,12 +654,12 @@ test('settlement scales with difficulty and pays a run only once', () => {
   rich.currency = EQUIPMENT.bounty_seal.cost;
   assert.equal(buyEquipment(rich, 'bounty_seal').ok, true);
   assert.equal(equipItem(rich, 'bounty_seal').ok, true);
-  assert.equal(getProfileBonuses(rich).reward, 0.1);
+  assert.equal(getProfileBonuses(rich).reward, 0.15);
   const boosted = award('normal', 'victory', STATS, rich);
-  assert.equal(boosted.settlement.currency, 82);
-  assert.equal(rich.currency, 82);
+  assert.equal(boosted.settlement.currency, 85);
+  assert.equal(rich.currency, 85);
   assert.equal(settleRun(rich, boosted.state), boosted.settlement);
-  assert.equal(rich.currency, 82);
+  assert.equal(rich.currency, 85);
 
   const lateProfile = createProfile();
   lateProfile.currency = EQUIPMENT.bounty_seal.cost;
@@ -671,7 +671,7 @@ test('settlement scales with difficulty and pays a run only once', () => {
   late.kills = STATS.kills;
   late.wave = STATS.wave;
   assert.equal(getProfileBonuses(late.profileSnapshot).reward, 0);
-  assert.equal(getProfileBonuses(lateProfile).reward, 0.1);
+  assert.equal(getProfileBonuses(lateProfile).reward, 0.15);
   assert.equal(settleRun(lateProfile, late).currency, 74);
   assert.equal(lateProfile.currency, 74);
 });

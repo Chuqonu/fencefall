@@ -35,9 +35,9 @@ for (const [id,en,zh,focusEn,focusZh,first,last] of missions) {
   const small=['swarm','runner','shambler'].includes(first);
   EXPEDITIONS[id]={id,name,focus,minutes:3,summary:focus,phases:[
     phase('opening',0,1,1,name,[pack('shambler',6,0.65,0.42)]),
-    phase('scout',13,44,10,name,[pack('swarm',6,1),pack(first,small?3:1,1,1)]),
-    phase('march',46,105,10,name,[pack('swarm',12,0.65),pack('shambler',5,1.5),pack(first,small?5:1,1)]),
-    phase('siege',108,167,10,name,[pack('swarm',16,0.5),pack('runner',4,1.2),pack(first,small?8:2,1)]),
+    phase('scout',20,44,10,name,[pack('swarm',6,1),pack(first,small?3:1,1,1)]),
+    phase('march',46,105,10,name,[pack('swarm',12,0.65),pack('shambler',5,1.5),pack(first,small?5:1,1),...(id==='gauntlet'?[pack('hush',1,0)]:[])]),
+    phase('siege',108,167,10,name,[pack('swarm',16,0.5),pack('runner',4,1.2),pack(first,small?8:2,1),...(last!=='boss'?[pack(last,1,0)]:[])]),
     phase('last',170,171,1,name,[pack(last,last==='boss'?1:5,1.4,last==='boss'?0.5:1),pack('swarm',16,0.5)])
   ]};
 }

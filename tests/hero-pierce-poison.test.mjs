@@ -1,6 +1,6 @@
-// Barbed Quills plus Piercing Bolt: one shot poisons the first enemy and the
-// pierced enemy at one stack. A second shot refreshes that poison and does not
-// raise stacks, poison dps, or the pierce count. The board keeps one hero.
+// Thermobaric plus Armor Core: one shot burns the first enemy and the
+// pierced enemy at one stack. A second shot refreshes that burn and does not
+// raise stacks, burn dps, or the pierce count. The board keeps one hero.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun} from '../src/engine.js';
@@ -16,8 +16,8 @@ function heroes(state) {
     .map(slot => slot.unit);
 }
 
-function poisonRows(enemy) {
-  return (enemy.statuses || []).filter(status => status && status.type === 'poison');
+function burnRows(enemy) {
+  return (enemy.statuses || []).filter(status => status && status.type === 'burn');
 }
 
 function assertOneHero(state, hero, label) {
@@ -30,13 +30,11 @@ function assertOneHero(state, hero, label) {
   assert.equal(hero.type, 'hero', `${label} type`);
 }
 
-function assertPoison(enemy, dps, sourceId, label) {
-  const rows = poisonRows(enemy);
-  assert.equal(rows.length, 1, `${label} poison rows`);
+function assertBurn(enemy, dps, sourceId, label) {
+  const rows = burnRows(enemy);
+  assert.equal(rows.length, 1, `${label} burn rows`);
   const status = rows[0];
-  assert.equal(status.stacks, 1, `${label} stacks`);
-  assert.equal(status.maxStacks, 1, `${label} maxStacks`);
-  assert.equal(status.power, dps, `${label} poison dps`);
+  assert.equal(status.power, dps, `${label} burn dps`);
   assert.equal(status.sourceId, sourceId, `${label} source`);
   assert.ok(status.remaining > 0, `${label} remaining`);
 }
@@ -61,8 +59,8 @@ function shoot(state, hero, firstId, pierce, dps) {
   assert.equal(projectile.sourceId, hero.id);
   assert.equal(projectile.targetId, firstId);
   assert.equal(projectile.pierce, pierce, 'pierce count on the shot');
-  assert.equal(projectile.effects.poison.dps, dps, 'poison dps on the shot');
-  assert.equal(projectile.effects.poison.maxStacks, 1, 'poison cap on the shot');
+  assert.equal(projectile.effects.burn.dps, dps, 'burn dps on the shot');
+  assert.equal(projectile.effects.burn.duration, 2.6, 'burn cap on the shot');
   holdFire(state);
   fly(state);
   const hits = state.events.filter(event => event.type === 'hit');
@@ -70,33 +68,33 @@ function shoot(state, hero, firstId, pierce, dps) {
   return hits;
 }
 
-test('Barbed Quills and Piercing Bolt poison the first enemy and the pierced enemy at one stack', () => {
-  assert.equal(HERO_UPGRADES.barbed.name.en, 'Barbed Quills');
-  assert.equal(HERO_UPGRADES.pierce.name.en, 'Piercing Bolt');
-  const barbed = HERO_UPGRADES.barbed.effect.poison;
+test('Thermobaric and Armor Core burn the first enemy and the pierced enemy at one stack', () => {
+  assert.equal(HERO_UPGRADES.shrapnel.name.en, 'Thermobaric');
+  assert.equal(HERO_UPGRADES.pierce.name.en, 'Armor Core');
+  const shrapnel = HERO_UPGRADES.shrapnel.effect.burn;
   const pierceCount = HERO_UPGRADES.pierce.effect.pierce;
-  assert.equal(barbed.maxStacks, 1);
+  assert.equal(shrapnel.duration, 2.6);
   assert.equal(pierceCount, 1);
-  assert.equal(barbed.dps, 6);
+  assert.equal(shrapnel.dps, 4);
 
-  const state = createRun({seed: 41, difficulty: 'normal', runId: 'hero-pierce-poison'});
+  const state = createRun({seed: 41, difficulty: 'normal', runId: 'hero-pierce-burn'});
   const hero = state.slots[2].unit;
   assertOneHero(state, hero, 'start');
 
-  assert.equal(applyHeroUpgrade(state, 'barbed').ok, true);
+  assert.equal(applyHeroUpgrade(state, 'shrapnel').ok, true);
   assert.equal(applyHeroUpgrade(state, 'pierce').ok, true);
   assertOneHero(state, hero, 'after upgrades');
-  assert.equal(hero.upgrades.barbed, 1);
+  assert.equal(hero.upgrades.shrapnel, 1);
   assert.equal(hero.upgrades.pierce, 1);
 
   const stats = getHeroStats(hero, state);
   const catalog = getUnitStats(hero, state);
-  assert.equal(stats.poison.dps, barbed.dps);
-  assert.equal(stats.poison.duration, barbed.duration);
-  assert.equal(stats.poison.maxStacks, 1);
+  assert.equal(stats.burn.dps, shrapnel.dps);
+  assert.equal(stats.burn.duration, shrapnel.duration);
+  assert.equal(stats.burn.duration, 2.6);
   assert.equal(stats.pierce, pierceCount);
-  assert.equal(catalog.poison.dps, barbed.dps);
-  assert.equal(catalog.poison.maxStacks, 1);
+  assert.equal(catalog.burn.dps, shrapnel.dps);
+  assert.equal(catalog.burn.duration, 2.6);
   assert.equal(catalog.pierce, pierceCount);
 
   const slot = state.slots[2];
@@ -125,24 +123,24 @@ test('Barbed Quills and Piercing Bolt poison the first enemy and the pierced ene
   assert.ok(reach(first) <= stats.range && reach(pierced) <= stats.range, 'both enemies are in range');
   assert.equal(first.x, pierced.x, 'the pierced enemy stays on the shot line');
 
-  const firstHits = shoot(state, hero, first.id, pierceCount, barbed.dps);
+  const firstHits = shoot(state, hero, first.id, pierceCount, shrapnel.dps);
   assert.deepEqual(firstHits.map(event => event.targetId), [first.id, pierced.id]);
-  assertPoison(first, barbed.dps, hero.id, 'first shot, first enemy');
-  assertPoison(pierced, barbed.dps, hero.id, 'first shot, pierced enemy');
+  assertBurn(first, shrapnel.dps, hero.id, 'first shot, first enemy');
+  assertBurn(pierced, shrapnel.dps, hero.id, 'first shot, pierced enemy');
 
-  const secondHits = shoot(state, hero, first.id, pierceCount, barbed.dps);
+  const secondHits = shoot(state, hero, first.id, pierceCount, shrapnel.dps);
   assert.deepEqual(secondHits.map(event => event.targetId), [first.id, pierced.id]);
-  assertPoison(first, barbed.dps, hero.id, 'second shot, first enemy');
-  assertPoison(pierced, barbed.dps, hero.id, 'second shot, pierced enemy');
+  assertBurn(first, shrapnel.dps, hero.id, 'second shot, first enemy');
+  assertBurn(pierced, shrapnel.dps, hero.id, 'second shot, pierced enemy');
 
   assertOneHero(state, hero, 'after shots');
   const after = getHeroStats(hero, state);
   const afterCatalog = getUnitStats(hero, state);
-  assert.equal(after.poison.dps, barbed.dps);
-  assert.equal(after.poison.maxStacks, 1);
+  assert.equal(after.burn.dps, shrapnel.dps);
+  assert.equal(after.burn.duration, 2.6);
   assert.equal(after.pierce, pierceCount);
-  assert.equal(afterCatalog.poison.dps, barbed.dps);
-  assert.equal(afterCatalog.poison.maxStacks, 1);
+  assert.equal(afterCatalog.burn.dps, shrapnel.dps);
+  assert.equal(afterCatalog.burn.duration, 2.6);
   assert.equal(afterCatalog.pierce, pierceCount);
   assert.equal(state.enemies.length, 2);
   assert.equal(first.dead, false);

@@ -11,7 +11,7 @@ import {spawnEnemy} from '../src/systems/movement.js';
 import {updateCombat} from '../src/systems/combat.js';
 import {applyStatus, isStunned, updateStatuses} from '../src/systems/status.js';
 
-const KINDS = Object.keys(ENEMIES);
+const KINDS = Object.keys(ENEMIES).filter(kind => !ENEMIES[kind].attackRange);
 const STUN = 3.2;
 
 function fresh(runId) {

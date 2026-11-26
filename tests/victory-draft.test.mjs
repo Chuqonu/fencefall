@@ -11,7 +11,7 @@ import {killEnemy} from '../src/systems/combat.js';
 import {draftXpCost} from '../src/systems/drafts.js';
 import {WAVES} from '../src/systems/waves.js';
 
-const FIRST_WAVE_AT = 1;
+const FIRST_WAVE_AT = 0.5;
 
 function heroCount(state) {
   return state.slots.filter(slot => {

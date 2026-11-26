@@ -10,7 +10,7 @@ import {ENEMIES} from '../src/data/enemies.js';
 import {spawnEnemy} from '../src/systems/movement.js';
 import {updateCombat} from '../src/systems/combat.js';
 
-const KINDS = Object.keys(ENEMIES);
+const KINDS = Object.keys(ENEMIES).filter(kind => !ENEMIES[kind].attackRange);
 const LOW = 0.3;
 
 function fresh(runId) {
@@ -158,6 +158,7 @@ test('a bite that empties the fence reports ratio 0', () => {
   const maxHp = state.fence.maxHp;
   assert.equal(enemy.damage, damage);
   assert.ok(damage > 1 && damage < maxHp);
+  state.surge.charges = 0;
   state.fence.hp = 1;
 
   const event = biteOnce(state);

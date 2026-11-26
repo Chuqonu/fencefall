@@ -110,8 +110,8 @@ test('codex mechanic badges use the active language', () => {
   const chinese = findByTestId(codexBadges('zh'), 'codex-tower-bolt');
   assert.ok(english);
   assert.ok(chinese);
-  assert.deepEqual(badgeRows(english)[0], ['Projectile', 'Crit', 'Pierce']);
-  assert.deepEqual(badgeRows(chinese)[0], ['投射', '暴击', '穿透']);
+  assert.deepEqual(badgeRows(english)[0], ['Projectile', 'Pierce', 'Crit']);
+  assert.deepEqual(badgeRows(chinese)[0], ['投射', '穿透', '暴击']);
 
   const chineseCodex = codexBadges('zh');
   const recipes = findByTestId(chineseCodex, 'codex-tab-recipes');
@@ -119,7 +119,7 @@ test('codex mechanic badges use the active language', () => {
   for (const fn of recipes.listeners.click) fn({preventDefault() {}, stopPropagation() {}});
   const scald = findByTestId(chineseCodex, 'codex-recipe-scald');
   const rows = badgeRows(scald);
-  assert.ok(rows.some(row => row.join(' ') === '溅射 燃烧 减速'), rows);
+  assert.ok(rows.some(row => ['溅射','燃烧','减速','蒸汽爆破'].every(x=>row.includes(x))), rows);
 });
 
 function lineTexts(node, rows = []) {
@@ -151,6 +151,6 @@ test('the Cinder codex burn row marks 4 per second', () => {
     for (const fn of tab?.listeners?.click || []) fn({preventDefault() {}, stopPropagation() {}});
     return lineTexts(findByTestId(root, 'codex-tower-fire')).find(row => /burn|燃烧/i.test(row)) || '';
   }
-  assert.equal(burnLine('en'), 'Burn 4/s · 2.6 s');
-  assert.equal(burnLine('zh'), '燃烧 4/秒 · 2.6 s');
+  assert.equal(burnLine('en'), 'Burn 5/s · 2.8 s');
+  assert.equal(burnLine('zh'), '燃烧 5/秒 · 2.8 s');
 });

@@ -91,8 +91,8 @@ export const ENEMIES = {
     attackRange:135, projectileSpeed:190,
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
-      en: 'Fragile, with the shortest pause between bites. Each bite on the shared fence is light, and the danger is how fast those bites stack once it arrives.',
-      zh: '身体脆弱，啃咬间隔最短。对共享栅栏的每一口都很轻，威胁在于抵达之后轻咬叠得很快。',
+      en: 'Stops 135 px from the fence and spits acid. A bulwark in its path intercepts the shot.',
+      zh: '在距栅栏 135 像素处停步喷酸，弹道上的铁棘壁可拦截酸液。',
     },
     role: {en: 'Sapper', zh: '工兵'},
     threat: 3,
@@ -143,8 +143,8 @@ export const ENEMIES = {
   leaper: {
     name: {en: 'Ash Leaper', zh: '灰跃者'},
     description: {
-      en: 'Crouches, then jumps toward the fence. Shots land during the crouch, and again once it is biting. It only bites the shared fence.',
-      zh: '先蹲下，再跳向栅栏。只有蹲下时和贴上栅栏之后才会被打中。它只啃共享栅栏。',
+      en: 'Vulnerable while walking and crouching. A bulwark catches its jump and stuns it for 1.2 s.',
+      zh: '行进与蹲伏时均可射击。铁棘壁能拦下跳跃并眩晕 1.2 秒。',
     },
     role: {en: 'Leaper', zh: '跃袭'},
     threat: 3,
@@ -195,8 +195,8 @@ export const ENEMIES = {
   shade: {
     name: {en: 'Fence Shade', zh: '栅影'},
     description: {
-      en: 'Solid for a short beat, then faded and untargetable. It still walks and bites the shared fence while faded.',
-      zh: '短暂凝实，然后淡出并无法被选中。淡出时仍会走向并啃咬共享栅栏。',
+      en: 'Fades every 1.4 s. Flares and Pyre reveal it. Spikes and clouds damage it while faded.',
+      zh: '每 1.4 秒切换虚实。耀光灯塔和烽坛可显隐，地刺与云雾能伤及虚化状态。',
     },
     role: {en: 'Shade', zh: '虚化'},
     threat: 3,

@@ -89,7 +89,7 @@ function immune(enemy, type) {
   return Array.isArray(list) && list.includes(type);
 }
 
-function resistScale(enemy, type) {
+export function statusDurationScale(enemy, type) {
   const table = enemy && enemy.statusResist;
   if (!table || typeof table !== 'object') return 1;
   const resist = table[type];
@@ -130,7 +130,7 @@ function normalize(enemy, input) {
   if (!finite(remaining) || remaining <= EPS) return {ok: false, reason: 'invalid'};
   if (type !== 'stun' && !finite(power)) return {ok: false, reason: 'invalid'};
 
-  remaining = clamp(remaining * resistScale(enemy, type), 0, durationCap(type));
+  remaining = clamp(remaining * statusDurationScale(enemy, type), 0, durationCap(type));
   if (remaining <= EPS) return {ok: false, reason: 'immune'};
 
   if (type === 'burn') power = clamp(power, 0, STATUS_LIMITS.maxBurnDps);

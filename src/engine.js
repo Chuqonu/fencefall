@@ -30,7 +30,7 @@ requireFn(getProfileBonuses, 'getProfileBonuses');
 function sanitizeBonuses(value) {
   const out = {...ZERO_BONUSES};
   if (!value || typeof value !== 'object') return out;
-  for (const key of Object.keys(out)) {
+  for (const key of [...Object.keys(out),'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount','fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate']) {
     const number = Number(value[key]);
     if (Number.isFinite(number)) out[key] = number;
   }
@@ -47,6 +47,9 @@ export function applyProfileBonuses(state, bonuses) {
     state.fence.maxHp += clean.fence;
     state.fence.hp = Math.min(state.fence.maxHp, state.fence.hp + clean.fence);
   }
+  state.energy=Math.min(state.maxEnergy,state.energy+(clean.energy||0));
+  state.freeRerollsLeft=clean.freeRerolls || 0;
+  state.surge.charges=state.surge.maxCharges=1+(clean.surgeCharges||0);
   state.initialized = true;
   return state;
 }

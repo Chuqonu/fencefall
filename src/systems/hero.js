@@ -22,17 +22,6 @@ const BONUS_LIMITS = Object.freeze({
   critChance: [-0.2, 0.5],
 });
 
-const STAT_LIMITS = Object.freeze({
-  damage: [1, 250],
-  interval: [0.25, 3],
-  range: [280, 640],
-  critChance: [0, 0.75],
-  critMultiplier: [1.25, 3.5],
-  projectileSpeed: [240, 720],
-  pierce: [0, 4],
-  poisonDps: [0, 80],
-});
-
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const key of Object.keys(value)) deepFreeze(value[key]);
@@ -40,17 +29,17 @@ function deepFreeze(value) {
 }
 
 function upgrade(id, cap, en, zh, info, detail, effect) {
-  return deepFreeze({id,cap,name:{en,zh},description:{en:info,zh:detail},effect});
+  return deepFreeze({id,cap,name:{en,zh},description:{en:'Hero · '+info,zh:'英雄 · '+detail},effect});
 }
 export const HERO_UPGRADES = deepFreeze({
   volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
   strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
   cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
   pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级多贯穿一名敌人，并忽略 25% 护甲。',{pierce:1}),
-  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds.','爆炸弹溅射并灼烧敌群 2.6 秒。',{}),
-  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take.','减速目标并使其受到更多伤害。',{}),
+  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds.','爆炸弹溅射并灼烧敌群 2.6 秒。',{splash:30,burn:{dps:4,duration:2.6}}),
+  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take.','减速目标并使其受到更多伤害。',{brittle:{power:0.1,duration:2.6}}),
   focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{})
+  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80})
 });
 
 function finiteOr(value, fallback = 0) {
@@ -85,7 +74,7 @@ function readBonuses(state) {
   const empty = {damage: 0, haste: 0, range: 0, critChance: 0};
   const profile = state && state.profileSnapshot;
   if (!profile || typeof profile !== 'object') return empty;
-  const raw = getProfileBonuses(profile) || empty;
+  const raw = state.systems?.integration?.bonuses || getProfileBonuses(profile) || empty;
   return {
     damage: clamp(finiteOr(raw.damage), BONUS_LIMITS.damage[0], BONUS_LIMITS.damage[1]),
     haste: clamp(finiteOr(raw.haste), BONUS_LIMITS.haste[0], BONUS_LIMITS.haste[1]),
@@ -127,7 +116,7 @@ export function getHeroStats(unit, state) {
     range:HERO_BASE.range+bonus.range,
     critChance:round4(HERO_BASE.critChance+0.1*focus+bonus.critChance),
     critMultiplier:round4(HERO_BASE.critMultiplier+0.3*focus),
-    pierce, armorPen:pierce*0.25, critKnockback:strike ? 18 : 0, multishot:volley};
+    fence:levels.bastion*80, pierce, armorPen:pierce*0.25, critKnockback:(strike ? 18 : 0)+(state?.systems?.integration?.bonuses?.critKnockback || getProfileBonuses(state?.profileSnapshot).critKnockback || 0), multishot:volley};
   if (volley) stats.mechanics.push('multishot');
   if (focus >= 2) stats.mechanics.push('execute');
   if (shrapnel) {

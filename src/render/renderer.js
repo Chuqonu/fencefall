@@ -1079,130 +1079,6 @@ function activeLanguage(state, ui) {
     || 'en';
 }
 
-function bilingualHint(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const en = typeof value.en === 'string' ? value.en.trim() : '';
-  const zh = typeof value.zh === 'string' ? value.zh.trim() : '';
-  if (!en || !zh) return null;
-  return {en, zh};
-}
-
-function fieldHint(state) {
-  if (!state || typeof state !== 'object') return null;
-  return bilingualHint(state.director?.playerHint) || bilingualHint(state.systems?.waves?.current?.hint);
-}
-
-function textWidth(ctx, text) {
-  if (ctx && typeof ctx.measureText === 'function') {
-    try {
-      const width = ctx.measureText(String(text)).width;
-      if (Number.isFinite(width) && width > 0) return width;
-    } catch {
-      /* Estimate when the context cannot measure. */
-    }
-  }
-  let width = 0;
-  for (const ch of Array.from(String(text))) width += ch.charCodeAt(0) > 127 ? 11 : 6;
-  return width;
-}
-
-function shrinkToWidth(ctx, word, maxWidth, lines) {
-  let rest = word;
-  while (rest && textWidth(ctx, rest) > maxWidth) {
-    let fit = '';
-    for (const ch of Array.from(rest)) {
-      const next = fit + ch;
-      if (textWidth(ctx, next) > maxWidth) break;
-      fit = next;
-    }
-    if (!fit) {
-      const first = Array.from(rest)[0] || '';
-      if (!first) break;
-      lines.push(first);
-      rest = Array.from(rest).slice(1).join('');
-      continue;
-    }
-    lines.push(fit);
-    rest = Array.from(rest).slice(Array.from(fit).length).join('');
-  }
-  return rest;
-}
-
-function wrapHintLines(ctx, text, maxWidth) {
-  const lines = [];
-  const limited = Array.from(String(text)).slice(0, HINT_CHAR_LIMIT).join('');
-  for (const paragraph of limited.split('\n')) {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) continue;
-    let line = shrinkToWidth(ctx, words[0], maxWidth, lines);
-    for (let i = 1; i < words.length; i++) {
-      const next = line ? `${line} ${words[i]}` : words[i];
-      if (textWidth(ctx, next) <= maxWidth) line = next;
-      else {
-        if (line) lines.push(line);
-        line = shrinkToWidth(ctx, words[i], maxWidth, lines);
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
-}
-
-function ellipsize(ctx, line, maxWidth) {
-  const mark = '…';
-  let out = line;
-  while (out && textWidth(ctx, `${out}${mark}`) > maxWidth) out = Array.from(out).slice(0, -1).join('');
-  return `${out}${mark}`;
-}
-
-function drawFieldHint(ctx, state, ui) {
-  const hint = fieldHint(state);
-  if (!hint || typeof ctx.fillText !== 'function') return;
-  const text = hint[activeLanguage(state, ui)];
-  if (!text) return;
-  const maxWidth = ARENA.width - 16;
-  ctx.save();
-  try {
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    let lines = wrapHintLines(ctx, text, maxWidth);
-    if (lines.length > HINT_MAX_LINES) {
-      lines = lines.slice(0, HINT_MAX_LINES);
-      lines[HINT_MAX_LINES - 1] = ellipsize(ctx, lines[HINT_MAX_LINES - 1], maxWidth);
-    }
-    if (!lines.length) return;
-    const lineHeight = 13;
-    const blockWidth = Math.min(maxWidth, Math.max(...lines.map((line) => textWidth(ctx, line))));
-    const bandHeight = Math.min(HINT_BAND, lines.length * lineHeight + 6);
-    const x = Math.round((ARENA.width - blockWidth) / 2);
-    const y = 3;
-    if (typeof ctx.beginPath === 'function' && typeof ctx.rect === 'function' && typeof ctx.clip === 'function') {
-      ctx.beginPath();
-      ctx.rect(0, 0, ARENA.width, HINT_BAND);
-      ctx.clip();
-    }
-    ctx.fillStyle = 'rgba(8, 14, 16, 0.78)';
-    ctx.fillRect(x - 4, 1, Math.ceil(blockWidth) + 8, bandHeight - 1);
-    for (let i = 0; i < lines.length; i++) {
-      const lx = x;
-      const ly = y + i * lineHeight;
-      ctx.fillStyle = '#0c1216';
-      ctx.fillText(lines[i], lx - 1, ly);
-      ctx.fillText(lines[i], lx + 1, ly);
-      ctx.fillText(lines[i], lx, ly - 1);
-      ctx.fillText(lines[i], lx, ly + 1);
-      ctx.fillStyle = '#f4efe2';
-      ctx.fillText(lines[i], lx, ly);
-    }
-  } catch {
-    /* Hint text is optional. A missing text API must not blank the field. */
-  } finally {
-    ctx.restore();
-  }
-}
-
-// Rank 1–4 sits in the open band above the selected sprite, clear of its body.
 function drawSelectedRank(ctx, unit, anchorX, anchorY, size) {
   const rank = clamp(Math.round(finite(unit?.rank) ?? 1), 1, 4);
   const glyph = RANK_DIGIT[rank];
@@ -1655,7 +1531,7 @@ export function createRenderer(canvas) {
 
     isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
     // The HUD shows playerHint. Drawing it here covered enemies entering from the top.
-    void drawFieldHint;
+
   }
 
   function draw(state, ui) {

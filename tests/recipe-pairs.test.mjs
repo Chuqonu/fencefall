@@ -22,8 +22,9 @@ test('every unordered pair of different base types has exactly one recipe', () =
   assert.equal(new Set(BASE_TYPES).size, BASE_TYPES.length);
   assert.equal(BASE_TYPES.includes('hero'), false);
 
-  const expected = unorderedPairs(BASE_TYPES);
-  assert.equal(expected.length, (BASE_TYPES.length * (BASE_TYPES.length - 1)) / 2);
+  const expected = unorderedPairs(BASE_TYPES.filter(type => type !== 'harvest'));
+  for (const type of BASE_TYPES) assert.equal(findRecipe('harvest',type),null);
+  assert.equal(expected.length, 15);
   assert.equal(RECIPES.length, expected.length);
 
   const byPair = new Map();

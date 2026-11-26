@@ -105,6 +105,8 @@ export function mountShell(root, api) {
   const waveLabel = el('span', { class: 'stat-label' });
   const waveValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-wave-value' });
   const waveStat = stat('hud-wave', waveLabel, waveValue);
+  const waveProgress = el('small',{'data-testid':'hud-wave-progress'});
+  waveStat.append(waveProgress);
   const killsLabel = el('span', { class: 'stat-label' });
   const killsValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-kills-value' });
   const killsStat = stat('hud-kills', killsLabel, killsValue, 'hud-quiet');
@@ -306,7 +308,7 @@ export function mountShell(root, api) {
         }
         return;
       }
-      if (slotIndex(ui?.selectedSlot) >= 0) {
+      if (slotIndex(ui?.selectedSlot) >= 0 || slotIndex(ui?.selectedField)>=0) {
         event.preventDefault();
         api.act('selectSlot', { index: -1 });
       }
@@ -448,7 +450,7 @@ export function mountShell(root, api) {
 
     const mergeOpen = Boolean(ui?.mergePreview);
     const selected = slotIndex(ui?.selectedSlot);
-    const unitOpen = screen === 'battle' && selected >= 0 && phaseName !== 'draft' && phaseName !== 'placing' && !mergeOpen;
+    const unitOpen = screen === 'battle' && (selected >= 0 || !!state?.fieldSlots?.[ui?.selectedField]?.unit) && phaseName !== 'draft' && phaseName !== 'placing' && !mergeOpen;
     shell.classList.toggle('is-unit-open', unitOpen);
     const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing' || mergeOpen);
     overlayRoot.classList.toggle('is-open', overlayOpen);
@@ -508,7 +510,8 @@ export function mountShell(root, api) {
     setText(sortie, sortieName);
     sortie.hidden = !sortieName;
     setText(waveLabel, text('wave'));
-    setText(waveValue, runReady ? num(finite(state.wave,0),language)+' · '+Math.round((getWaveInfo(state).progress || 0)*100)+'%' : '—');
+    setText(waveValue, runReady ? num(finite(state.wave,0),language) : '—');
+    setText(waveProgress,runReady?Math.round((getWaveInfo(state).progress || 0)*100)+'%':'');
     setText(killsLabel, text('kills'));
     setText(killsValue, runReady ? num(finite(state?.kills, 0), language) : '—');
     setText(timeLabel, text('time'));
@@ -566,7 +569,7 @@ export function mountShell(root, api) {
     }
 
     if (!validSlot(endIndex, state)) {
-      if (!validSlot(startIndex, state) && slotIndex(ui?.selectedSlot) >= 0) {
+      if (!validSlot(startIndex, state) && (slotIndex(ui?.selectedSlot) >= 0 || slotIndex(ui?.selectedField)>=0)) {
         api.act('selectSlot', { index: -1 });
       }
       return;
@@ -1004,11 +1007,12 @@ function structuralKey(state, profile, ui) {
     profile?.settings?.language ?? '',
     profile?.settings?.sound ? 1 : 0,
     profile?.settings?.reducedMotion ? 1 : 0,
-    ui?.selectedSlot ?? '',
+    ui?.selectedSlot ?? '',ui?.selectedField ?? '',ui?.fieldKind ?? '',
     ui?.mergeFrom ?? '',
     ui?.mergePreview ? 1 : 0,
     message,
-    state?.wave ?? '',
+    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',
+    ...Object.values(state?.fieldCooldowns || {}).map(Math.ceil),
     playerHintKey(state?.director?.playerHint),
     playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',

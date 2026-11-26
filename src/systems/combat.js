@@ -74,7 +74,7 @@ import {gainEnergy,hurtField} from './field.js';
 import {TARGET_MODES,canPlan,ARENA, DIFFICULTIES, clamp, distance, emit, random, uid} from '../shared.js';
 import {ENEMIES} from '../data/enemies.js';
 import {getUnitStats} from '../data/towers.js';
-import {applyStatus} from './status.js';
+import {statusDurationScale, applyStatus} from './status.js';
 import {spawnEnemy} from './movement.js';
 
 export const AURA_DAMAGE_CAP = 0.6;
@@ -929,7 +929,8 @@ function triggerFenceSurge(state) {
     damageEnemy(state,e,boss?Math.min(450,e.maxHp*0.08):110*power,{type:'surge',armorPen:1});
     if (!isLiving(e)) continue;
     pushEnemy(state,e,boss?45:150*(1+0.35*level));
-    applyStatus(e,{type:'stun',remaining:(boss?0.5/(1-(e.statusResist?.stun||0)):1.6),sourceId:'fence'});
+    const stunScale=statusDurationScale(e,'stun');
+    if (stunScale>0) applyStatus(e,{type:'stun',remaining:boss ? 0.5/stunScale : 1.6,sourceId:'fence'});
     e.chargeLit=false;
     e.chargeTimer=0;
   }
@@ -1123,6 +1124,8 @@ function updateFenceAttacks(state, dt) {
     let hits = 0;
     while (enemy.attackCooldown <= 1e-9 && fence.hp > 0 && hits++ < hitCap) {
       if (enemy.projectileSpeed && enemy.attackRange) {
+        emit(state,'shot',{sourceId:enemy.id,targetId:'fence',x:enemy.x,y:enemy.y,targetX:enemy.x,targetY:ARENA.fenceY,
+          damage:enemy.damage,crit:false,towerType:enemy.kind,team:'enemy'});
         state.projectiles.push({id:uid(state,'p'),team:'enemy',sourceId:enemy.id,targetId:null,enemyKind:enemy.kind,
           x:enemy.x,y:enemy.y,speed:enemy.projectileSpeed,damage:enemy.damage,crit:false,tags:['acid'],
           dirx:0,diry:1,chainRange:70,life:3,visited:[],pierce:0,chain:0,splash:0});
@@ -1182,6 +1185,17 @@ function updateWards(state) {
  * A warden's shield is applied before shots. It never covers the warden.
  * Does not modify state.time, state.tick, or state.speed.
  */
+// Derived statistics are shared across fixed steps; the serialized state remains authoritative.
+const combatStatsCache=new WeakMap();
+function combatStats(unit,state) {
+  const levels=unit.kind==='hero'?Object.values(unit.upgrades).join(',')+Object.keys(unit.upgrades).join(','):'';
+  const bonuses=state.systems?.integration?.bonuses || state.profileSnapshot;
+  const cached=combatStatsCache.get(unit);
+  if (cached && cached.rank===unit.rank && cached.type===unit.type && cached.levels===levels && cached.bonuses===bonuses) return cached.stats;
+  const stats=getUnitStats(unit,state);
+  combatStatsCache.set(unit,{rank:unit.rank,type:unit.type,levels,bonuses,stats});
+  return stats;
+}
 export function updateCombat(state, dt) {
   if (simulationFrozen(state)) return state;
   if (!Number.isFinite(dt) || dt <= 0) return state;
@@ -1199,7 +1213,7 @@ export function updateCombat(state, dt) {
   const roster = [];
   for (const slot of state.slots) {
     if (!slot?.unit || slot.unit.type==='harvest') continue;
-    const stats = getUnitStats(slot.unit, state);
+    const stats = combatStats(slot.unit,state);
     if (!stats || typeof stats !== 'object') continue;
     roster.push({slot, unit: slot.unit, stats});
   }

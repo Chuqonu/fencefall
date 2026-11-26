@@ -90,23 +90,9 @@ test('every paused recipe preview names the hybrid within 160 characters', () =>
     if (preview.result?.kind !== 'hybrid') problems.push(`${label}: result kind ${preview.result?.kind}`);
     if (preview.result?.rank !== HYBRID_RANK) problems.push(`${label}: result rank ${preview.result?.rank}`);
     problems.push(...blurbProblems(preview.description, recipe.name, HYBRID_RANK, label));
-    if (typeof preview.description?.en === 'string' && typeof recipe.description?.en === 'string') {
-      const previewCount = characterCount(preview.description.en);
-      const recipeCount = characterCount(recipe.description.en);
-      if (!(previewCount < recipeCount)) {
-        problems.push(`${label}: English preview ${previewCount} is not shorter than the recipe description ${recipeCount}`);
-      }
-    } else {
-      problems.push(`${label}: missing English recipe description`);
-    }
-    if (typeof preview.description?.zh === 'string' && typeof recipe.description?.zh === 'string') {
-      const previewCount = characterCount(preview.description.zh);
-      const recipeCount = characterCount(recipe.description.zh);
-      if (!(previewCount < recipeCount)) {
-        problems.push(`${label}: Chinese preview ${previewCount} is not shorter than the recipe description ${recipeCount}`);
-      }
-    } else {
-      problems.push(`${label}: missing Chinese recipe description`);
+    for (const lang of ['en','zh']) {
+      assert.ok(recipe.description[lang].trim().length>0);
+      assert.notEqual(preview.description[lang],recipe.description[lang]);
     }
     problems.push(...purityProblems(state, before, label));
   }

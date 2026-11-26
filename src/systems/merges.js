@@ -207,7 +207,7 @@ export function mergeUnits(state, fromIndex, toIndex) {
   };
   if (plan.parents) event.parents = [...plan.parents];
   emit(state, 'merge', event);
-  return { ok: true, unit };
+  return { ok: true, unit, description:plan.description };
 }
 
 // Slots that have at least one legal merge partner. The hero is never included.

@@ -66,8 +66,8 @@ test('equipped haste gear names the hero in both languages', () => {
       getUI: () => ({}),
     });
     const line = texts(findByTestId(container, 'equipped-bonus-charm'));
-    if (language === 'zh') assert.match(line, /英雄攻击速度/);
-    else assert.match(line, /Hero attack speed/);
+    if (language === 'zh') assert.match(line, /全队攻速/);
+    else assert.match(line, /Team attack speed/);
     assert.doesNotMatch(line, /栅栏/);
   }
 });
@@ -96,13 +96,13 @@ test('an Armory fence bonus says fence HP, not the fence itself', () => {
     const roots = rowText(findByTestId(container, 'perm-vitality'));
     const nails = rowText(findByTestId(container, 'equip-card-fence_nails'));
     if (language === 'zh') {
-      assert.match(roots, /升级 · 栅栏生命 \+12/);
-      assert.equal(roots.includes('升级 · 栅栏 +12'), false);
-      assert.match(nails, /栅栏生命 \+30/);
+      assert.match(roots, /升级 · 栅栏生命 \+18/);
+      assert.equal(roots.includes('升级 · 栅栏 +18'), false);
+      assert.match(nails, /栅栏生命 \+40/);
     } else {
-      assert.match(roots, /Upgrade · Fence HP \+12/);
-      assert.equal(roots.includes('Upgrade · Fence +12'), false);
-      assert.match(nails, /Fence HP \+30/);
+      assert.match(roots, /Upgrade · Fence HP \+18/);
+      assert.equal(roots.includes('Upgrade · Fence +18'), false);
+      assert.match(nails, /Fence HP \+40/);
     }
   }
 });
@@ -119,13 +119,13 @@ test('permanent damage and haste name the hero', () => {
     const damage = rowText(findByTestId(container, 'perm-damage'));
     const haste = rowText(findByTestId(container, 'perm-haste'));
     if (language === 'zh') {
-      assert.match(damage, /升级 · 英雄伤害 \+2/);
-      assert.match(haste, /升级 · 英雄攻击速度 \+2/);
+      assert.match(damage, /升级 · 全队伤害 \+3/);
+      assert.match(haste, /升级 · 全队攻速 \+3/);
       assert.equal(damage.includes('升级 · 伤害'), false);
       assert.equal(haste.includes('升级 · 急速'), false);
     } else {
-      assert.match(damage, /Upgrade · Hero damage \+2/);
-      assert.match(haste, /Upgrade · Hero attack speed \+2/);
+      assert.match(damage, /Upgrade · Team damage \+3/);
+      assert.match(haste, /Upgrade · Team attack speed \+3/);
       assert.equal(damage.includes('Upgrade · Damage'), false);
       assert.equal(haste.includes('Upgrade · Haste'), false);
     }
@@ -149,16 +149,16 @@ test('Armory totals and an equipped fence bonus name the hero and the fence HP',
     const fence = rowText(findByTestId(container, 'bonus-fence'));
     const equipped = texts(findByTestId(container, 'equipped-bonus-armor'));
     if (language === 'zh') {
-      assert.match(damage, /英雄伤害/);
-      assert.match(haste, /英雄攻击速度/);
+      assert.match(damage, /全队伤害/);
+      assert.match(haste, /全队攻速/);
       assert.match(fence, /栅栏生命/);
-      assert.match(equipped, /栅栏生命 \+30/);
-      assert.equal(equipped.includes('栅栏 +30'), false);
+      assert.match(equipped, /栅栏生命 \+40/);
+      assert.equal(equipped.includes('栅栏 +40'), false);
     } else {
-      assert.match(damage, /Hero damage/);
-      assert.match(haste, /Hero attack speed/);
+      assert.match(damage, /Team damage/);
+      assert.match(haste, /Team attack speed/);
       assert.match(fence, /Fence HP/);
-      assert.match(equipped, /Fence HP \+30/);
+      assert.match(equipped, /Fence HP \+40/);
     }
   }
 });

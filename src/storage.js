@@ -400,6 +400,11 @@ function validateEnemy(enemy, ids, mark) {
   if (!isPlain(enemy)) return fail('invalid_run');
   if (!isId(enemy.id, 64) || !claimId(enemy.id, ids)) return fail('invalid_run');
   noteUid(enemy.id, mark);
+  for (const key of ['revealed','priority']) {
+    if (key in enemy && !isBool(enemy[key])) return fail('invalid_run');
+  }
+  if (enemy.blockedByFieldId!=null && !isId(enemy.blockedByFieldId)) return fail('invalid_run');
+  if (enemy.statusResist!=null && (!isPlain(enemy.statusResist) || Object.values(enemy.statusResist).some(value=>!isNum(value,0,1)))) return fail('invalid_run');
   if (!ENEMY_KINDS.has(enemy.kind)) return fail('invalid_enum');
   if (!isNum(enemy.x, ARENA.enemyMinX - 32, ARENA.enemyMaxX + 32)) return fail('invalid_bounds');
   if (!isNum(enemy.y, ARENA.spawnY - 80, ARENA.fenceY + 80)) return fail('invalid_bounds');
@@ -510,6 +515,12 @@ function validateCloud(cloud, ids, mark) {
   const next = sanitizeJson(cloud);
   if (!next.ok) return next;
   if (!isPlain(next.value)) return fail('invalid_run');
+  for (const [key,power,lo,hi] of [['slow','factor',0,1],['brittle','power',0,2],['poison','dps',0,100000]]) {
+    if (!(key in cloud)) continue;
+    const effect=cloud[key];
+    if (!isPlain(effect) || !isNum(effect[power],lo,hi) || !isNum(effect.duration,0.01,120)) return fail('invalid_run');
+    if (key==='poison' && !isInt(effect.maxStacks,1,32)) return fail('invalid_run');
+  }
   const cloudValue = next.value;
   if (!isId(cloud.id) || !isId(cloud.sourceId) || !isId(cloud.kind) || !isNum(cloud.x,-80,440) ||
       !isNum(cloud.y,-120,680) || !isNum(cloud.radius,1,400) || !isNum(cloud.duration,0.01,120) ||

@@ -87,13 +87,7 @@ const CSS = `
 .ff-build .ff-unit-signature{font-size:15px;font-weight:650;line-height:1.25;color:#f0cb72}
 .ff-build.is-placing .ff-place-title{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:0}
 .ff-build.is-placing .ff-place-signature{font-size:13px;font-weight:550;line-height:1.2;color:#c5d5da}
-.ff-build.is-placing .ff-place-row{grid-template-columns:repeat(5,minmax(0,1fr))}
-.ff-build.is-placing .ff-place-body{overflow:auto;max-height:6.5rem}
-.ff-build.is-placing .ff-place-row .btn,.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
-.ff-build.is-placing .ff-place-row .btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-width:0;height:auto;padding:3px 2px;line-height:1.05}
-.ff-build.is-placing .ff-place-row .btn small{display:block;flex:none;width:100%;max-width:100%;font-size:11px;line-height:1.05;text-align:center;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
-.ff-build.is-placing .ff-place-row .ff-note{min-width:0;height:auto;padding:3px 2px;line-height:1.05}
-.ff-build.is-placing .ff-place-row .ff-note small{max-width:100%;font-size:11px;line-height:1.05;text-align:center;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
 .ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
@@ -125,311 +119,6 @@ const CSS = `
   .ff-build *,.ff-build *::before,.ff-build *::after{transition:none !important;animation:none !important}
 }
 `;
-
-const EXTRA = {
-  en: {
-    damage: 'Damage',
-    range: 'Range',
-    attackSpeed: 'Attack speed',
-    interval: 'Interval',
-    crit: 'Critical',
-    critDamage: 'Crit damage',
-    rank: 'Rank',
-    hero: 'Hero',
-    towers: 'Tower',
-    upgrade: 'Upgrade',
-    select: 'Select',
-    place: 'Place',
-    move: 'Move',
-    merge: 'Merge',
-    mergePreview: 'Merge preview',
-    mergeConfirm: 'Confirm merge',
-    mergeCancel: 'Cancel merge',
-    heroProtected: 'Hero stays independent',
-    invalidMerge: 'These units cannot merge',
-    fullBoard: 'All slots are full',
-    chooseUpgrade: 'Choose upgrade',
-    chooseOneOfThree: 'Choose one of three',
-    chooseSlot: 'Choose a slot',
-    cancelPlacement: 'Cancel placement',
-    replace: 'Replace',
-    replaceConfirm: 'Confirm replacement',
-    effect: 'Effect',
-    emptySlot: 'Empty slot',
-    recipes: 'Recipe',
-    ingredients: 'Ingredients',
-    cost: 'Cost',
-    level: 'Level',
-    maxLevel: 'Max level',
-    pause: 'Pause',
-    resume: 'Resume',
-    planning: 'Planning',
-    nextWave: 'Next wave',
-    pausedHidden: 'Paused while the page is hidden',
-    helpPlacement: 'Drag a defender to an empty slot to move it, or onto a compatible tower to merge. The fight keeps running. An illegal drop snaps back.',
-    helpMerge: 'Matching type and rank raise rank, up to 4. Different base towers of equal rank follow a recipe. Cancel keeps both units.',
-    helpDraft: 'Choose one card. A tower is placed next. A hero upgrade applies immediately and the hero stays on the board.',
-    helpRange: 'Range is measured from this slot center to an enemy center, across the field. Rear slots sit farther back, so their range reaches past the fence.',
-    kills: 'Kills',
-    xp: 'XP',
-    victory: 'Victory',
-    defeat: 'Defeat',
-    cancel: 'Cancel',
-    close: 'Close',
-    back: 'Back',
-    confirm: 'Confirm',
-    locked: 'Unavailable',
-    loading: 'Loading',
-    frontRow: 'Front row',
-    backRow: 'Rear row',
-    hybrid: 'Hybrid',
-    projectile: 'Projectile',
-    splash: 'Splash',
-    chain: 'Chain',
-    pierce: 'Pierce',
-    burn: 'Burn',
-    slow: 'Slow',
-    poison: 'Poison',
-    aura: 'Aura',
-    haste: 'Haste',
-    stacks: 'Stacks',
-    speed: 'Speed',
-    swap: 'Swap',
-    pauseToPlan: 'Move defenders or merge towers while the fight is running.',
-    noMergePartner: 'A merge needs two towers. The hero stays independent.',
-    heroNoMerge: 'The hero stays independent. You can move the hero while the fight is running. Moving it only changes its slot. Merges and replacement leave the hero in place.',
-    placeHint: 'Choose an empty slot. Occupied towers stay unless this card is a replacement.',
-    replaceHeroSafe: 'Choose the tower to replace. The hero stays in place.',
-    confirmReplaceBody: 'The tower in this slot will be removed.',
-    slotOccupied: 'Occupied',
-    statsUnavailable: 'Stats will appear when the catalog is ready.',
-    noDraft: 'The draft has no cards yet. Wait for the next choice.',
-    planningLocked: 'The fight is running. You can still move or merge.',
-    emptySelection: 'Select a slot to see its stats.',
-    sameTypeMerge: 'Same type and rank combine into the next rank.',
-    hybridMerge: 'This pair becomes the hybrid below.',
-    maxRankNote: 'Rank 4 can form a hybrid with a different rank-4 base tower when a recipe exists.',
-    supportNote: 'Support range is a circle from this slot. Aura bonuses reach defenders inside that circle. Attacks use the same geometric range.',
-    youGain: 'Result',
-    currentStats: 'Stats',
-    nextStats: 'After this choice',
-    draftWaiting: 'The three choices stay available until you pick one.',
-    draftOnField: 'Already on the field',
-    draftNewType: 'Not on the field yet',
-    mergeReview: 'Review the merge, then confirm or cancel. Both units stay if you cancel.',
-    lostOnReplace: 'Removed tower',
-    chooseEmpty: 'Empty slots are ready for placement.',
-    heroStays: 'The hero stays on the board.',
-    cancelPick: 'Back',
-    noValidTarget: 'No legal merge is available from this tower.',
-    moveHint: 'Choose a destination. An occupied slot swaps places.',
-    mergeHint: 'Choose a tower of equal rank. The preview explains the result before you confirm.',
-    sourceHint: 'Choose the defender to move.',
-    mergeSourceHint: 'Choose the first tower. The hero is not a merge ingredient.',
-    attacks: 'Attacks',
-    duration: 'Duration',
-    reduction: 'slow',
-    buildPanelLabel: 'Build, draft, and merge',
-    kindTower: 'Tower',
-    kindHybrid: 'Hybrid',
-    kindUpgrade: 'Hero upgrade',
-    slotLabel: 'Slot',
-  },
-  zh: {
-    damage: '伤害',
-    range: '射程',
-    attackSpeed: '攻速',
-    interval: '间隔',
-    crit: '暴击',
-    critDamage: '暴击伤害',
-    rank: '阶',
-    hero: '英雄',
-    towers: '塔',
-    upgrade: '升级',
-    select: '选择',
-    place: '放置',
-    move: '移动',
-    merge: '合成',
-    mergePreview: '合成预览',
-    mergeConfirm: '确认合成',
-    mergeCancel: '取消合成',
-    heroProtected: '英雄保持独立',
-    invalidMerge: '这些单位不能合成',
-    fullBoard: '栏位已满',
-    chooseUpgrade: '选择升级',
-    chooseOneOfThree: '三选一',
-    chooseSlot: '选择格子',
-    cancelPlacement: '取消放置',
-    replace: '替换',
-    replaceConfirm: '确认替换',
-    effect: '效果',
-    emptySlot: '空位',
-    recipes: '配方',
-    ingredients: '材料',
-    cost: '花费',
-    level: '等级',
-    maxLevel: '已满级',
-    pause: '暂停',
-    resume: '继续',
-    planning: '规划中',
-    nextWave: '下一波',
-    pausedHidden: '页面隐藏，战斗已暂停',
-    helpPlacement: '把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。战斗会继续进行。非法放置会弹回。',
-    helpMerge: '同类型且同阶会升阶，最高 4 阶。不同基础塔在同阶时按配方合成。取消会保留双方。',
-    helpDraft: '选择一张卡。塔需要接着放置。英雄升级会立即生效，英雄留在场上。',
-    helpRange: '射程从本格中心量到敌人中心，可以跨列。后排更靠后，因此射程要能覆盖到栅栏前方。',
-    kills: '击杀',
-    xp: '经验',
-    victory: '胜利',
-    defeat: '失败',
-    cancel: '取消',
-    close: '关闭',
-    back: '返回',
-    confirm: '确认',
-    locked: '不可用',
-    loading: '读取中',
-    frontRow: '前排',
-    backRow: '后排',
-    hybrid: '混合',
-    projectile: '弹道',
-    splash: '溅射',
-    chain: '连锁',
-    pierce: '穿透',
-    burn: '燃烧',
-    slow: '减速',
-    poison: '毒素',
-    aura: '光环',
-    haste: '急速',
-    stacks: '层数',
-    speed: '速度',
-    swap: '交换',
-    pauseToPlan: '战斗进行中就可以移动防守者或合成防御塔。',
-    noMergePartner: '合成需要两座塔。英雄保持独立。',
-    heroNoMerge: '英雄保持独立。战斗进行中可以移动英雄，移动只改变格子。合成和替换都不会动英雄。',
-    placeHint: '选择一个空位。已有的塔会留下，除非这张卡是替换。',
-    replaceHeroSafe: '选择要替换的塔。英雄会留在原位。',
-    confirmReplaceBody: '这个格子上的塔会被移除。',
-    slotOccupied: '已占用',
-    statsUnavailable: '图鉴就绪后会显示属性。',
-    noDraft: '这次选拔还没有卡牌。请等待下一次选择。',
-    planningLocked: '战斗进行中，仍然可以移动或合成。',
-    emptySelection: '选择一个格子以查看属性。',
-    sameTypeMerge: '相同类型且阶数相同，会升到下一阶。',
-    hybridMerge: '这一对会变成下面的混合单位。',
-    maxRankNote: '4 阶可以与另一座 4 阶的不同基础塔按配方混合。',
-    supportNote: '支援范围是以本格为圆心的圆。光环加成覆盖圆内的防守单位。攻击也按这个几何距离判定。',
-    youGain: '结果',
-    currentStats: '属性',
-    nextStats: '选择之后',
-    draftWaiting: '在你做出选择之前，三张卡都会保留。',
-    draftOnField: '场上已有',
-    draftNewType: '场上还没有',
-    mergeReview: '先查看合成结果，再确认或取消。取消会保留双方。',
-    lostOnReplace: '被移除的塔',
-    chooseEmpty: '空位可以直接放置。',
-    heroStays: '英雄会留在场上。',
-    cancelPick: '返回',
-    noValidTarget: '这座塔目前没有合法的合成对象。',
-    moveHint: '选择目的地。占用的格子会交换位置。',
-    mergeHint: '选择一座同阶塔。确认前会显示合成结果。',
-    sourceHint: '选择要移动的防守单位。',
-    mergeSourceHint: '选择第一座塔。英雄不能作为合成材料。',
-    attacks: '攻击',
-    duration: '持续',
-    reduction: '减速',
-    buildPanelLabel: '构筑、选拔与合成',
-    kindTower: '塔',
-    kindHybrid: '混合',
-    kindUpgrade: '英雄升级',
-    slotLabel: '格子',
-  },
-};
-
-const REASONS = {
-  en: {
-    hero: 'The hero stays independent and is not a merge ingredient.',
-    hero_protected: 'The hero stays independent and is not a merge ingredient.',
-    heroProtected: 'The hero stays independent and is not a merge ingredient.',
-    same: 'Choose two different slots.',
-    same_slot: 'Choose two different slots.',
-    empty: 'That slot is empty.',
-    not_planning: 'You cannot move or merge right now.',
-    planning: 'You can move or merge while the fight is running.',
-    phase: 'Move and merge while the fight is running. Pause and an open draft still allow it.',
-    rank: 'Both units need the same rank.',
-    rank_mismatch: 'Both units need the same rank.',
-    max_rank: 'Rank 4 does not rank up. A different rank-4 base tower can still form a hybrid.',
-    capped: 'That upgrade is already at its cap.',
-    no_recipe: 'This pair has no hybrid recipe.',
-    recipe: 'This pair has no hybrid recipe.',
-    hybrid: 'A hybrid merges only with the same hybrid at the same rank.',
-    hybrid_mix: 'A hybrid merges only with the same hybrid at the same rank.',
-    different: 'These types have no combination.',
-    invalid: 'These units cannot merge.',
-    invalidMerge: 'These units cannot merge.',
-    full: 'Every slot is full. Replace a tower, or merge two towers.',
-    fullBoard: 'Every slot is full. Replace a tower, or merge two towers.',
-    occupied: 'That slot already holds a defender.',
-  },
-  zh: {
-    hero: '英雄保持独立，不能作为合成材料。',
-    hero_protected: '英雄保持独立，不能作为合成材料。',
-    heroProtected: '英雄保持独立，不能作为合成材料。',
-    same: '请选择两个不同的格子。',
-    same_slot: '请选择两个不同的格子。',
-    empty: '这个格子是空的。',
-    not_planning: '现在不能移动或合成。',
-    planning: '战斗进行中可以移动或合成。',
-    phase: '战斗进行中可以移动和合成。暂停和整备打开时也可以。',
-    rank: '双方阶数需要相同。',
-    rank_mismatch: '双方阶数需要相同。',
-    max_rank: '4 阶不能再升阶。另一座 4 阶的不同基础塔仍可混合。',
-    capped: '这项升级已经到达上限。',
-    no_recipe: '这一对没有混合配方。',
-    recipe: '这一对没有混合配方。',
-    hybrid: '混合单位只能与相同的混合单位在同阶合成。',
-    hybrid_mix: '混合单位只能与相同的混合单位在同阶合成。',
-    different: '这两种类型不能组合。',
-    invalid: '这些单位不能合成。',
-    invalidMerge: '这些单位不能合成。',
-    full: '栏位已满。可以替换一座塔，或先合成两座塔。',
-    fullBoard: '栏位已满。可以替换一座塔，或先合成两座塔。',
-    occupied: '这个格子已经有防守单位。',
-  },
-};
-
-const MECHANICS = {
-  en: {
-    splash: 'Hits enemies around the impact.',
-    chain: 'Jumps to another enemy in chain range.',
-    pierce: 'Continues through additional enemies.',
-    burn: 'Applies burning damage over time.',
-    slow: 'Lowers enemy move speed for a short time.',
-    poison: 'Stacks poison damage over time.',
-    aura: 'Buffs defenders inside the aura circle.',
-    support: 'Buffs nearby defenders and still uses geometric range.',
-    stun: 'Can stop an enemy briefly.',
-    brittle: 'Marked enemies take extra damage.',
-    frost: 'Chills and slows enemies in range.',
-    lightning: 'Chains a strike between enemies.',
-    execute: 'Deals heavier damage to weakened enemies.',
-  },
-  zh: {
-    splash: '命中点周围的敌人也会受伤。',
-    chain: '会跳到连锁范围内的另一个敌人。',
-    pierce: '可以继续打穿后面的敌人。',
-    burn: '附加持续燃烧伤害。',
-    slow: '短时间内降低敌人移速。',
-    poison: '叠加持续毒素伤害。',
-    aura: '强化光环圆内的防守单位。',
-    support: '强化附近防守单位，攻击仍按几何距离判定。',
-    stun: '可以短暂停住敌人。',
-    brittle: '被标记的敌人会受到额外伤害。',
-    frost: '减速范围内的敌人。',
-    lightning: '在敌人之间连锁电击。',
-    execute: '对残血敌人造成更重的伤害。',
-  },
-};
 
 const ephemeral = {
   runId: '',
@@ -586,27 +275,9 @@ function reducedMotion(state, api) {
   }
 }
 
-function makeT(api, lang) {
-  const table = EXTRA[lang] || EXTRA.en;
-  return (key, vars) => {
-    let value = '';
-    try {
-      if (typeof api?.t === 'function') value = api.t(key, vars);
-    } catch {
-      value = '';
-    }
-    if (typeof value !== 'string' || value === '' || value === key) {
-      let fallback = table[key] ?? EXTRA.en[key] ?? '';
-      if (!fallback) return typeof value === 'string' && value !== '' ? value : String(key);
-      if (vars && typeof vars === 'object') {
-        fallback = fallback.replace(/\{(\w+)\}/g, (_, name) => (vars[name] != null ? String(vars[name]) : `{${name}}`));
-      }
-      return fallback;
-    }
-    return value;
-  };
+function makeT(api,lang) {
+  return (key,vars)=>{const value=api?.t?.(key,vars); return value && value!==key ? value : translate(lang,key,vars);};
 }
-
 function localizeSafe(value, lang) {
   if (value == null) return '';
   if (typeof value === 'string') return value;
@@ -652,10 +323,9 @@ function reasonText(reason, lang, tr) {
   if (reason == null || reason === '') return tr('invalidMerge');
   if (typeof reason === 'object') return localizeSafe(reason, lang) || tr('invalidMerge');
   const code = String(reason);
-  const table = REASONS[lang] || REASONS.en;
-  const normalized = code.replace(/[\s-]+/g, '_');
-  if (table[code]) return table[code];
-  if (table[normalized]) return table[normalized];
+  const normalized=code.replace(/[\s-]+/g,'_');
+  const label=translate(lang,normalized);
+  if (label!==normalized) return label;
   if (code.includes(' ')) return code;
   const translated = tr(code);
   if (translated && translated !== code) return translated;
@@ -943,8 +613,7 @@ function mechanicText(item, lang) {
   }
   const id = String(item ?? '').trim();
   if (!id) return '';
-  const table = MECHANICS[lang] || MECHANICS.en;
-  return table[id] || table[id.replace(/[\s-]+/g, '_')] || id.replace(/[_-]+/g, ' ');
+  return translate(lang,id);
 }
 
 function describeStats(stats, lang, tr) {
@@ -975,7 +644,7 @@ function describeStats(stats, lang, tr) {
     push('stat-crit', tr('crit'), `${chanceText}${multiplier}`);
   }
   if (finite(stats.projectileSpeed) && Number(stats.projectileSpeed) > 0) {
-    push('stat-projectile', tr('projectile'), `${fmtNum(stats.projectileSpeed, lang)} px/s`);
+    push('stat-projectile', tr('projectileSpeed'), `${fmtNum(stats.projectileSpeed, lang)} px/s`);
   }
   if (finite(stats.splash) && Number(stats.splash) > 0) {
     const amount = fmtNum(stats.splash, lang);
@@ -1114,7 +783,7 @@ function effectObjectLines(record, lang, tr) {
     haste: 'haste',
     critChance: 'crit',
     critMultiplier: 'crit',
-    projectileSpeed: 'projectile',
+    projectileSpeed: 'projectileSpeed',
     splash: 'splash',
     chain: 'chain',
     pierce: 'pierce',
@@ -1763,6 +1432,10 @@ function unitLead(stats, lang, tr) {
 function heroEffectLine(record, lang, tr) {
   const effect = record?.effect;
   if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
+  if (effect.multishot) return tr('multishot')+' +'+effect.multishot;
+  if (effect.burn) return tr('burn')+' '+effect.burn.dps+'/'+(lang==='zh'?'秒':'s');
+  if (effect.brittle) return tr('brittle')+' +'+Math.round(100*effect.brittle.power)+'%';
+  if (effect.fence) return tr('fenceBonus')+' +'+effect.fence;
   if (finite(effect.damageAdd) && Number(effect.damageAdd) !== 0) {
     return `${tr('damage')} +${fmtNum(effect.damageAdd, lang)}`;
   }
@@ -1967,7 +1640,7 @@ function towerPowerBars(state, option) {
   return threeBars(
     fillPct(Number(stats.damage) || 0, 12),
     fillPct(interval > 0 ? 1 / interval : 0, 1.6),
-    fillPct(Number(stats.range) || 0, 280),
+    fillPct(Number(stats.range) || 0, 330),
   );
 }
 
@@ -1985,7 +1658,7 @@ function heroPowerBars(option) {
   if (effect.critChance) return [{ key: 'crit', fill: strong }];
   if (effect.critMultiplier) return [{ key: 'critDamage', fill: strong }];
   if (Number(effect.pierce) > 0) return [{ key: 'pierce', fill: strong }];
-  if (effect.poison) return [{ key: 'poison', fill: strong }];
+  for (const key of ['multishot','burn','brittle','fence']) if (effect[key]) return [{key,fill:strong}];
   return [{ key: 'damage', fill: strong }];
 }
 
@@ -1996,7 +1669,7 @@ function powerBars(state, option) {
 
 function meterCaption(key, lang) {
   const table = lang === 'zh' ? METER_CAPTION.zh : METER_CAPTION.en;
-  return table[key] || '';
+  return table[key] || translate(lang,key);
 }
 
 function renderMeter(state, option, lang, index) {
@@ -2028,10 +1701,10 @@ function heroMarkLabel(effect, lang) {
   else if (effect.critMultiplier) key = 'critDamage';
   else if (Number(effect.pierce) > 0) key = 'pierce';
   else if (effect.poison) key = 'poison';
-  const labels = lang === 'zh'
-    ? { damage: '伤害', speed: '攻速', range: '射程', crit: '暴击', critDamage: '暴伤', pierce: '穿透', poison: '毒素' }
-    : { damage: 'Damage', speed: 'Speed', range: 'Range', crit: 'Crit', critDamage: 'Crit×', pierce: 'Pierce', poison: 'Poison' };
-  return labels[key] || '';
+  if (!key) key=['multishot','burn','brittle','fence'].find(k=>effect[k]);
+  if (!key) return '';
+  const badge='badge.'+key, value=translate(lang,badge);
+  return value===badge?translate(lang,key):value;
 }
 
 function heroStatCue(option, lang) {

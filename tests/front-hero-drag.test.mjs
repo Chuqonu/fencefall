@@ -89,6 +89,9 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   const beforeMerge = state.time;
   const merged = api.act('dragDrop', {from: 3, to: 4});
   assert.equal(merged.ok, true, merged.reason);
+  assert.deepEqual(ids(state),board);
+  assert.ok(api.getUI().mergePreview);
+  assert.equal(api.act('mergeConfirm',{from:3,to:4}).ok,true);
   assert.equal(state.paused, false);
   assert.equal(state.phase, 'playing');
   assert.equal(state.slots[3].unit, null);

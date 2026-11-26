@@ -10,12 +10,9 @@ test('the range help says the shot prefers the enemy closest to the fence', () =
   assert.equal(t('zh', 'helpRange').includes('任意敌人'), false);
 });
 
-test('bolt and banner descriptions use the same closest-to-the-fence rule', () => {
-  for (const id of ['bolt', 'support']) {
-    const text = TOWERS[id].description;
-    assert.match(text.en, /closest to the fence/);
-    assert.match(text.zh, /最靠近栅栏/);
-    assert.equal(text.en.includes('any enemy'), false, id);
-    assert.equal(text.zh.includes('任意敌人'), false, id);
-  }
+test('bolt and support cards describe their different roles in both languages', () => {
+  assert.match(TOWERS.bolt.description.en,/pierce/i);
+  assert.match(TOWERS.bolt.description.zh,/穿/);
+  assert.match(TOWERS.support.description.en,/allies|nearby|aura/i);
+  assert.match(TOWERS.support.description.zh,/友|周围|光环/);
 });

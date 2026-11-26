@@ -37,7 +37,7 @@ test('a fresh run before the first wave may omit director.playerHint', () => {
 
   const opening = Number(WAVES[0]?.start);
   assert.ok(Number.isFinite(opening) && opening > FRAME, 'campaign has a first wave after the opening frame');
-  while (!campaignStarted(state) && state.phase === 'playing' && state.time + FRAME < opening) {
+  while (!campaignStarted(state) && state.phase === 'playing' && state.time + FRAME < opening - 1e-9) {
     simulate(state, FRAME);
     assert.equal(campaignStarted(state), false);
     if (state.director.playerHint !== undefined) assertPlayerHint(state.director.playerHint, `t=${state.time}`);
