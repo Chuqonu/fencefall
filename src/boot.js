@@ -568,7 +568,7 @@ async function mount() {
     const state = api.getState();
     const view = api.getUI();
     if (renderer && state) {
-      renderer.draw(state, {fieldKind:view.fieldKind,selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
+      renderer.draw(state, {fieldKind:view.fieldKind, selectedField:view.selectedField, selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
     }
   };
   const refresh = () => {

@@ -52,6 +52,17 @@ const AUDIO_LIMITS = Object.freeze({
   ui: 2,
   status: 2,
   boss: 1,
+  fence_surge: 1,
+  corpse_explode: 2,
+  field_build: 1,
+  field_hit: 2,
+  field_destroy: 1,
+  field_repair: 1,
+  field_remove: 1,
+  energy_gain: 1,
+  wave_horde: 1,
+  draft_reroll: 1,
+  targeting_change: 1,
 });
 
 const GAPS = Object.freeze({
@@ -66,20 +77,42 @@ const GAPS = Object.freeze({
   ui: 0.03,
   status: 0.08,
   boss: 0.25,
+  fence_surge: 0.35,
+  corpse_explode: 0.09,
+  field_build: 0.1,
+  field_hit: 0.09,
+  field_destroy: 0.16,
+  field_repair: 0.28,
+  field_remove: 0.12,
+  energy_gain: 0.35,
+  wave_horde: 0.6,
+  draft_reroll: 0.12,
+  targeting_change: 0.05,
 });
 
 const PRIORITY = Object.freeze({
   victory: 0,
   defeat: 1,
-  merge: 2,
-  draft: 3,
-  boss: 4,
-  fence_hit: 5,
-  kill: 6,
-  hit: 7,
-  shot: 8,
-  ui: 9,
-  status: 10,
+  fence_surge: 2,
+  merge: 3,
+  draft: 4,
+  boss: 5,
+  wave_horde: 5,
+  fence_hit: 6,
+  field_destroy: 6,
+  corpse_explode: 7,
+  kill: 7,
+  field_build: 7,
+  draft_reroll: 7,
+  hit: 8,
+  field_hit: 8,
+  shot: 9,
+  field_repair: 9,
+  field_remove: 9,
+  targeting_change: 9,
+  ui: 10,
+  energy_gain: 10,
+  status: 11,
 });
 
 const PITCH = Object.freeze({
@@ -91,6 +124,7 @@ const PITCH = Object.freeze({
   support: 640,
   hero: 500,
   brittle: 340,
+  harvest: 880,
   neutral: 420,
 });
 
@@ -446,6 +480,17 @@ export function createAudio(options) {
   function playHit(desc, delay) {
     const tint = Math.min(260, Math.max(90, pitchFor(desc) * 0.28));
     const body = wobble(tint, desc.time + 0.17);
+    if (desc.reaction === 'steam') {
+      safe(() => layers(
+        noise({ dur: 0.08, gain: 0.18, band: 2400, q: 1.2, delay }),
+        tone({ freq: 880, dur: 0.055, type: 'sine', gain: 0.16, slide: 260, delay }),
+      ));
+    } else if (desc.reaction === 'catalyst') {
+      safe(() => layers(
+        tone({ freq: 1040, dur: 0.05, type: 'triangle', gain: 0.17, slide: 380, delay }),
+        noise({ dur: 0.04, gain: 0.15, band: 1900, q: 1.1, delay: delay + 0.01 }),
+      ));
+    }
     if (desc.crit) {
       // Rising chime, not the low hit thud. Both layers stay under the fence sine at 0.32.
       // Reduced motion shortens and quiets this chime in tone(); it does not become the thud.
@@ -554,6 +599,81 @@ export function createAudio(options) {
     ));
   }
 
+  function playFenceSurge(delay) {
+    return safe(() => layers(
+      tone({ freq: 96, dur: 0.22, type: 'sine', gain: 0.3, slide: 140, delay }),
+      noise({ dur: 0.16, gain: 0.24, band: 900, q: 0.55, delay }),
+      tone({ freq: 523, dur: 0.14, type: 'triangle', gain: 0.22, slide: 360, delay: delay + 0.04 }),
+      tone({ freq: 880, dur: 0.18, type: 'sine', gain: 0.18, slide: 220, delay: delay + 0.09 }),
+    ));
+  }
+
+  function playCorpseExplode(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.12, gain: 0.26, band: 460, q: 0.6, delay }),
+      tone({ freq: 190, dur: 0.11, type: 'sawtooth', gain: 0.2, slide: -120, delay }),
+    ));
+  }
+
+  function playFieldBuild(desc, delay) {
+    const high = desc.fieldKind === 'flare' ? 660 : desc.fieldKind === 'spikes' ? 520 : 280;
+    return safe(() => layers(
+      tone({ freq: 150, dur: 0.07, type: 'triangle', gain: 0.22, slide: -35, delay }),
+      tone({ freq: high, dur: 0.055, type: 'sine', gain: 0.18, slide: 120, delay: delay + 0.03 }),
+    ));
+  }
+
+  function playFieldHit(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.035, gain: 0.16, band: 420, q: 0.75, delay }),
+      tone({ freq: 135, dur: 0.045, type: 'triangle', gain: 0.15, slide: -30, delay }),
+    ));
+  }
+
+  function playFieldDestroy(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.1, gain: 0.24, band: 320, q: 0.55, delay }),
+      tone({ freq: 210, dur: 0.12, type: 'sawtooth', gain: 0.2, slide: -130, delay }),
+    ));
+  }
+
+  function playFieldRepair(delay) {
+    return safe(() => layers(
+      tone({ freq: 523, dur: 0.06, type: 'sine', gain: 0.14, slide: 110, delay }),
+      tone({ freq: 784, dur: 0.07, type: 'triangle', gain: 0.12, delay: delay + 0.045 }),
+    ));
+  }
+
+  function playFieldRemove(delay) {
+    return safe(() => tone({ freq: 420, dur: 0.065, type: 'triangle', gain: 0.16, slide: -120, delay }));
+  }
+
+  function playEnergyGain(desc, delay) {
+    if (desc.source !== 'harvest') return false;
+    return safe(() => layers(
+      tone({ freq: 784, dur: 0.055, type: 'sine', gain: 0.11, slide: 120, delay }),
+      tone({ freq: 1174, dur: 0.065, type: 'triangle', gain: 0.08, delay: delay + 0.04 }),
+    ));
+  }
+
+  function playWaveHorde(delay) {
+    return safe(() => layers(
+      tone({ freq: 146, dur: 0.16, type: 'sawtooth', gain: 0.2, slide: 28, delay }),
+      tone({ freq: 196, dur: 0.22, type: 'triangle', gain: 0.22, slide: -18, delay: delay + 0.13 }),
+    ));
+  }
+
+  function playDraftReroll(delay) {
+    return safe(() => layers(
+      tone({ freq: 480, dur: 0.045, type: 'triangle', gain: 0.18, slide: 140, delay }),
+      tone({ freq: 720, dur: 0.06, type: 'sine', gain: 0.18, slide: 180, delay: delay + 0.045 }),
+    ));
+  }
+
+  function playTargetingChange(delay) {
+    return safe(() => tone({ freq: 980, dur: 0.032, type: 'triangle', gain: 0.15, slide: 180, delay }));
+  }
+
   function playLeap(delay) {
     return safe(() => tone({ freq: 480, dur: 0.046, type: 'triangle', gain: 0.18, slide: 260, delay }));
   }
@@ -635,6 +755,17 @@ export function createAudio(options) {
       case 'ui': return playUi(desc, delay);
       case 'status': return playStatus(desc, delay);
       case 'boss': return playBoss(desc, delay);
+      case 'fence_surge': return playFenceSurge(delay);
+      case 'corpse_explode': return playCorpseExplode(delay);
+      case 'field_build': return playFieldBuild(desc, delay);
+      case 'field_hit': return playFieldHit(delay);
+      case 'field_destroy': return playFieldDestroy(delay);
+      case 'field_repair': return playFieldRepair(delay);
+      case 'field_remove': return playFieldRemove(delay);
+      case 'energy_gain': return playEnergyGain(desc, delay);
+      case 'wave_horde': return playWaveHorde(delay);
+      case 'draft_reroll': return playDraftReroll(delay);
+      case 'targeting_change': return playTargetingChange(delay);
       default: return false;
     }
   }

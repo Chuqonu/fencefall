@@ -1,5 +1,7 @@
 import {rerollCost} from '../systems/drafts.js';
 import {fieldCost} from '../systems/field.js';
+import {HARVEST} from '../data/field-units.js';
+import {catalogIcon} from './icons.js';
 /**
  * Placement, draft, and merge UI.
  *
@@ -33,81 +35,108 @@ import { localize, formatNumber, t as translate } from '../i18n.js';
 const STYLE_ID = 'fencefall-build-panel-styles';
 
 const CSS = `
-.ff-build{display:flex;flex-direction:column;gap:10px;max-width:100%;min-width:0;color:#f1eee2;font:15px/1.35 ui-sans-serif,system-ui,sans-serif}
+.ff-build{display:flex;flex-direction:column;gap:8px;max-width:100%;min-width:0;color:#f2efe4;font:15px/1.35 "Segoe UI","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif}
 .ff-build *{box-sizing:border-box}
 .ff-build h2,.ff-build h3,.ff-build p{margin:0}
-.ff-build h2{font-size:1.15rem;line-height:1.25}
-.ff-build h3{font-size:1rem;line-height:1.3;word-break:break-word}
+.ff-build h2{font-size:1.1rem;line-height:1.22;letter-spacing:.01em}
+.ff-build h3{font-size:.96rem;line-height:1.28;word-break:break-word}
 .ff-build .card{min-width:0}
-.ff-build .muted{color:#a5b8be}
-.ff-build .ff-next-wave{font-size:13px;line-height:1.3}
-.ff-build .badge{display:inline-block;padding:2px 6px;border:1px solid #6d8388;vertical-align:middle}
-.ff-build .hero-lock{border-color:#e0c17a;color:#e0c17a}
+.ff-build .muted{color:#9eb3ba}
+.ff-build .ff-next-wave{font-size:12.5px;line-height:1.3}
+.ff-build .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid rgba(130,164,172,.38);background:rgba(28,48,56,.78);font-size:12px;vertical-align:middle}
+.ff-build .hero-lock{border-color:rgba(240,203,114,.65);background:rgba(92,70,28,.35);color:#f0cb72}
 .ff-build button{touch-action:manipulation}
-.ff-build .btn{appearance:none;width:auto;min-height:44px;min-width:44px;height:auto;padding:8px 10px;border:1px solid #6d8388;border-radius:2px;background:#1c3338;color:#f1eee2;font:inherit;line-height:1.25;text-align:center;white-space:normal;word-break:break-word;cursor:pointer}
-.ff-build .btn-primary{background:#2d6a4f;border-color:#e0c17a;color:#f7fff8;font-weight:700}
-.ff-build .btn:focus-visible{outline:2px solid #f1eee2;outline-offset:2px}
+.ff-build .btn{appearance:none;width:auto;min-height:44px;min-width:44px;height:auto;padding:8px 12px;border:1px solid rgba(126,162,172,.4);border-radius:10px;background:linear-gradient(180deg,#203841 0%,#162830 100%);color:#f2efe4;font:inherit;line-height:1.2;text-align:center;white-space:normal;word-break:break-word;cursor:pointer;transition:border-color 140ms ease,background 140ms ease,transform 100ms ease}
+.ff-build .btn-primary{background:linear-gradient(180deg,#337a57 0%,#245a40 100%);border-color:#e6c57a;color:#f7fff8;font-weight:700}
+.ff-build .btn:focus-visible{outline:2px solid #f0cb72;outline-offset:2px}
 .ff-build .ff-actions{display:flex;flex-wrap:wrap;gap:8px}
-.ff-build .ff-actions .btn{flex:1 1 140px}
+.ff-build .ff-actions .btn{flex:1 1 120px}
 .ff-build .ff-merge .ff-actions .btn{flex:1 1 140px;min-width:44px;min-height:44px;height:44px}
 .ff-build .card>.btn,.ff-build .ff-choice .btn{width:100%}
+.ff-build .ff-draft-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.ff-build .ff-reroll-btn{flex:0 0 auto;min-height:44px;padding:6px 12px;font-size:13px;font-weight:600;border-color:rgba(240,203,114,.55);background:linear-gradient(180deg,#2a3934 0%,#1b2826 100%);color:#f5d888;white-space:nowrap}
 .ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
 .ff-build .ff-effect{white-space:pre-line}
-.ff-build.is-draft{gap:6px;background:rgba(12,22,28,.94);border:1px solid #3e5960;padding:8px}
-.ff-build.is-draft .ff-title{font-size:18px}
-.ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
-.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;min-height:44px;text-align:left;cursor:pointer}
-.ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
-.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:1px solid currentColor;font-size:16px;line-height:1}
-.ff-build.is-draft .ff-mark small{font-size:9px;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ff-build.is-draft .ff-meter{width:64px;height:44px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.ff-build.is-draft{gap:6px;background:rgba(10,18,23,.95);border:1px solid rgba(212,175,98,.42);border-radius:14px;padding:10px;box-shadow:0 16px 36px rgba(0,0,0,.5)}
+.ff-build.is-draft .ff-title{font-size:17px;color:#f6e4b4}
+.ff-build.is-draft .ff-draft-hint{font-size:12.5px;line-height:1.3}
+.ff-build.is-draft .ff-choice{padding:7px 9px;display:flex;flex-direction:row;align-items:center;gap:9px;width:100%;min-height:44px;text-align:left;cursor:pointer;border-radius:11px;background:linear-gradient(180deg,#1a2f37 0%,#13232a 100%);border:1px solid rgba(126,162,172,.36);box-shadow:inset 3px 0 0 var(--choice-accent,#6d8388)}
+.ff-build.is-draft .ff-choice:hover:not(:disabled){border-color:#f0cb72;background:linear-gradient(180deg,#213c46 0%,#182c34 100%)}
+.ff-build.is-draft .ff-choice-copy{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-choice-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:9px;border:1px solid currentColor;background:rgba(8,14,18,.65);font-size:17px;line-height:1}
+.ff-build.is-draft .ff-mark small{font-size:9px;font-weight:700;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ff-build.is-draft .ff-meter{width:64px;height:44px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:3px}
 .ff-build.is-draft .ff-meter-row{display:flex;align-items:center;gap:3px;height:10px;min-height:0;min-width:0}
 .ff-build.is-draft .ff-meter-row>span:first-child{flex:none;font-size:9px;line-height:1;color:#c5d5da;white-space:nowrap}
-.ff-build.is-draft .ff-meter-track{flex:1 1 auto;min-width:12px;height:6px;background:#24383e;overflow:hidden}
-.ff-build.is-draft .ff-meter-fill{display:block;height:100%;width:0}
+.ff-build.is-draft .ff-meter-track{flex:1 1 auto;min-width:12px;height:6px;border-radius:999px;background:#0d181d;border:1px solid rgba(112,148,156,.25);overflow:hidden}
+.ff-build.is-draft .ff-meter-fill{display:block;height:100%;width:0;border-radius:999px}
 .ff-build.is-draft [data-meter="damage"] .ff-meter-fill{background:#f0d56a}
 .ff-build.is-draft [data-meter="speed"] .ff-meter-fill{background:#f0cb72}
-.ff-build.is-draft [data-meter="range"] .ff-meter-fill{background:#9fd7e8}
+.ff-build.is-draft [data-meter="range"] .ff-meter-fill{background:#88d6ec}
 .ff-build.is-draft [data-meter="crit"] .ff-meter-fill{background:#f0cb72}
 .ff-build.is-draft [data-meter="critDamage"] .ff-meter-fill{background:#e7a08a}
 .ff-build.is-draft [data-meter="pierce"] .ff-meter-fill{background:#d7e4ea}
 .ff-build.is-draft [data-meter="poison"] .ff-meter-fill{background:#7dce6a}
+.ff-build.is-draft [data-meter="energy"] .ff-meter-fill{background:#f5cc58}
+.ff-build.is-draft [data-meter="multishot"] .ff-meter-fill{background:#f0cb72}
+.ff-build.is-draft [data-meter="burn"] .ff-meter-fill{background:#e86a38}
+.ff-build.is-draft [data-meter="brittle"] .ff-meter-fill{background:#9fd7e8}
+.ff-build.is-draft [data-meter="fence"] .ff-meter-fill{background:#7dce92}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-row{height:14px}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-track,.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-fill{height:14px}
-.ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
-.ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
+.ff-build.is-draft .ff-choice h3{font-size:15.5px;line-height:1.2;color:#f7f4ea}
+.ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:12.5px;line-height:1.25;color:#cbd9de}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
-.ff-build.is-draft .ff-field{align-self:flex-start;font-size:12px;line-height:1.2;padding:1px 6px}
-.ff-build .ff-field.is-new{border-color:#e0c17a;color:#e0c17a}
-.ff-build .ff-field.is-owned{color:#a5b8be}
+.ff-build.is-draft .ff-field{align-self:flex-start;font-size:11px;line-height:1.2;padding:1px 7px}
+.ff-build .ff-field.is-new{border-color:rgba(240,203,114,.68);background:rgba(104,78,24,.32);color:#f5d888}
+.ff-build .ff-field.is-owned{border-color:rgba(130,164,172,.35);color:#a5b8be}
 .ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
 .ff-build.is-draft .ff-draft-merge .btn{width:100%}
-.ff-build .ff-details{padding:8px 8px 6px}
-.ff-build .ff-unit-signature{font-size:15px;font-weight:650;line-height:1.25;color:#f0cb72}
+.panel-wrap .ff-build.panel{background:transparent;border:none;padding:0;box-shadow:none}
+.ff-build .ff-details{padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:transparent;border:none;border-radius:10px}
+.ff-build .ff-unit-toolbar{display:flex;align-items:center;gap:6px;min-width:0}
+.ff-build .ff-unit-toolbar .ff-target-btn{flex:1 1 auto;min-height:44px;padding:6px 10px;font-size:13px;font-weight:600;border-color:rgba(240,203,114,.48);background:linear-gradient(180deg,#25393d 0%,#18272b 100%);color:#f3dca0;white-space:nowrap}
+.ff-build .ff-unit-toolbar .ff-close-btn{flex:0 0 auto;min-height:44px;min-width:52px;padding:6px 12px;margin-left:auto;font-size:13px;background:rgba(20,34,40,.92)}
+.ff-build .ff-unit-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ff-build .ff-unit-badges{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.ff-build .ff-unit-signature{font-size:14px;font-weight:650;line-height:1.25;color:#f0cb72}
+.ff-build .ff-field-card{padding:8px 10px;display:flex;flex-direction:column;gap:8px;background:transparent;border:none;border-radius:10px}
+.ff-build .ff-field-head{display:flex;align-items:center;gap:8px;min-width:0}
+.ff-build .ff-field-head .catalog-icon{width:38px;height:38px;min-width:38px;min-height:38px;flex:0 0 38px}
+.ff-build .ff-field-meta{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.ff-build .ff-field-hp-track{height:7px;border-radius:999px;background:#0c1519;border:1px solid rgba(112,148,156,.3);overflow:hidden}
+.ff-build .ff-field-hp-fill{height:100%;border-radius:999px;background:#68cf8b}
+.ff-build .ff-field-hp-fill.is-mid{background:#f0c15a}
+.ff-build .ff-field-hp-fill.is-low{background:#e55a45}
+.ff-build .ff-dismantle-btn{width:100%;border-color:rgba(229,120,96,.55);background:linear-gradient(180deg,#3d2622 0%,#2b1a18 100%);color:#ffd5c8;font-weight:600}
+.ff-build.is-placing{background:rgba(10,18,23,.94);border:1px solid rgba(126,206,160,.52);border-radius:12px;padding:8px 10px}
+.ff-build.is-placing .ff-place-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ff-build.is-placing .ff-place-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 140px}
 .ff-build.is-placing .ff-place-title{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:0}
-.ff-build.is-placing .ff-place-signature{font-size:13px;font-weight:550;line-height:1.2;color:#c5d5da}
-.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
+.ff-build.is-placing .ff-place-signature{font-size:13px;font-weight:550;line-height:1.2;color:#b8d4cc}
+.ff-build.is-placing [data-testid="cancel-placement"]{flex:0 0 auto;min-height:44px;min-width:44px;padding:6px 12px;font-size:13px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
-.ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
+.ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15;border-radius:8px}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
 .ff-build .ff-note small,.ff-build .ff-slots .btn small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ff-build .ff-slots:not(.ff-place-row) .btn{display:flex;flex-direction:column;align-items:center;justify-content:center}
 .ff-build .ff-slots:not(.ff-place-row) .btn small{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .ff-build .is-selected{border-color:#e0c17a;box-shadow:inset 0 0 0 1px #e0c17a}
 .ff-build .is-hero{color:#e0c17a}
-.ff-build .ff-stats{list-style:none;margin:0;padding:0;display:grid;gap:4px}
-.ff-build .ff-stats li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #2a4148;padding:2px 0}
-.ff-build .ff-stats b{font-weight:650;text-align:right}
-.ff-build .ff-pips{letter-spacing:1px}
-.ff-build .ff-message{padding:8px;border:1px solid #e7a08a;background:#3a2a22}
+.ff-build .ff-stats{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.ff-build .ff-stats li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(72,106,116,.35);padding:3px 0;font-size:13.5px}
+.ff-build .ff-stats b{font-weight:650;text-align:right;font-variant-numeric:tabular-nums}
+.ff-build .ff-pips{letter-spacing:1px;color:#f0cb72}
+.ff-build .ff-message{padding:7px 10px;border-radius:9px;border:1px solid #e7a08a;background:rgba(66,38,30,.92);font-size:13px}
 .ff-build .ff-mechs{display:flex;flex-wrap:wrap;gap:4px;margin:0;padding:0;list-style:none}
 @media (max-width:899px){
-  .ff-build.is-draft{gap:4px;padding:6px}
+  .ff-build.is-draft{gap:4px;padding:7px}
   .ff-build.is-draft .ff-title{font-size:16px}
   .ff-build.is-draft .ff-draft-hint{font-size:12px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-  .ff-build.is-draft .ff-draft-list{gap:4px}
-  .ff-build.is-draft .ff-choice{padding:4px 6px;gap:6px}
+  .ff-build.is-draft .ff-draft-list{gap:5px}
+  .ff-build.is-draft .ff-choice{padding:5px 7px;gap:7px}
   .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 }
 @media (max-width:360px){
@@ -616,13 +645,37 @@ function mechanicText(item, lang) {
   return translate(lang,id);
 }
 
-function describeStats(stats, lang, tr) {
+function isHarvestUnit(unit, stats) {
+  if (unit?.type === 'harvest') return true;
+  if (!unit && stats && Number(stats.damage) === 0 && Number(stats.range) === 0 && !stats.aura && Number(stats.interval) >= 3) return true;
+  return false;
+}
+
+function harvestCrop(unit) {
+  const rank = Math.max(1, Math.min(HARVEST.length, Number(unit?.rank) || 1));
+  return HARVEST[rank - 1];
+}
+
+function describeStats(stats, lang, tr, unit = null) {
   const rows = [];
   const specials = [];
   const push = (id, label, value) => {
     if (value == null || value === '' || value === '—') return;
     rows.push({ id, label, value: String(value) });
   };
+  if (isHarvestUnit(unit, stats)) {
+    const crop = harvestCrop(unit);
+    const sec = lang === 'zh' ? ' 秒' : 's';
+    push('stat-energy', tr('energy'), `+${fmtNum(crop.energy, lang)} / ${fmtNum(crop.interval, lang)}${sec}`);
+    push('stat-xp', tr('xp'), `+${fmtNum(crop.xp, lang)} / ${fmtNum(crop.interval, lang)}${sec}`);
+    push('stat-rear', lang === 'zh' ? '后排加成' : 'Rear row bonus', '+30%');
+    if (crop.repair > 0) {
+      const repairLabel = lang === 'zh' ? '工事修复' : 'Field repair';
+      push('stat-repair', repairLabel, `+${fmtNum(crop.repair, lang)} HP`);
+      specials.push(`${repairLabel} +${fmtNum(crop.repair, lang)}`);
+    }
+    return { rows, specials };
+  }
   if (!stats || typeof stats !== 'object') return { rows, specials };
   if (finite(stats.damage)) {
     const amount = fmtNum(stats.damage, lang);
@@ -695,11 +748,11 @@ function describeStats(stats, lang, tr) {
   return { rows, specials };
 }
 
-function effectLinesFromStats(stats, lang, tr) {
+function effectLinesFromStats(stats, lang, tr, unit = null) {
   if (!stats) return [tr('statsUnavailable')];
-  const { rows, specials } = describeStats(stats, lang, tr);
+  const { rows, specials } = describeStats(stats, lang, tr, unit);
   const lines = [];
-  for (const id of ['stat-damage', 'stat-attackSpeed', 'stat-range', 'stat-crit']) {
+  for (const id of ['stat-energy', 'stat-xp', 'stat-rear', 'stat-damage', 'stat-attackSpeed', 'stat-range', 'stat-crit']) {
     const row = rows.find((item) => item.id === id);
     if (row) lines.push(`${row.label} ${row.value}`);
   }
@@ -716,8 +769,8 @@ function effectLinesFromStats(stats, lang, tr) {
   return lines.length ? lines : [tr('statsUnavailable')];
 }
 
-function statList(stats, lang, tr, testid = 'unit-stats') {
-  const { rows } = describeStats(stats, lang, tr);
+function statList(stats, lang, tr, testid = 'unit-stats', unit = null) {
+  const { rows } = describeStats(stats, lang, tr, unit);
   const list = el('ul', { class: 'ff-stats', 'data-testid': testid });
   const prefix = testid === 'unit-stats' ? '' : `${testid}-`;
   if (!rows.length) {
@@ -1382,7 +1435,14 @@ function roleSegment(role, signature) {
   return role;
 }
 
-function signatureLine(stats, lang, tr) {
+function signatureLine(stats, lang, tr, unit = null) {
+  if (isHarvestUnit(unit, stats)) {
+    const crop = harvestCrop(unit);
+    const repairBit = crop.repair > 0 ? (lang === 'zh' ? ` · 修工事 +${fmtNum(crop.repair, lang)}` : ` · Repair +${fmtNum(crop.repair, lang)}`) : '';
+    return lang === 'zh'
+      ? `产辉光 +${fmtNum(crop.energy, lang)} · 经验 +${fmtNum(crop.xp, lang)} / ${fmtNum(crop.interval, lang)}秒${repairBit}`
+      : `+${fmtNum(crop.energy, lang)} Energy · +${fmtNum(crop.xp, lang)} XP / ${fmtNum(crop.interval, lang)}s${repairBit}`;
+  }
   if (!stats) return lang === 'zh' ? '单体射击' : 'Single-target shot';
   if (stats.burn && typeof stats.burn === 'object') {
     const dps = fmtNum(Number(stats.burn.dps ?? stats.burn.damage), lang);
@@ -1423,8 +1483,9 @@ function signatureLine(stats, lang, tr) {
   return lang === 'zh' ? '单体射击' : 'Single-target shot';
 }
 
-function unitLead(stats, lang, tr) {
-  const signature = signatureLine(stats, lang, tr);
+function unitLead(stats, lang, tr, unit = null) {
+  const signature = signatureLine(stats, lang, tr, unit);
+  if (isHarvestUnit(unit, stats)) return signature;
   const reach = finite(stats?.range) ? `${tr('range')} ${fmtNum(stats.range, lang)}` : '';
   return [signature, reach].filter(Boolean).join(' · ');
 }
@@ -1492,7 +1553,20 @@ function compactOffer(state, option, lang, tr) {
     ? option.unit
     : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
   const stats = safeStats(preview, state);
-  const signature = signatureLine(stats, lang, tr);
+  if (isHarvestUnit(preview, stats)) {
+    const crop = harvestCrop(preview);
+    const rear = lang === 'zh' ? '后排 +30%' : 'Rear +30%';
+    const yieldText = lang === 'zh'
+      ? `+${fmtNum(crop.energy, lang)}辉光/+${fmtNum(crop.xp, lang)}经验`
+      : `+${fmtNum(crop.energy, lang)} Energy / +${fmtNum(crop.xp, lang)} XP`;
+    const blurb = fitChoice([
+      { text: option?.replace ? tr('replace') : '', optional: false },
+      { text: yieldText, optional: false },
+      { text: rear, optional: true, drop: 1 },
+    ], max);
+    return { blurb, stats: [] };
+  }
+  const signature = signatureLine(stats, lang, tr, preview);
   const role = roleSegment(towerRole(option?.type || preview.type, lang), signature);
   const aura = stats?.aura && typeof stats.aura === 'object';
   const amount = fmtNum(stats.damage, lang);
@@ -1610,11 +1684,12 @@ const ROLE_CUES = {
   lightning: { glyph: '↯', color: '#f4e27a', en: 'Chain', zh: '连锁' },
   poison: { glyph: '●', color: '#7dce6a', en: 'Stack', zh: '叠毒' },
   support: { glyph: '✚', color: '#8fd0c6', en: 'Aura', zh: '光环' },
+  harvest: { glyph: '☀', color: '#f5cc58', en: 'Eco', zh: '经济' },
 };
 
 const METER_CAPTION = {
-  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox' },
-  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒' },
+  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco' },
+  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光' },
 };
 
 function fillPct(part, whole) {
@@ -1632,6 +1707,12 @@ function threeBars(damage, speed, range) {
 
 function towerPowerBars(state, option) {
   const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
+  if (option?.type === 'harvest') {
+    return [
+      { key: 'energy', fill: Math.min(100, 32 + rank * 17) },
+      { key: 'speed', fill: Math.min(100, 48 + rank * 12) },
+    ];
+  }
   const preview = option?.unit && typeof option.unit === 'object'
     ? option.unit
     : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
@@ -1750,10 +1831,19 @@ function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
-  section.append(title);
-  const fee=rerollCost(state);
-  section.append(button({'data-action':'rerollDraft','data-testid':'reroll-draft',disabled:state.draftRerollsUsed>=3 || state.energy<fee,
-    text:tr('reroll')+' · '+(fee || tr('free'))+' / '+Math.floor(state.energy)+' '+tr('energy')}));
+  const fee = rerollCost(state);
+  const energyNow = Number.isFinite(Number(state.energy)) ? Math.floor(Number(state.energy)) : 0;
+  const rerollsUsed = Number(state.draftRerollsUsed) || 0;
+  const head = el('div', { class: 'ff-draft-head' });
+  head.append(title);
+  head.append(button({
+    class: 'ff-reroll-btn',
+    'data-action': 'rerollDraft',
+    'data-testid': 'reroll-draft',
+    disabled: rerollsUsed >= 3 || energyNow < fee,
+    text: tr('reroll') + ' · ' + (fee || tr('free')) + ' / ' + energyNow + ' ' + tr('energy'),
+  }));
+  section.append(head);
   section.setAttribute('aria-labelledby', titleId);
   section.append(el('p', { class: 'muted ff-draft-hint', 'data-testid': 'draft-hint', text: draftIntro(lang) }));
   const threat = bilingualHint(state?.director?.playerHint, lang);
@@ -1782,6 +1872,7 @@ function renderDraft(state, lang, tr, idSuffix) {
     const spoken = field ? `${name}. ${field.text}. ${described}` : `${name}. ${described}`;
     const card = button({
       class: 'card ff-choice',
+      style: `--choice-accent:${mark.color}`,
       'data-action': 'chooseDraft',
       'data-index': String(index),
       'data-kind': option?.kind || '',
@@ -1804,9 +1895,10 @@ function renderDraft(state, lang, tr, idSuffix) {
     if (mark.label) markNode.append(el('small', { text: mark.label }));
     card.append(markNode, renderMeter(state, option, lang, index));
     const copy = el('span', { class: 'ff-choice-copy' });
-    copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
+    const top = el('span', { class: 'ff-choice-top' });
+    top.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     if (field) {
-      copy.append(el('p', {
+      top.append(el('p', {
         class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
         'data-testid': `draft-choice-${index}-field`,
         'data-on-field': field.onField ? 'true' : 'false',
@@ -1814,6 +1906,7 @@ function renderDraft(state, lang, tr, idSuffix) {
         text: field.text,
       }));
     }
+    copy.append(top);
     copy.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
     if (statText) {
       copy.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
@@ -1828,7 +1921,7 @@ function renderDraft(state, lang, tr, idSuffix) {
 function placingTitle(state, unit, lang, tr) {
   if (!unit) return el('h2', { class: 'ff-title', text: tr('chooseSlot') });
   const name = unitLabel(unit, lang, tr);
-  const signature = signatureLine(safeStats(unit, state), lang, tr);
+  const signature = signatureLine(safeStats(unit, state), lang, tr, unit);
   const title = el('h2', {
     class: 'ff-title ff-place-title',
     'data-testid': 'placing-title',
@@ -1839,12 +1932,12 @@ function placingTitle(state, unit, lang, tr) {
   return title;
 }
 
-function renderPlacing(state, lang, tr,activeReplaceIndex=-1) {
+function renderPlacing(state, lang, tr, activeReplaceIndex = -1) {
   const section = el('section', { 'data-testid': 'build-placing' });
   const pending = state.pendingUnit;
   const unit = pending?.unit;
-  section.append(placingTitle(state, unit, lang, tr));
   if (!unit) {
+    section.append(placingTitle(state, unit, lang, tr));
     section.append(el('p', { text: tr('loading') }));
     section.append(button({
       'data-action': 'cancelPlacement',
@@ -1853,10 +1946,84 @@ function renderPlacing(state, lang, tr,activeReplaceIndex=-1) {
     }));
     return section;
   }
-  const index=state.pendingUnit.replace ? activeReplaceIndex : -1;
-  if (index>=0) section.append(button({'data-action':'place','data-index':String(index),'data-replace':'true',
-    'data-testid':'replace-confirm',text:tr('replaceConfirm')+' · '+unitLabel(state.slots[index].unit,lang,tr)}));
-  section.append(el('span',{text:tr('chooseSlot')}),button({'data-action':'cancelPlacement','data-testid':'cancel-placement',text:tr('cancelPlacement')}));
+  const bar = el('div', { class: 'ff-place-bar' });
+  const info = el('div', { class: 'ff-place-info' });
+  info.append(placingTitle(state, unit, lang, tr));
+  info.append(el('span', { class: 'muted', text: tr('chooseSlot') }));
+  bar.append(info);
+  const index = state.pendingUnit.replace ? activeReplaceIndex : -1;
+  if (index >= 0) {
+    bar.append(button({
+      primary: true,
+      'data-action': 'place',
+      'data-index': String(index),
+      'data-replace': 'true',
+      'data-testid': 'replace-confirm',
+      text: tr('replaceConfirm') + ' · ' + unitLabel(state.slots[index].unit, lang, tr),
+    }));
+  }
+  bar.append(button({
+    'data-action': 'cancelPlacement',
+    'data-testid': 'cancel-placement',
+    text: tr('cancelPlacement'),
+  }));
+  section.append(bar);
+  return section;
+}
+
+function fieldUnitRole(kind, lang) {
+  const zh = lang === 'zh';
+  if (kind === 'bulwark') {
+    return zh
+      ? '格挡来袭敌军并承受伤害（15% 减伤），为后排塔群争取输出时间。'
+      : 'Blocks approaching enemies with 15% armor, buying firing time for rear towers.';
+  }
+  if (kind === 'spikes') {
+    return zh
+      ? '敌军经过时持续造成穿刺伤害，专门削弱集群与高速突进单位。'
+      : 'Shreds enemies crossing the pad; ideal against swarms and fast runners.';
+  }
+  if (kind === 'flare') {
+    return zh
+      ? '照亮半径 115px 区域，强制显现隐身敌军并阻挡其前进。'
+      : 'Reveals faded enemies within 115 px and blocks incoming movement.';
+  }
+  return '';
+}
+
+function renderFieldInspector(state, ui, lang, tr, popup) {
+  const field = state?.fieldSlots?.[ui.selectedField]?.unit;
+  if (!field) return null;
+  const section = el('section', { class: 'card ff-field-card', 'data-testid': 'field-inspector' });
+  const head = el('div', { class: 'ff-field-head' });
+  head.append(catalogIcon(currentDoc, field.kind));
+  const meta = el('div', { class: 'ff-field-meta' });
+  const maxHp = Math.max(1, Number(field.maxHp) || 1);
+  const hp = Math.max(0, Number(field.hp) || 0);
+  const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+  meta.append(el('h2', { 'data-testid': 'field-name', text: `${tr(field.kind)} · ${Math.ceil(hp)} / ${Math.ceil(maxHp)}` }));
+  const fillClass = pct <= 30 ? 'ff-field-hp-fill is-low' : pct <= 60 ? 'ff-field-hp-fill is-mid' : 'ff-field-hp-fill';
+  meta.append(el('div', { class: 'ff-field-hp-track' }, el('div', { class: fillClass, style: `width:${pct}%` })));
+  head.append(meta);
+  if (popup) {
+    head.append(button({
+      class: 'ff-close-btn',
+      'data-intent': 'dismiss-unit',
+      'data-testid': 'unit-close',
+      text: tr('close'),
+    }));
+  }
+  section.append(head);
+  const roleText = fieldUnitRole(field.kind, lang);
+  if (roleText) section.append(el('p', { class: 'muted', text: roleText }));
+  const refund = Math.floor(fieldCost(state, field.kind) * 0.5 * hp / maxHp);
+  section.append(button({
+    class: 'ff-dismantle-btn',
+    'data-action': 'removeField',
+    'data-index': String(ui.selectedField),
+    'data-testid': 'remove-field',
+    text: `${tr('removeField')} +${refund} ${tr('energy')}`,
+  }));
   return section;
 }
 
@@ -1874,12 +2041,28 @@ function renderDetails(state, ui, lang, tr, options) {
     }
     if (state.hiddenPaused) section.append(el('p', { class: 'muted', text: tr('pausedHidden') }));
   }
-  if (options.popup && slot) {
-    section.append(button({
-      'data-intent': 'dismiss-unit',
-      'data-testid': 'unit-close',
-      text: tr('close'),
-    }));
+  const canTarget = !!(options.showTargeting && unit && unit.type !== 'harvest');
+  const showClose = !!(options.popup && slot);
+  if (canTarget || showClose) {
+    const toolbar = el('div', { class: 'ff-unit-toolbar' });
+    if (canTarget) {
+      toolbar.append(button({
+        class: 'ff-target-btn',
+        'data-action': 'setTargeting',
+        'data-index': String(index),
+        'data-testid': 'unit-targeting',
+        text: `${tr('targeting')} · ${tr(unit.targeting)}`,
+      }));
+    }
+    if (showClose) {
+      toolbar.append(button({
+        class: 'ff-close-btn',
+        'data-intent': 'dismiss-unit',
+        'data-testid': 'unit-close',
+        text: tr('close'),
+      }));
+    }
+    section.append(toolbar);
   }
   if (!slot) {
     section.append(el('h2', { text: tr('select') }));
@@ -1903,16 +2086,18 @@ function renderDetails(state, ui, lang, tr, options) {
     const kind = isHero(unit) ? tr('hero') : (unit.kind === 'hybrid' ? tr('hybrid') : tr('towers'));
     const stats = safeStats(unit, state);
     section.append(el('h2', { 'data-testid': 'unit-name', text: unitLabel(unit, lang, tr) }));
-    const lead = unitLead(stats, lang, tr);
+    const lead = unitLead(stats, lang, tr, unit);
     if (lead) section.append(el('p', { class: 'ff-unit-signature', 'data-testid': 'unit-signature', text: lead }));
     if (leadWithUnit && state.hiddenPaused) {
       section.append(el('p', { class: 'muted', text: tr('pausedHidden') }));
     }
-    section.append(el('p', { class: isHero(unit) ? 'badge hero-lock' : 'badge', 'data-testid': 'unit-type', text: kind }));
+    const badges = el('div', { class: 'ff-unit-badges' });
+    badges.append(el('p', { class: isHero(unit) ? 'badge hero-lock' : 'badge', 'data-testid': 'unit-type', text: kind }));
     if (isHero(unit) && options.heroBadge) {
-      section.append(el('p', { class: 'badge hero-lock', 'data-testid': 'hero-protected', text: tr('heroProtected') }));
+      badges.append(el('p', { class: 'badge hero-lock', 'data-testid': 'hero-protected', text: tr('heroProtected') }));
     }
-    section.append(el('p', { class: 'muted', text: slotCaption(slot, tr) }));
+    badges.append(el('p', { class: 'muted', text: slotCaption(slot, tr) }));
+    section.append(badges);
     if (!isHero(unit)) {
       section.append(el('p', { class: 'ff-pips', 'data-testid': 'unit-rank', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank)}` }));
       if (Number(unit.rank) >= 4) section.append(el('p', { class: 'muted', text: tr('maxRankNote') }));
@@ -1925,7 +2110,7 @@ function renderDetails(state, ui, lang, tr, options) {
       }
     }
     section.append(el('h3', { text: tr('currentStats') }));
-    section.append(statList(stats, lang, tr, 'unit-stats'));
+    section.append(statList(stats, lang, tr, 'unit-stats', unit));
     if (isHero(unit) && options.heroBadge) {
       section.append(el('p', { class: 'muted', 'data-testid': 'hero-note', text: tr('heroNoMerge') }));
     }
@@ -2200,30 +2385,30 @@ export function renderBuildPanel(container, state, api) {
   });
   const messages = renderMessages(ui, lang, tr, { omitEssays: role === 'overlay' });
   if (messages) root.append(messages);
-  const inspected = role === 'panel' && validSlot(ui.selectedSlot) && slotAt(state, ui.selectedSlot)?.unit;
+  const field = state.fieldSlots?.[ui.selectedField]?.unit || null;
+  const selected = state.slots[ui.selectedSlot]?.unit || null;
+  const inspected = role === 'panel' && ((validSlot(ui.selectedSlot) && selected) || Boolean(field));
   if (showProgress && state.phase !== 'placing' && !inspected) {
     root.append(el('p', { class: 'muted', 'data-testid': 'xp-progress', text: progressText(state, tr, lang) }));
   }
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
   if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main', ui));
-  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr,ui.replaceIndex));
-  const selected=state.slots[ui.selectedSlot]?.unit;
-  if (includeDetails && !modalHere && selected && selected.type!=='harvest') {
-    root.append(button({'data-action':'setTargeting','data-index':String(ui.selectedSlot),text:tr('targeting')+' · '+tr(selected.targeting)}));
-  }
-  const field=state.fieldSlots[ui.selectedField]?.unit;
-  if (includeDetails && !modalHere && field) {
-    const refund=Math.floor(fieldCost(state,field.kind)*0.5*field.hp/field.maxHp);
-    root.append(el('strong',{text:tr(field.kind)+' '+Math.ceil(field.hp)+' / '+Math.ceil(field.maxHp)}),
-      button({'data-action':'removeField','data-index':String(ui.selectedField),text:tr('removeField')+' +'+refund}));
-  }
-  if (includeDetails) {
+  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr, ui.replaceIndex));
+  if (includeDetails && !modalHere && field && !selected) {
+    const fieldCard = renderFieldInspector(state, ui, lang, tr, role === 'panel');
+    if (fieldCard) root.append(fieldCard);
+  } else if (includeDetails) {
+    if (!modalHere && field) {
+      const fieldCard = renderFieldInspector(state, ui, lang, tr, false);
+      if (fieldCard) root.append(fieldCard);
+    }
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;
     root.append(renderDetails(state, ui, lang, tr, {
       actions: actionsHere && !modalHere,
       heroBadge: !draftOwnsHeroNote && isHero(slotUnit(state, ui.selectedSlot)),
       placeSelected: false,
       popup: role === 'panel',
+      showTargeting: !modalHere,
     }));
   }
   if (!root.childNodes.length) {

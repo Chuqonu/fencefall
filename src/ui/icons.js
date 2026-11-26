@@ -77,7 +77,43 @@ function flame(dx, dy, color, scale = 1) {
 }
 
 const MARKS = {
-  harvest:()=>[L(22,12,22,38,POISON,3),C(22,13,8,GOLD),L(10,28,22,35,POISON,3)],
+  harvest: () => [
+    L(22, 20, 22, 37, POISON, 2.6),
+    P('M22 31 C16 30 12 26 12 23 C16 24 19 26 22 29', POISON, 1.8, POISON),
+    P('M22 28 C28 27 32 23 32 20 C28 21 25 23 22 26', POISON, 1.8, POISON),
+    L(22, 6, 22, 10, GOLD, 2.2),
+    L(14, 9, 17, 12, GOLD, 2.2),
+    L(30, 9, 27, 12, GOLD, 2.2),
+    L(11, 15, 15, 15, GOLD, 2.2),
+    L(33, 15, 29, 15, GOLD, 2.2),
+    C(22, 15, 6.2, GOLD, INK, 1.1),
+    C(22, 15, 2.5, FIRE),
+  ],
+  bulwark: () => [
+    G('11,16 13,8 15,16', PIERCE),
+    G('20,16 22,7 24,16', PIERCE),
+    G('29,16 31,8 33,16', PIERCE),
+    R(8, 16, 28, 18, '#5a3f28', GOLD, 2),
+    L(8, 22, 36, 22, MUTED, 2.4),
+    L(8, 29, 36, 29, MUTED, 2.4),
+    C(13, 22, 1.3, INK),
+    C(22, 22, 1.3, INK),
+    C(31, 22, 1.3, INK),
+  ],
+  spikes: () => [
+    R(7, 30, 30, 5, PLATE, MUTED, 1.5),
+    G('9,30 14,13 19,30', PIERCE, MUTED, 1.2),
+    G('17,30 22,10 27,30', INK, GOLD, 1.2),
+    G('25,30 30,13 35,30', PIERCE, MUTED, 1.2),
+  ],
+  flare: () => [
+    C(22, 17, 13, 'none', GOLD, 1.2),
+    flame(0, -7, GOLD, 0.52),
+    P('M12 22 H32 L29 29 H15 Z', GOLD, 1.6, '#4c3818'),
+    L(17, 29, 13, 37, MUTED, 2.2),
+    L(27, 29, 31, 37, MUTED, 2.2),
+    L(22, 29, 22, 37, MUTED, 2.2),
+  ],
   economy:()=>[C(22,20,12,GOLD),C(22,20,7,PLATE),L(22,14,22,26,GOLD,2)],
   bastion:()=>[R(9,15,26,20,PLATE,GOLD),L(10,14,34,14,INK,4)],
   splinter_bow: () => [

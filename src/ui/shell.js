@@ -120,9 +120,9 @@ export function mountShell(root, api) {
   const phase = el('span', { class: 'badge', 'data-testid': 'hud-phase' });
   const sortie = el('span', { class: 'badge hud-sortie', 'data-testid': 'hud-sortie' });
   const stats = el('div', { class: 'hud-stats' });
-  const energyValue=el('strong',{'data-testid':'hud-energy'});
-  const surgeValue=el('strong',{'data-testid':'hud-surge'});
-  stats.append(energyValue,surgeValue);
+  const energyValue = el('strong', { class: 'hud-chip hud-energy-chip', 'data-testid': 'hud-energy' });
+  const surgeValue = el('strong', { class: 'hud-chip hud-surge-chip', 'data-testid': 'hud-surge' });
+  stats.append(energyValue, surgeValue);
   stats.append(sortie, waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
 
   const pauseButton = controlButton('btn-pause', 'pause');
@@ -151,14 +151,15 @@ export function mountShell(root, api) {
     waveHint,
     message
   );
-  const fieldBar=el('div',{class:'field-bar'});
-  const fieldButtons=Object.keys(FIELD_UNITS).map(kind=>{
-    const b=controlButton('field-'+kind,'fieldKind');
-    b.dataset.kind=kind;
+  const fieldBar = el('div', { class: 'field-bar', 'data-testid': 'field-bar', role: 'group' });
+  const fieldButtons = Object.keys(FIELD_UNITS).map((kind) => {
+    const b = controlButton('field-' + kind, 'fieldKind');
+    b.className = `btn field-btn field-btn--${kind}`;
+    b.dataset.kind = kind;
     fieldBar.append(b);
     return b;
   });
-  hud.append(hudMain, controls, fieldBar,live);
+  hud.append(hudMain, controls, fieldBar, live);
 
   const overlayRoot = el('div', {
     class: 'overlay-root',
@@ -492,13 +493,23 @@ export function mountShell(root, api) {
     const nextXp = finite(state?.nextDraftXp, 0);
     const xpPct = nextXp > 0 ? clamp01(xp / nextXp) : 0;
     if (state) {
-      setText(energyValue,text('energy')+' '+Math.floor(state.energy));
-      setText(surgeValue,text('surge')+' '+state.surge.charges+'/'+state.surge.maxCharges);
+      const energy = Number.isFinite(state.energy) ? Math.floor(state.energy) : 0;
+      setText(energyValue, text('energy') + ' ' + energy);
+      const charges = Number.isFinite(state.surge?.charges) ? state.surge.charges : 0;
+      const maxCharges = Number.isFinite(state.surge?.maxCharges) ? state.surge.maxCharges : 0;
+      setText(surgeValue, text('surge') + ' ' + charges + '/' + maxCharges);
+      surgeValue.classList.toggle('is-empty', charges <= 0);
+      surgeValue.classList.toggle('is-active', (state.surge?.shieldTime || 0) > 0);
       for (const b of fieldButtons) {
-        const kind=b.dataset.kind, cd=Math.ceil(state.fieldCooldowns[kind]), cost=fieldCost(state,kind);
-        b.disabled=!canPlan(state) || cd>0 || state.energy<cost;
-        b.setAttribute('aria-pressed',String(ui.fieldKind===kind));
-        setText(b,text(kind)+' '+cost+(cd?' · '+cd+'s':''));
+        const kind = b.dataset.kind;
+        const cd = Math.ceil(state.fieldCooldowns?.[kind] || 0);
+        const cost = fieldCost(state, kind);
+        const active = ui.fieldKind === kind;
+        b.disabled = !canPlan(state) || cd > 0 || energy < cost;
+        b.setAttribute('aria-pressed', String(active));
+        b.classList.toggle('is-active', active);
+        b.classList.toggle('is-cooldown', cd > 0);
+        setText(b, text(kind) + ' ' + cost + (cd ? ' · ' + cd + 's' : ''));
       }
     }
     setText(xpLabel, text('xp'));
@@ -510,8 +521,8 @@ export function mountShell(root, api) {
     setText(sortie, sortieName);
     sortie.hidden = !sortieName;
     setText(waveLabel, text('wave'));
-    setText(waveValue, runReady ? num(finite(state.wave,0),language) : '—');
-    setText(waveProgress,runReady?Math.round((getWaveInfo(state).progress || 0)*100)+'%':'');
+    setText(waveValue, runReady ? num(finite(state.wave, 0), language) : '—');
+    setText(waveProgress, runReady ? Math.round((getWaveInfo(state).progress || 0) * 100) + '%' : '');
     setText(killsLabel, text('kills'));
     setText(killsValue, runReady ? num(finite(state?.kills, 0), language) : '—');
     setText(timeLabel, text('time'));
@@ -526,6 +537,7 @@ export function mountShell(root, api) {
     setText(phase, phaseText);
     phase.hidden = !phaseText;
     phase.classList.toggle('is-boss', !!phaseText && phaseText === text('bossWarning'));
+    phase.classList.toggle('is-danger', !!phaseText && phaseText === text('fenceDanger'));
 
     if (screen !== 'battle') shell.classList.remove('is-details-open');
     detailsButton.hidden = true;
