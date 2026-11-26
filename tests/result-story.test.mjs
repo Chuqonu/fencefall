@@ -2,7 +2,7 @@
 // It never prints a raw outcome or reason code.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resultLabel, resultStory} from '../src/i18n.js';
+import {resultLabel, resultStory, defeatAdvice} from '../src/i18n.js';
 
 const CODES = ['abandon', 'victory', 'defeat', 'invalid_json', 'heroProtected', 'bad-phase'];
 
@@ -50,4 +50,19 @@ test('an unknown outcome stays a sentence and does not echo the code', () => {
   assert.match(en, /no settled outcome|reward appears/i);
   assert.equal(en.includes('not_a_result'), false);
   assert.equal(resultLabel('en', 'heroProtected').includes('heroProtected'), false);
+});
+
+test('a loss names one next step, and Easy does not tell you to switch to Easy', () => {
+  const normal = defeatAdvice('en', 'normal');
+  const chinese = defeatAdvice('zh', 'hard');
+  const easy = defeatAdvice('en', 'easy');
+  const easyZh = defeatAdvice('zh', 'easy');
+  assert.match(normal, /Easy lowers enemy health, speed, and damage/);
+  assert.match(normal, /Armory/);
+  assert.match(chinese, /简单难度会降低敌人的生命、速度和伤害/);
+  assert.match(chinese, /军械库/);
+  assert.match(easy, /Armory bonus applies on the next run/);
+  assert.equal(easy.includes('Easy lowers'), false);
+  assert.match(easyZh, /军械库加成会在下一局生效/);
+  assert.equal(easyZh.includes('简单难度会降低'), false);
 });

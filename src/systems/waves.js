@@ -2,6 +2,9 @@
 // The boss still has to walk and die after the last spawn, so a cleared run lands
 // near 14 minutes of active simulation. Planning pauses are not part of this clock.
 //
+// state.expedition selects a sortie schedule. The watch sortie uses PHASES.
+// A missing expedition or an unknown id uses that same campaign schedule.
+//
 // This module does not set victory or defeat, does not award XP, and does not call
 // random() or uid(). Spawn positions and difficulty health/speed/damage belong to
 // spawnEnemy. Difficulty count is applied here, with a fractional remainder so
@@ -40,11 +43,12 @@
 
 import {DIFFICULTIES, STEP, emit} from '../shared.js';
 import {ENEMIES} from '../data/enemies.js';
+import {EXPEDITIONS} from '../data/expeditions.js';
 import {spawnEnemy} from './movement.js';
 
 const INTRO_HINTS = {
   shambler: {
-    en: 'Ash shamblers are crossing the field. Four of them pay the first draft.',
+    en: 'Ash shamblers are crossing the field. Defeat these four to open the first draft.',
     zh: '灰烬蹒者正在过场。击倒这四只就能拿到第一次整备。',
   },
   runner: {
@@ -68,8 +72,40 @@ const INTRO_HINTS = {
     zh: '闸门蛮兽缓慢、巨大，对栅栏的打击非常重。',
   },
   boss: {
-    en: 'A Crown Breach is coming. Below half health it enrages and calls dust gnawers. It only attacks the fence.',
-    zh: '冠裂兽要来了。生命低于一半会狂暴并召唤尘啮。它只攻击栅栏。',
+    en: 'A Crown Breach calls dust gnawers while alive. Half health only enrages it. It only attacks the fence.',
+    zh: '冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。它只攻击栅栏。',
+  },
+  leaper: {
+    en: 'Ash leapers can be shot while they crouch, then they jump. They only bite the fence.',
+    zh: '灰跃者蹲下时才能被打中，然后向前跳。它们只啃栅栏。',
+  },
+  splitter: {
+    en: 'Crack broods release two dust gnawers when they die.',
+    zh: '裂巢死后会放出两只尘啮。',
+  },
+  mender: {
+    en: 'Ash menders heal the most wounded ally. They do not heal themselves.',
+    zh: '烬补者会治疗伤得最重的同伴，不会治疗自己。',
+  },
+  shade: {
+    en: 'Fence shades are solid only briefly. While faded they cannot be shot, but they still walk and bite.',
+    zh: '栅影只短暂凝实。淡出时无法被射击，但仍会走并啃栅栏。',
+  },
+  banner: {
+    en: 'A standard wretch triples the pace of enemies near it. Kill it before that pack arrives.',
+    zh: '旗孽会让附近的敌人变为三倍速。在那队人抵达前打掉它。',
+  },
+  warden: {
+    en: 'An ash warden weakens hits on a nearby ally. It is not shielded itself. Kill it first.',
+    zh: '烬卫会减弱对附近同伴的打击。它自己没有这层护盾。先打掉它。',
+  },
+  charge: {
+    en: 'A cinder charge bites once at the fence, then the fuse burns. Kill it before the blast.',
+    zh: '烬爆贴上栅栏后先啃一口，然后引线燃烧。爆炸前打掉它。',
+  },
+  hush: {
+    en: 'While an ash hush is on the fence, defenders recharge more slowly. Kill it to restore the board.',
+    zh: '烬寂贴在栅栏上时，防守者充能变慢。打掉它，阵列就会恢复。',
   },
 };
 
@@ -121,6 +157,17 @@ const PHASES = [
     ],
   },
   {
+    id: 'leap-in',
+    from: 200,
+    until: 201,
+    every: 30,
+    name: {en: 'Leap ash', zh: '灰跃'},
+    groups: [
+      {kind: 'leaper', count: 3, interval: 1.2},
+      {kind: 'shambler', count: 2, interval: 1.2, delay: 0.8},
+    ],
+  },
+  {
     id: 'plate',
     from: 234,
     until: 330,
@@ -130,6 +177,28 @@ const PHASES = [
       {kind: 'armored', count: 2, interval: 8},
       {kind: 'swarm', count: 3, interval: 2.5, delay: 1},
       {kind: 'runner', count: 2, interval: 6, delay: 4},
+    ],
+  },
+  {
+    id: 'shade-in',
+    from: 260,
+    until: 261,
+    every: 30,
+    name: {en: 'Shade hour', zh: '栅影'},
+    groups: [
+      {kind: 'shade', count: 2, interval: 1.6},
+      {kind: 'runner', count: 2, interval: 1.2, delay: 1},
+    ],
+  },
+  {
+    id: 'banner-in',
+    from: 310,
+    until: 311,
+    every: 30,
+    name: {en: 'Standard', zh: '旗帜'},
+    groups: [
+      {kind: 'banner', count: 1, interval: 0},
+      {kind: 'shambler', count: 3, interval: 1, delay: 0.6},
     ],
   },
   {
@@ -160,10 +229,40 @@ const PHASES = [
         {kind: 'runner', count: 2, interval: 6, delay: 2},
       ],
       [
-        {kind: 'swarm', count: 4, interval: 2.5},
+        {kind: 'splitter', count: 2, interval: 2.4},
+        {kind: 'swarm', count: 3, interval: 2.5, delay: 1},
         {kind: 'runner', count: 2, interval: 6, delay: 3},
-        {kind: 'spitter', count: 2, interval: 6, delay: 5},
       ],
+    ],
+  },
+  {
+    id: 'ward-in',
+    from: 400,
+    until: 401,
+    every: 30,
+    name: {en: 'Ash ward', zh: '烬卫'},
+    hint: {
+      en: 'An ash warden weakens hits on a nearby ally. It is not shielded itself. Kill it first.',
+      zh: '烬卫会减弱对附近同伴的打击。它自己没有这层护盾。先打掉它。',
+    },
+    groups: [
+      {kind: 'warden', count: 1, interval: 0, exact: true},
+      {kind: 'shambler', count: 3, interval: 0.8, delay: 0.4, exact: true},
+    ],
+  },
+  {
+    id: 'charge-in',
+    from: 430,
+    until: 431,
+    every: 30,
+    name: {en: 'Cinder', zh: '烬爆'},
+    hint: {
+      en: 'A cinder charge bites once at the fence, then the fuse burns. Kill it before the blast.',
+      zh: '烬爆贴上栅栏后先啃一口，然后引线燃烧。爆炸前打掉它。',
+    },
+    groups: [
+      {kind: 'charge', count: 1, interval: 0, exact: true},
+      {kind: 'shambler', count: 2, interval: 0.8, delay: 0.5, exact: true},
     ],
   },
   {
@@ -173,8 +272,8 @@ const PHASES = [
     every: 10,
     name: {en: 'Lesser crown', zh: '次冠'},
     hint: {
-      en: 'A lesser Crown Breach tests the fence. It enrages and calls dust gnawers, then the push resumes.',
-      zh: '一只较弱的冠裂兽来试栅栏。它会狂暴并召唤尘啮，之后攻势还会继续。',
+      en: 'A lesser Crown Breach calls dust gnawers while alive. Half health only enrages it. The push resumes after.',
+      zh: '较弱的冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。之后攻势还会继续。',
     },
     groups: [
       {kind: 'armored', count: 2, interval: 1.4},
@@ -184,8 +283,23 @@ const PHASES = [
     ],
   },
   {
+    id: 'hush-in',
+    from: 490,
+    until: 491,
+    every: 30,
+    name: {en: 'Ash hush', zh: '烬寂'},
+    hint: {
+      en: 'While an ash hush is on the fence, defenders recharge more slowly. Kill it to restore the board.',
+      zh: '烬寂贴在栅栏上时，防守者充能变慢。打掉它，阵列就会恢复。',
+    },
+    groups: [
+      {kind: 'hush', count: 1, interval: 0, exact: true},
+      {kind: 'shambler', count: 3, interval: 0.7, delay: 0.4, exact: true},
+    ],
+  },
+  {
     id: 'press',
-    from: 464,
+    from: 520,
     until: 652,
     every: 16,
     name: {en: 'Press', zh: '进逼'},
@@ -197,8 +311,8 @@ const PHASES = [
       ],
       [
         {kind: 'armored', count: 2, interval: 12},
-        {kind: 'runner', count: 2, interval: 7, delay: 3},
-        {kind: 'spitter', count: 2, interval: 6, delay: 5},
+        {kind: 'leaper', count: 2, interval: 6, delay: 2},
+        {kind: 'shade', count: 2, interval: 6, delay: 4},
       ],
       [
         {kind: 'swarm', count: 4, interval: 3.5},
@@ -216,8 +330,8 @@ const PHASES = [
     rotate: [
       [
         {kind: 'armored', count: 2, interval: 12},
-        {kind: 'spitter', count: 2, interval: 7, delay: 3},
-        {kind: 'swarm', count: 4, interval: 3.5, delay: 1},
+        {kind: 'mender', count: 1, interval: 0, delay: 1.2},
+        {kind: 'swarm', count: 3, interval: 3.5, delay: 1},
       ],
       [
         {kind: 'brute', count: 2, interval: 12},
@@ -225,9 +339,9 @@ const PHASES = [
         {kind: 'swarm', count: 3, interval: 4, delay: 2},
       ],
       [
-        {kind: 'spitter', count: 2, interval: 10, delay: 1},
+        {kind: 'splitter', count: 2, interval: 3, delay: 1},
+        {kind: 'banner', count: 1, interval: 0, delay: 2},
         {kind: 'runner', count: 2, interval: 8, delay: 4},
-        {kind: 'swarm', count: 3, interval: 4, delay: 2},
       ],
     ],
   },
@@ -238,8 +352,8 @@ const PHASES = [
     every: 20,
     name: {en: 'Crown Breach', zh: '冠裂'},
     hint: {
-      en: 'The Crown Breach is the last scheduled foe. At half health it enrages and calls dust gnawers. Clear the field to win.',
-      zh: '冠裂兽是日程上的最后一头。半血会狂暴并召唤尘啮。清场即可获胜。',
+      en: 'Last foe: Crown Breach calls dust gnawers while alive. Half health only enrages it. Clear the field to win.',
+      zh: '最后一头冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。清场即可获胜。',
     },
     groups: [
       {kind: 'armored', count: 3, interval: 1.2},
@@ -288,9 +402,61 @@ const ENDLESS_PATTERNS = [
       {kind: 'boss', count: 1, interval: 0, delay: 2, exact: true},
     ],
   },
+  {
+    name: {en: 'Unending brood', zh: '无尽裂巢'},
+    groups: [
+      {kind: 'splitter', count: 2, interval: 2},
+      {kind: 'swarm', count: 4, interval: 0.45, delay: 0.4},
+      {kind: 'shade', count: 1, interval: 0, delay: 1.6},
+    ],
+  },
+  {
+    name: {en: 'Unending standard', zh: '无尽旗帜'},
+    groups: [
+      {kind: 'banner', count: 1, interval: 0},
+      {kind: 'leaper', count: 2, interval: 1.6, delay: 0.8},
+      {kind: 'mender', count: 1, interval: 0, delay: 1.4},
+      {kind: 'armored', count: 1, interval: 0, delay: 2.4},
+    ],
+  },
+  {
+    name: {en: 'Unending ward', zh: '无尽烬卫'},
+    groups: [
+      {kind: 'warden', count: 1, interval: 0, exact: true},
+      {kind: 'armored', count: 2, interval: 1.6, delay: 0.4},
+      {kind: 'shambler', count: 3, interval: 0.7, delay: 0.8},
+    ],
+  },
+  {
+    name: {en: 'Unending fuse', zh: '无尽引线'},
+    groups: [
+      {kind: 'charge', count: 1, interval: 0, exact: true},
+      {kind: 'shambler', count: 3, interval: 0.8, delay: 0.5},
+      {kind: 'runner', count: 1, interval: 0, delay: 1.2},
+    ],
+  },
+  {
+    name: {en: 'Unending hush', zh: '无尽静场'},
+    groups: [
+      {kind: 'hush', count: 1, interval: 0, exact: true},
+      {kind: 'shambler', count: 4, interval: 0.7},
+    ],
+  },
 ];
 
 export const WAVES = freezeDeep(buildWaves(PHASES));
+
+const EXPEDITION_WAVES = {};
+for (const id of Object.keys(EXPEDITIONS)) {
+  const phases = EXPEDITIONS[id] && EXPEDITIONS[id].phases;
+  if (Array.isArray(phases) && phases.length) EXPEDITION_WAVES[id] = freezeDeep(buildWaves(phases));
+}
+
+function activeSchedule(state) {
+  const id = state && typeof state.expedition === 'string' ? state.expedition : '';
+  return EXPEDITION_WAVES[id] || WAVES;
+}
+
 const SCHEDULE_END = lastSpawnTime(WAVES);
 
 export function updateWaves(state, dt = 0) {
@@ -301,9 +467,10 @@ export function updateWaves(state, dt = 0) {
   const sys = ensureWaves(state);
   if (!Array.isArray(state.events)) state.events = [];
   if (state.endless && director.done) director.done = false;
+  const waves = activeSchedule(state);
 
-  while (director.nextWave < WAVES.length && state.time + 1e-6 >= WAVES[director.nextWave].start) {
-    const wave = WAVES[director.nextWave];
+  while (director.nextWave < waves.length && state.time + 1e-6 >= waves[director.nextWave].start) {
+    const wave = waves[director.nextWave];
     enqueueWave(state, sys, wave);
     director.nextWave += 1;
     state.wave = director.nextWave;
@@ -320,7 +487,7 @@ export function updateWaves(state, dt = 0) {
 
   spawnDue(state);
 
-  if (director.nextWave >= WAVES.length && director.queue.length === 0) {
+  if (director.nextWave >= waves.length && director.queue.length === 0) {
     if (state.endless) {
       director.done = false;
       pumpEndless(state, sys);
@@ -339,8 +506,9 @@ export function updateWaves(state, dt = 0) {
 
   syncBossFlag(state, director, sys);
   syncPlayerHint(state, director, sys);
-  syncNextHint(director);
+  syncNextHint(state, director);
   updateBosses(state, sys);
+  noteBossApproach(state, director);
   state.waveTime = sys.waveStartedAt == null ? 0 : Math.max(0, state.time - sys.waveStartedAt);
   return state;
 }
@@ -353,9 +521,10 @@ export function getWaveInfo(state) {
   const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
   const time = Number.isFinite(state?.time) ? state.time : 0;
   const stored = state?.systems?.waves?.current || null;
-  const catalogCurrent = started > 0 ? WAVES[Math.min(started, WAVES.length) - 1] : null;
+  const waves = activeSchedule(state);
+  const catalogCurrent = started > 0 ? waves[Math.min(started, waves.length) - 1] : null;
   const current = stored || catalogCurrent;
-  const upcomingWave = started >= 0 && started < WAVES.length ? WAVES[started] : null;
+  const upcomingWave = started >= 0 && started < waves.length ? waves[started] : null;
   const mult = countMultiplier(state);
   const incoming = {};
   let nextSpawnIn = null;
@@ -391,7 +560,7 @@ export function getWaveInfo(state) {
   const hint = current?.hint || quiet;
   return {
     wave: Number.isFinite(state?.wave) ? state.wave : 0,
-    total: WAVES.length,
+    total: waves.length,
     done: !!director.done,
     endless: !!state?.endless,
     id: current?.id || null,
@@ -411,19 +580,20 @@ export function getWaveInfo(state) {
     living,
     upcoming: upcomingWave ? peekGroups(upcomingWave, mult, state?.systems?.waves?.countRemainder || 0) : [],
     countMultiplier: mult,
-    finalSpawn: SCHEDULE_END,
+    finalSpawn: waves === WAVES ? SCHEDULE_END : lastSpawnTime(waves),
     bossAlive,
     hasBoss: readHasBoss(state, director),
-    progress: campaignProgress(director, time),
+    progress: campaignProgress(state, director, time),
   };
 }
 
-function campaignProgress(director, time) {
+function campaignProgress(state, director, time) {
+  const waves = activeSchedule(state);
   const index = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
-  if (index <= 0 || WAVES.length === 0) return 0;
-  const current = WAVES[Math.min(index, WAVES.length) - 1];
+  if (index <= 0 || waves.length === 0) return 0;
+  const current = waves[Math.min(index, waves.length) - 1];
   if (!current || !Number.isFinite(current.start)) return 0;
-  const next = index < WAVES.length ? WAVES[index] : null;
+  const next = index < waves.length ? waves[index] : null;
   const end = next && Number.isFinite(next.start) ? next.start : current.start + 30;
   const span = Math.max(1e-6, end - current.start);
   const raw = (time - current.start) / span;
@@ -712,30 +882,32 @@ function waveContainsBoss(wave) {
   return Array.isArray(wave?.groups) && wave.groups.some(group => group?.kind === 'boss');
 }
 
-// Current campaign wave comes from WAVES. Once endless waves have started, the
-// flag already stored on the current snapshot is the schedule for that wave.
+// Current wave comes from the active sortie schedule. Once endless waves have
+// started, the flag already stored on the current snapshot is that wave.
 function syncBossFlag(state, director, sys) {
+  const waves = activeSchedule(state);
   const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
-  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  const endlessRunning = !!state.endless && started >= waves.length && Number(sys?.endlessWave) > 0;
   if (endlessRunning) {
     director.hasBoss = sys?.current?.boss === true;
     return;
   }
-  if (started <= 0 || WAVES.length === 0) {
+  if (started <= 0 || waves.length === 0) {
     director.hasBoss = false;
     return;
   }
-  director.hasBoss = waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+  director.hasBoss = waveContainsBoss(waves[Math.min(started, waves.length) - 1]);
 }
 
-// Same current-wave choice as the boss flag. Campaign waves read the schedule.
-// Endless waves read the snapshot, which carries that wave's hint.
+// Same current-wave choice as the boss flag. Sortie waves read the active
+// schedule. Endless waves read the snapshot, which carries that wave's hint.
 function syncPlayerHint(state, director, sys) {
+  const waves = activeSchedule(state);
   const started = Number.isFinite(director.nextWave) ? director.nextWave : 0;
-  const endlessRunning = !!state.endless && started >= WAVES.length && Number(sys?.endlessWave) > 0;
+  const endlessRunning = !!state.endless && started >= waves.length && Number(sys?.endlessWave) > 0;
   const source = endlessRunning
     ? sys?.current?.hint
-    : (started > 0 && WAVES.length > 0 ? WAVES[Math.min(started, WAVES.length) - 1]?.hint : null);
+    : (started > 0 && waves.length > 0 ? waves[Math.min(started, waves.length) - 1]?.hint : null);
   const hint = copyHint(source);
   if (hint) director.playerHint = hint;
 }
@@ -746,7 +918,7 @@ function copyHint(hint) {
   return {en: hint.en, zh: hint.zh};
 }
 
-// Next campaign wave is WAVES[nextWave] until that index leaves the schedule.
+// Next wave is the active schedule at nextWave until that index leaves it.
 // Same copy as playerHint. No spawn, timing, kind, or difficulty change.
 function distinctHint(next, current, wave) {
   if (!current) return next;
@@ -761,12 +933,13 @@ function distinctHint(next, current, wave) {
   };
 }
 
-function syncNextHint(director) {
+function syncNextHint(state, director) {
+  const waves = activeSchedule(state);
   const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
-  if (index >= 0 && index < WAVES.length) {
-    const hint = copyHint(WAVES[index]?.hint);
+  if (index >= 0 && index < waves.length) {
+    const hint = copyHint(waves[index]?.hint);
     if (hint) {
-      director.nextHint = distinctHint(hint, director.playerHint, WAVES[index]);
+      director.nextHint = distinctHint(hint, director.playerHint, waves[index]);
       return;
     }
   }
@@ -777,9 +950,10 @@ function readHasBoss(state, director) {
   if (typeof director?.hasBoss === 'boolean') return director.hasBoss;
   const stored = state?.systems?.waves?.current;
   if (typeof stored?.boss === 'boolean') return stored.boss;
+  const waves = activeSchedule(state);
   const started = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
-  if (started <= 0 || WAVES.length === 0) return false;
-  return waveContainsBoss(WAVES[Math.min(started, WAVES.length) - 1]);
+  if (started <= 0 || waves.length === 0) return false;
+  return waveContainsBoss(waves[Math.min(started, waves.length) - 1]);
 }
 
 const BOSS_APPROACH_SECONDS = 12;
@@ -797,13 +971,29 @@ export function bossApproaching(state) {
   const queue = state.director?.queue;
   if (Array.isArray(queue) && queue.some(item => item && item.kind === 'boss')) return true;
   if (state.endless) return false;
+  const waves = activeSchedule(state);
   const index = Number.isFinite(state.director?.nextWave) ? state.director.nextWave : 0;
-  if (index < 0 || index >= WAVES.length) return false;
-  const wave = WAVES[index];
+  if (index < 0 || index >= waves.length) return false;
+  const wave = waves[index];
   if (!waveContainsBoss(wave)) return false;
   const time = Number.isFinite(state.time) ? state.time : 0;
   const wait = Number(wave.start) - time;
   return wait >= 0 && wait <= BOSS_APPROACH_SECONDS;
+}
+
+function noteBossApproach(state, director) {
+  if (state.paused || state.hiddenPaused || state.phase !== 'playing') return;
+  if (!bossApproaching(state)) {
+    director.approachWave = null;
+    return;
+  }
+  if (director.approachWave) return;
+  const waves = activeSchedule(state);
+  const index = Number.isFinite(director.nextWave) ? director.nextWave : 0;
+  const wave = index >= 0 && index < waves.length ? waves[index] : null;
+  const id = wave?.id || 'queued';
+  director.approachWave = id;
+  emit(state, 'boss_approach', {warning: true, id, x: 180, y: 24});
 }
 
 function snapshotWave(wave) {

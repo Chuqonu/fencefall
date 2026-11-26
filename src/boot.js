@@ -26,13 +26,13 @@ const TEXT = {
     currency:'Cores', results:'Results', victory:'Victory', defeat:'Defeat', settings:'Settings', howto:'How to play',
     armory:'Armory', codex:'Codex', menu:'Menu', abandon:'Abandon', newRun:'New run', rewardMultiplier:'Reward',
     chooseOneOfThree:'Choose one of three', chooseSlot:'Choose a slot', mergePreview:'Merge preview', mergeConfirm:'Confirm merge',
-    mergeCancel:'Cancel merge', heroProtected:'The hero never merges', notPlanning:'Pause to move or merge', unavailable:'Not integrated yet',
+    mergeCancel:'Cancel merge', heroProtected:'The hero never merges', notPlanning:'You cannot move or merge right now', unavailable:'Not integrated yet',
     noSave:'No saved run', settlementPending:'Rewards are not settled until the progression module is present',
     helpFence:'Enemies advance from above and damage only the fence.', helpDraft:'Each draft offers three towers or hero upgrades.',
-    helpMerge:'Pause, then combine equal ranks. The hero stays independent.', helpRange:'A selected defender shows the range it can actually reach.',
+    helpMerge:'Combine equal ranks while the fight is running. The hero stays independent.', helpRange:'A selected defender shows the range it can actually reach.',
     systems:'Systems online', missing:'Still waiting', exportSave:'Export', importSave:'Import', close:'Close', replace:'Replace',
-    'not-planning':'Pause to move or merge', 'no-run':'Start a run first', 'bad-phase':'Not available right now', 'bad-slot':'Choose a defender slot',
-    'bad-speed':'Speed stays at 1, 1.5, or 3', 'emptySlot':'Choose occupied slots', 'replaceConfirm':'Confirm replacement', 'bad-choice':'Choose one of the three cards',
+    'not-planning':'You cannot move or merge right now', 'no-run':'Start a run first', 'bad-phase':'Not available right now', 'bad-slot':'Choose a defender slot',
+    'bad-speed':'Speed stays at 1, 1.5, 3, or 10', 'emptySlot':'Choose occupied slots', 'replaceConfirm':'Confirm replacement', 'bad-choice':'Choose one of the three cards',
     'unknown-action':'Unknown action', error:'Something went wrong', 'bad-language':'Language is English or Chinese', 'bad-screen':'Unknown screen', 'importError':'Import failed',
   },
   zh:{
@@ -42,13 +42,13 @@ const TEXT = {
     currency:'核心', results:'结算', victory:'守住了', defeat:'栅栏倒下', settings:'设置', howto:'玩法',
     armory:'武备', codex:'图鉴', menu:'主菜单', abandon:'放弃本局', newRun:'新的一局', rewardMultiplier:'奖励',
     chooseOneOfThree:'三选一', chooseSlot:'选择一个空位', mergePreview:'合成预览', mergeConfirm:'确认合成',
-    mergeCancel:'取消合成', heroProtected:'英雄不能合成', notPlanning:'暂停后才能移动或合成', unavailable:'这个模块还没接入',
+    mergeCancel:'取消合成', heroProtected:'英雄不能合成', notPlanning:'现在不能移动或合成', unavailable:'这个模块还没接入',
     noSave:'没有可继续的存档', settlementPending:'进度模块接入前，这一局不会发放奖励',
     helpFence:'敌人从上方进入，只攻击共同的栅栏。', helpDraft:'每次整备给出三个新塔或英雄强化。',
-    helpMerge:'先暂停，再把同等级单位合成。英雄始终独立。', helpRange:'选中防守单位后，能看到它真正打得到的范围。',
+    helpMerge:'战斗进行中就可以把同等级单位合成。英雄始终独立。', helpRange:'选中防守单位后，能看到它真正打得到的范围。',
     systems:'已接入系统', missing:'还在等待', exportSave:'导出', importSave:'导入', close:'关闭', replace:'替换',
-    'not-planning':'暂停后才能移动或合成', 'no-run':'先开始一局', 'bad-phase':'现在不能这么做', 'bad-slot':'请选择防守格',
-    'bad-speed':'速度只能是 1、1.5 或 3', 'emptySlot':'请选择有单位的格子', 'replaceConfirm':'需要确认替换', 'bad-choice':'请选择三张牌中的一张',
+    'not-planning':'现在不能移动或合成', 'no-run':'先开始一局', 'bad-phase':'现在不能这么做', 'bad-slot':'请选择防守格',
+    'bad-speed':'速度只能是 1、1.5、3 或 10', 'emptySlot':'请选择有单位的格子', 'replaceConfirm':'需要确认替换', 'bad-choice':'请选择三张牌中的一张',
     'unknown-action':'未知操作', error:'出错了', 'bad-language':'语言只能是中文或英文', 'bad-screen':'未知界面', 'importError':'导入失败',
   },
 };
@@ -173,7 +173,9 @@ export async function createController(options = {}) {
       const difficulty = Object.prototype.hasOwnProperty.call(DIFFICULTIES, requested) ? requested : 'normal';
       profile.settings.difficulty = difficulty;
       const seed = Number.isFinite(Number(payload.seed)) ? Number(payload.seed) >>> 0 : Math.floor(Math.random() * 0x100000000) >>> 0;
-      run = createRun({seed, difficulty, profile, runId:typeof payload.runId === 'string' ? payload.runId : undefined});
+      const expedition = typeof payload.expedition === 'string' ? payload.expedition : (typeof profile.settings?.expedition === 'string' ? profile.settings.expedition : 'watch');
+      run = createRun({seed, difficulty, profile, runId:typeof payload.runId === 'string' ? payload.runId : undefined, expedition});
+      if (typeof run.expedition === 'string') profile.settings.expedition = run.expedition;
       prepare(run);
       ui.screen = 'battle';
       ui.selectedSlot = -1;
@@ -186,7 +188,8 @@ export async function createController(options = {}) {
     }
     if (action === 'restart') {
       const difficulty = run?.difficulty || profile.settings?.difficulty || 'normal';
-      return perform('start', {difficulty, seed:payload.seed});
+      const expedition = typeof run?.expedition === 'string' ? run.expedition : profile.settings?.expedition;
+      return perform('start', {difficulty, seed:payload.seed, expedition});
     }
     if (action === 'resume') {
       if (!run) {
@@ -235,7 +238,7 @@ export async function createController(options = {}) {
     if (action === 'speed') {
       if (!run) return {ok:false, reason:'no-run'};
       const value = Number(payload.value);
-      if (![1, 1.5, 3].includes(value)) return {ok:false, reason:'bad-speed'};
+      if (![1, 1.5, 3, 10].includes(value)) return {ok:false, reason:'bad-speed'};
       setSpeed(run, value);
       return {ok:true, speed:run.speed};
     }
@@ -261,7 +264,9 @@ export async function createController(options = {}) {
     }
     if (action === 'screen') {
       if (!SCREENS.includes(payload.name)) return {ok:false, reason:'bad-screen'};
-      if ((payload.name === 'battle' || payload.name === 'results') && !run) return {ok:false, reason:'no-run'};
+      if (payload.name === 'battle' && !run) return perform('resume');
+      if (payload.name === 'results' && !run) return {ok:false, reason:'no-run'};
+      if (payload.name !== 'battle' && ui.screen === 'battle' && run && run.phase === 'playing') run.paused = true;
       ui.screen = payload.name;
       return {ok:true};
     }
@@ -274,6 +279,10 @@ export async function createController(options = {}) {
     if (action === 'selectSlot') {
       if (!run) return {ok:false, reason:'no-run'};
       const index = payload.index;
+      if (index === -1) {
+        ui.selectedSlot = -1;
+        return {ok:true, index:-1};
+      }
       if (!integerSlot(index)) return {ok:false, reason:'bad-slot'};
       if (run.phase === 'placing') return perform('place', {index, replace:payload.replace === true});
       const previous = ui.selectedSlot;
@@ -689,7 +698,7 @@ function renderBattle(hud, overlay, api) {
   const profile = api.getProfile();
   if (!state) return;
   hud.append(button(state.paused || state.hiddenPaused ? 'resume' : 'pause', api.t(state.paused || state.hiddenPaused ? 'resume' : 'pause'), {testid:'pause'}));
-  for (const speed of [1, 1.5, 3]) {
+  for (const speed of [1, 1.5, 3, 10]) {
     const node = button('speed', `${api.t('speed')} ${speed}`, {testid:`speed-${String(speed).replace('.', '-')}`, value:speed});
     if (state.speed === speed) node.setAttribute('aria-pressed', 'true');
     hud.append(node);
@@ -738,6 +747,14 @@ function renderResults(hud, panel, api) {
   const paid = state?.settlement && Number.isFinite(state.settlement.currency) ? state.settlement.currency : null;
   detail.textContent = i18n.resultStory(language, outcome, paid);
   panel.append(heading, detail);
+  if (outcome === 'defeat') {
+    const offer = progression.nextArmoryBuy(profile);
+    const named = offer ? i18n.armoryNextLine(language, offer) : '';
+    const next = el('p');
+    next.dataset.testid = 'result-next';
+    next.textContent = named || i18n.defeatAdvice(language, state?.settlement?.difficulty || state?.difficulty);
+    panel.append(next);
+  }
   hud.append(button('restart', api.t('newRun'), {testid:'restart'}), button('screen', api.t('menu'), {name:'menu', testid:'menu'}));
 }
 
@@ -921,6 +938,7 @@ async function mount() {
       } else if (event.key === '1') api.act('speed', {value:1});
       else if (event.key === '2') api.act('speed', {value:1.5});
       else if (event.key === '3') api.act('speed', {value:3});
+      else if (event.key === '4') api.act('speed', {value:10});
       else if (event.key === 'Escape') {
         if (api.getUI().mergePreview) api.act('mergeCancel');
         else api.act('cancelPlacement');

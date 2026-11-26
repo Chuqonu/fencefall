@@ -45,7 +45,7 @@ function place(state, kind, x, y = 24) {
 describe('drift stays inside the arena', {concurrency: 1}, () => {
   test('enemy x stays inside the spawn bounds after several movement updates', () => {
     assert.equal(COLUMN_X.length, 5);
-    assert.deepEqual(COLUMN_X, [36, 108, 180, 252, 324]);
+    assert.deepEqual(COLUMN_X, [84, 132, 180, 228, 276]);
     assert.ok(ARENA.enemyMinX < COLUMN_X[0]);
     assert.ok(ARENA.enemyMaxX > COLUMN_X[4]);
 
@@ -124,15 +124,18 @@ describe('drift stays inside the arena', {concurrency: 1}, () => {
 
   test('movement does not snap enemy x onto the five slot columns', () => {
     assert.equal(new Set(COLUMN_X).size, 5);
+    const pitch = COLUMN_X[1] - COLUMN_X[0];
     for (let i = 1; i < COLUMN_X.length; i += 1) {
-      assert.equal(COLUMN_X[i] - COLUMN_X[i - 1], 72);
+      assert.equal(COLUMN_X[i] - COLUMN_X[i - 1], pitch);
     }
 
     for (const seed of [99, 20261114]) {
       const state = fresh(seed);
-      const gaps = [72, 144, 216, 288, 50, 90, 160, 200, 230, 270, 310];
+      const gaps = [];
+      for (let i = 0; i < COLUMN_X.length - 1; i += 1) gaps.push((COLUMN_X[i] + COLUMN_X[i + 1]) / 2);
+      gaps.push(40, 100, 160, 210, 250, 300, 330);
       const gapEnemies = gaps.map((x, index) => place(state, KINDS[index % KINDS.length], x, 30));
-      const midGaps = gapEnemies.filter(enemy => columnDistance(enemy.x) >= 36);
+      const midGaps = gapEnemies.filter(enemy => columnDistance(enemy.x) + 1e-6 >= pitch / 2);
       const columnEnemies = COLUMN_X.map((x, index) => place(state, KINDS[index % KINDS.length], x, 30));
       const edges = [
         place(state, 'swarm', ARENA.enemyMinX, 30),
@@ -164,7 +167,7 @@ describe('drift stays inside the arena', {concurrency: 1}, () => {
         if (step + 1 === SEVERAL) {
           assert.ok(midGaps.length >= 4, `seed ${seed} mid-gap count ${midGaps.length}`);
           for (const enemy of midGaps) {
-            assert.ok(columnDistance(enemy.x) > 20, `seed ${seed} mid-gap snapped to ${enemy.x}`);
+            assert.ok(columnDistance(enemy.x) > pitch / 2 - 8, `seed ${seed} mid-gap snapped to ${enemy.x}`);
           }
           for (const enemy of gapEnemies) {
             assert.equal(onColumn(enemy.x), false, `seed ${seed} gap snapped to ${enemy.x}`);

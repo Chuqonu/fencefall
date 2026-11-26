@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {createRun} from '../src/state.js';
+import {createProfile, createRun} from '../src/state.js';
 import {createUnit} from '../src/shared.js';
 import {renderBuildPanel} from '../src/ui/build-panel.js';
 
@@ -16,6 +16,8 @@ test('placing layout markers stay in the build panel', () => {
   assert.match(source, /is-draft/);
   assert.match(source, /is-reduced/);
   assert.match(source, /\.ff-build\.is-placing \.ff-place-row\{[^}]*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(source, /\.ff-build\.is-placing \.ff-place-row \.btn\{[^}]*flex-direction:\s*column/);
+  assert.match(source, /\.ff-build\.is-placing \.ff-place-row \.btn small\{[^}]*white-space:\s*normal/);
   assert.match(source, /\.ff-build\.is-placing \.ff-place-body\{[^}]*overflow:\s*auto[^}]*max-height:\s*6\.5rem/);
   assert.match(source, /class:\s*'grid ff-slots ff-place-row'/);
 });
@@ -211,7 +213,42 @@ test('a placing render keeps the place grid above the description', () => {
   assert.ok(orderIndex(root, cancel) < orderIndex(root, body));
   assert.equal(body.contains(container.querySelector('[data-testid="pending-stats"]')), true);
   assert.equal(body.contains(container.querySelector('[data-testid="pending-name"]')), true);
+  const title = container.querySelector('[data-testid="placing-title"]');
+  assert.ok(title);
+  assert.equal(container.querySelector('[data-testid="placing-name"]')?.textContent, 'Rivet');
+  assert.match(container.querySelector('.ff-place-signature')?.textContent || '', /Pierce/);
+  assert.ok(orderIndex(root, title) < orderIndex(root, grid));
+  assert.equal(container.querySelector('[data-testid="xp-progress"]'), null);
   assert.ok(container.querySelector('[data-testid="place-slot-0"]'));
   assert.ok(container.querySelector('.empty-slot'));
   assert.ok(container.querySelector('[data-testid="place-blocked-2"]'));
+  const front = container.querySelector('[data-testid="place-slot-0"]');
+  const rear = container.querySelector('[data-testid="place-slot-5"]');
+  const words = (node) => (node?.childNodes || []).map((child) => child.textContent).join(' ');
+  assert.match(words(front), /Front row/);
+  assert.equal(front.getAttribute('data-row'), 'front');
+  assert.match(words(rear), /Rear row/);
+  assert.equal(rear.getAttribute('data-row'), 'rear');
+  assert.equal(words(front).includes('Empty slot'), false);
+});
+
+test('Chinese placement names the front and rear rows', () => {
+  const doc = createFakeDocument();
+  const container = doc.createElement('div');
+  container.setAttribute('data-ui', 'overlay');
+  const state = createRun({
+    seed: 5,
+    difficulty: 'normal',
+    runId: 'place-zh',
+    profile: createProfile('zh'),
+  });
+  state.phase = 'placing';
+  state.pendingUnit = {unit: createUnit(state, 'bolt', 1), replace: false};
+  renderBuildPanel(container, state, {getUI() { return {screen: 'battle'}; }});
+  const words = (id) => (container.querySelector(`[data-testid="${id}"]`)?.childNodes || []).map((child) => child.textContent).join(' ');
+  assert.match(words('place-slot-0'), /前排/);
+  assert.match(words('place-slot-5'), /后排/);
+  assert.equal(container.querySelector('[data-testid="placing-name"]')?.textContent, '穿钉');
+  assert.match(container.querySelector('.ff-place-signature')?.textContent || '', /穿透/);
+  assert.equal(words('place-slot-0').includes('空位'), false);
 });

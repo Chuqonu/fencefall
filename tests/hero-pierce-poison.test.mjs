@@ -77,7 +77,7 @@ test('Barbed Quills and Piercing Bolt poison the first enemy and the pierced ene
   const pierceCount = HERO_UPGRADES.pierce.effect.pierce;
   assert.equal(barbed.maxStacks, 1);
   assert.equal(pierceCount, 1);
-  assert.equal(barbed.dps, 3);
+  assert.equal(barbed.dps, 6);
 
   const state = createRun({seed: 41, difficulty: 'normal', runId: 'hero-pierce-poison'});
   const hero = state.slots[2].unit;

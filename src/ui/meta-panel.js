@@ -7,18 +7,20 @@
  * the current level, or a function (level, profile). Bonus fractions are
  * damage, haste, critChance, and reward; range and fence are flat amounts.
  */
-import {localize, formatNumber, resultLabel, resultStory} from '../i18n.js';
-import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses} from '../systems/progression.js';
+import {localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
+import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses, nextArmoryBuy} from '../systems/progression.js';
 import {TOWERS} from '../data/towers.js';
 import {RECIPES} from '../data/recipes.js';
 import {HERO_UPGRADES} from '../systems/hero.js';
 import {ENEMIES} from '../data/enemies.js';
+import {EXPEDITIONS, EXPEDITION_ORDER} from '../data/expeditions.js';
+import {catalogIcon} from './icons.js';
 import {BASE_TYPES, CONTRACT_VERSION, DIFFICULTIES, clone} from '../shared.js';
 
 const STYLE_ID = 'fencefall-meta-panel-styles';
 const SCREENS = new Set(['menu', 'armory', 'codex', 'settings', 'howto', 'results']);
 const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
-const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss'];
+const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
 const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward']);
@@ -27,6 +29,7 @@ const FLAT_KEYS = new Set(['fence', 'vitality']);
 
 const local = {
   difficulty: null,
+  expedition: null,
   seed: '',
   confirmAbandon: false,
   confirmStart: false,
@@ -55,6 +58,7 @@ const META_CSS = `
 .meta-panel .panel,.meta-panel .card{min-width:0}
 .meta-panel .card{background:#162329;border:1px solid #2c454c;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .meta-panel .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.meta-panel .grid.meta-sorties{grid-template-columns:1fr 1fr;gap:8px}
 .meta-panel .btn{min-height:44px;min-width:44px;padding:10px 12px;border-radius:10px;border:1px solid #3d5a54;background:#1a2c32;color:#f1eee2;font:inherit;line-height:1.25;text-align:center;cursor:pointer;overflow-wrap:anywhere;white-space:normal}
 .meta-panel .btn-primary{background:#2a6848;border-color:#8dcaa8;color:#f4fff8;font-weight:700}
 .meta-panel .btn[disabled]{opacity:.55;cursor:not-allowed}
@@ -78,6 +82,10 @@ const META_CSS = `
 .meta-panel input,.meta-panel textarea{width:100%;min-height:44px;padding:8px 10px;border-radius:10px;border:1px solid #3d5a54;background:#0e171c;color:#f1eee2;font:inherit}
 .meta-panel textarea{min-height:128px;resize:vertical}
 .meta-badges{display:flex;flex-wrap:wrap;gap:6px}
+.catalog-head{display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:44px}
+.catalog-icon{width:44px;height:44px;min-width:44px;min-height:44px;flex:0 0 44px;display:block}
+.catalog-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 auto}
+.catalog-desc{min-width:0;color:#f1eee2}
 .meta-board{display:flex;flex-direction:column;gap:6px}
 .meta-beats{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;counter-reset:beat}
 .meta-beats li{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;padding:8px 12px;border-radius:10px;background:#24362a;border:1px solid #3f6b45}
@@ -247,7 +255,7 @@ function renderArmory(ctx, root) {
     ['reward', 'bonus-reward', bonuses.ok ? signed(percent(bonuses.reward, lang), bonuses.reward) : '—']
   ];
   for (const [key, testid, value] of fields) {
-    summary.append(line(ctx, bonusLabel(ctx, key), value, testid));
+    summary.append(line(ctx, profileBonusLabel(ctx, key), value, testid));
   }
   summary.append(h(doc, 'p', {className: 'muted meta-mini', text: tx(api, lang, 'rewardBonusNote',
     'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.',
@@ -368,7 +376,11 @@ function renderHowto(ctx, root) {
   const {doc, api, lang} = ctx;
   const head = pageHead(ctx, 'meta-howto', t(api, 'howto'));
   head.append(howtoBeats(ctx));
+  head.append(h(doc, 'p', {text: tx(api, lang, 'howtoSortie',
+    'Sorties are chosen before Play, and the new enemies are explained in the codex.',
+    '出击在开始前选定，新敌人的说明在图鉴里。')}));
   root.append(head);
+  root.append(roleCard(ctx));
   root.append(h(doc, 'p', {text: tx(api, lang, 'helpRole',
     'You plan, build, and decide. Towers and the hero attack on their own. There are no active combat abilities and no direct hero control.',
     '你负责规划、建造和抉择。防御塔与英雄会自动攻击。没有主动战斗技能，也不能直接操纵英雄作战。')}));
@@ -378,26 +390,46 @@ function renderHowto(ctx, root) {
       'Enemies enter from the top and attack only the shared fence. Defenders have no health. The run ends when fence HP reaches zero.',
       '敌人从上方进入，并且只攻击共享的栅栏。防御单位没有生命值。栅栏生命降到零时，本局结束。'],
     ['help-placement', 'place', 'helpPlacement',
-      'Defenders fill two rows of five slots. The run starts with one hero in the front center. That hero stays independent and is never merged, replaced, or sold. While planning, drag a defender to an empty slot to move it, or onto a compatible tower to merge. An illegal drop snaps back. Moving the hero only changes its slot.',
-      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于前排正中。英雄始终独立，不能被合并、替换或出售。布阵时，把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。非法放置会弹回。移动英雄只改变它所在的槽位。'],
+      'Defenders fill two rows of five slots. The run starts with one hero in the front center. That hero stays independent and is never merged, replaced, or sold. While the fight is running, drag a defender to an empty slot to move it, or onto a compatible tower to merge. Pause, a draft, and the menu still allow it. An illegal drop snaps back. Moving the hero only changes its slot.',
+      '防御单位占据两行，每行五个槽位。开局只有一名英雄，位于前排正中。英雄始终独立，不能被合并、替换或出售。战斗进行中，把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。暂停、整备和菜单里也可以。非法放置会弹回。移动英雄只改变它所在的槽位。'],
     ['help-range', 'range', 'helpRange',
-      'A defender attacks any enemy inside a circle centered on its slot, across the whole field. There are no lanes. Rear-row ranges reach threats in front of the fence. Select a defender during battle to see its range.',
-      '防御者以自己的槽位为圆心，攻击范围内的任何敌人，覆盖整个战场。战场没有分路。后排的射程能够打到栅栏前的威胁。战斗中点选防御者即可看到范围。'],
+      'A defender attacks the enemy closest to the fence inside a circle centered on its slot, across the whole field. There are no lanes. Rear-row ranges reach threats in front of the fence. Select a defender during battle to see its range.',
+      '防御者以自己的槽位为圆心，攻击范围内最靠近栅栏的敌人，覆盖整个战场。战场没有分路。后排的射程能够打到栅栏前的威胁。战斗中点选防御者即可看到范围。'],
     ['help-draft', 'chooseOneOfThree', 'helpDraft',
       'Kills fill the draft meter. Each draft pauses the battle and offers exactly three choices: a new tower or a hero upgrade. Placement is a separate tap. Canceling placement keeps those same three choices. A full board still offers hero upgrades or an explicit replacement, and replacement never takes the hero.',
       '击杀会填满选卡进度。每次选卡都暂停战斗，并给出恰好三个选项：新的防御塔或英雄升级。放置需要再点一次槽位。取消放置会保留同一组三个选项。格子满了仍然会提供英雄升级或明确的替换，替换不会动到英雄。'],
     ['help-merge', 'merge', 'helpMerge',
-      'While planning, pick two different occupied slots. Matching type and rank become that unit at rank + 1, up to rank 4, including two copies of the same hybrid. Different base types of equal rank become their recipe at that rank. A hybrid does not mix with a different type. The hero is protected. Preview the result, then confirm. Cancel and invalid pairs leave both units in place.',
-      '规划时选择两个不同的已占用槽位。种类和等级都相同会升到下一等级，最高 4 级，相同的混合单位也可以这样升级。两种不同的基础塔在等级相同且存在配方时，会变成该等级的混合单位。混合单位不能再与另一种类混合。英雄受保护。先预览结果再确认。取消或无效组合都会保留双方。'],
+      'While the fight is running, pick two different occupied slots. Matching type and rank become that unit at rank + 1, up to rank 4, including two copies of the same hybrid. Different base types of equal rank become their recipe at that rank. A hybrid does not mix with a different type. The hero is protected. Preview the result, then confirm. Cancel and invalid pairs leave both units in place.',
+      '战斗进行中选择两个不同的已占用槽位。种类和等级都相同会升到下一等级，最高 4 级，相同的混合单位也可以这样升级。两种不同的基础塔在等级相同且存在配方时，会变成该等级的混合单位。混合单位不能再与另一种类混合。英雄受保护。先预览结果再确认。取消或无效组合都会保留双方。'],
     ['help-speed', 'speed', 'helpSpeed',
-      'Speeds are 1x, 1.5x, and 3x. The same simulation rules advance with game time at every speed, and speed does not change rewards. Hiding the page pauses the battle; return and resume it yourself.',
-      '速度只有 1 倍、1.5 倍和 3 倍。每种速度都按游戏时间推进同一套模拟，速度不会改变奖励。页面隐藏时战斗会暂停，返回后需要你自己继续。']
+      'Speeds are 1x, 1.5x, 3x, and 10x. The same simulation rules advance with game time at every speed, and speed does not change rewards. Hiding the page pauses the battle; return and resume it yourself.',
+      '速度有 1 倍、1.5 倍、3 倍和 10 倍。每种速度都按游戏时间推进同一套模拟，速度不会改变奖励。页面隐藏时战斗会暂停，返回后需要你自己继续。']
   ];
   for (const [testid, titleKey, bodyKey, en, zh] of topics) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': testid});
     card.append(h(doc, 'h3', {text: t(api, titleKey)}), h(doc, 'p', {text: tx(api, lang, bodyKey, en, zh)}));
     root.append(card);
   }
+}
+
+function roleCard(ctx) {
+  const {doc, api, lang} = ctx;
+  const card = h(doc, 'article', {className: 'card', 'data-testid': 'howto-roles'});
+  card.append(h(doc, 'h3', {text: tx(api, lang, 'howtoRoles', 'Eight threats', '八种威胁')}));
+  const list = h(doc, 'ul', {'data-testid': 'howto-role-list'});
+  const lines = [
+    ['Ash Leaper: shots land during the crouch, then it jumps.', '灰跃者：蹲下时才会被打中，然后向前跳。'],
+    ['Crack Brood: death releases two dust gnawers that finish the walk.', '裂巢：死后放出两只尘啮，由它们走完剩下的路。'],
+    ['Ash Mender: heals the most wounded ally, never itself.', '烬补者：治疗伤得最重的同伴，从不治疗自己。'],
+    ['Fence Shade: shoot the short solid beat. It still bites while faded.', '栅影：在短暂凝实时射击。淡出时仍会啃栅栏。'],
+    ['Standard Wretch: nearby enemies move three times as fast. Kill it first.', '旗孽：附近敌人变为三倍速。先打掉它。'],
+    ['Ash Warden: nearby allies take weaker hits. The warden itself is not shielded.', '烬卫：附近同伴受到的伤害变低。烬卫自己没有这层护盾。'],
+    ['Cinder Charge: one bite at the fence, then a fuse. Kill it before the blast.', '烬爆：贴上栅栏后啃一口，然后是引线。爆炸前打掉它。'],
+    ['Ash Hush: on the fence, the whole board recharges more slowly.', '烬寂：贴在栅栏上时，整个阵列的充能都会变慢。']
+  ];
+  for (const [en, zh] of lines) list.append(h(doc, 'li', {text: lang === 'zh' ? zh : en}));
+  card.append(list);
+  return card;
 }
 
 function howtoBeats(ctx) {
@@ -428,11 +460,21 @@ function renderResults(ctx, root) {
   card.append(h(doc, 'h3', {text: t(api, 'runComplete')}));
   card.append(line(ctx, t(api, 'results'), outcomeText(ctx, outcome), 'result-outcome'));
   const paid = settlement && Number.isFinite(settlement.currency) ? settlement.currency : null;
+  const difficultyId = settlement?.difficulty || run?.difficulty;
   card.append(h(doc, 'p', {
     className: 'result-story',
     'data-testid': 'result-story',
     text: resultStory(lang, outcome, paid)
   }));
+  if (outcome === 'defeat') {
+    const offer = nextArmoryBuy(profile);
+    const named = offer ? armoryNextLine(lang, offer) : '';
+    card.append(h(doc, 'p', {
+      className: 'result-story',
+      'data-testid': 'result-next',
+      text: named || defeatAdvice(lang, difficultyId)
+    }));
+  }
 
   if (settlement && Number.isFinite(settlement.currency)) {
     card.append(line(ctx, t(api, 'earned'), num(settlement.currency, lang), 'result-currency'));
@@ -443,7 +485,12 @@ function renderResults(ctx, root) {
     card.append(row);
   }
 
-  const difficultyId = settlement?.difficulty || run?.difficulty;
+  const expeditionId = typeof run?.expedition === 'string' ? run.expedition : '';
+  const expedition = expeditionId && Object.prototype.hasOwnProperty.call(EXPEDITIONS, expeditionId) ? EXPEDITIONS[expeditionId] : null;
+  if (expedition) {
+    card.append(line(ctx, tx(api, lang, 'expedition', 'Sortie', '出击'), textOf(expedition.name, lang), 'result-expedition'));
+  }
+
   const difficulty = DIFFICULTIES[difficultyId];
   card.append(line(ctx, t(api, 'difficulty'), difficulty ? textOf(difficulty.name, lang) : (difficultyId ? String(difficultyId) : '—'), 'result-difficulty'));
   card.append(line(ctx, t(api, 'rewardMultiplier'), difficulty ? `×${num(difficulty.reward, lang, 2)}` : '—', 'result-reward-multiplier'));
@@ -495,6 +542,7 @@ function newRunForm(ctx, primary) {
   const {doc, api, lang} = ctx;
   const form = h(doc, 'form', {className: 'card', 'data-testid': 'new-run-form'});
   form.append(h(doc, 'h3', {text: t(api, 'newRun')}));
+  form.append(expeditionPicker(ctx));
   form.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'difficultyRewards',
     'Higher difficulties increase enemy pressure and the reward multiplier.',
     '更高的难度会提高敌人压力和奖励倍率。')}));
@@ -542,6 +590,51 @@ function newRunForm(ctx, primary) {
   return form;
 }
 
+function expeditionPicker(ctx) {
+  const {doc, api, lang} = ctx;
+  const profile = ctx.rawProfile || ctx.profile;
+  const selected = selectedExpedition(profile);
+  const block = h(doc, 'div', {className: 'meta-stack'});
+  block.append(h(doc, 'h3', {text: tx(api, lang, 'expedition', 'Sortie', '出击')}));
+  block.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'expeditionHelp',
+    'Sorties are shorter fights. The Long Watch is the full campaign.',
+    '出击是更短的一局。长夜守望是完整战役。')}));
+  const grid = h(doc, 'div', {className: 'grid meta-sorties', 'data-testid': 'expedition-grid'});
+  for (const id of EXPEDITION_ORDER) {
+    const entry = EXPEDITIONS[id];
+    if (!entry) continue;
+    const btn = h(doc, 'button', {type: 'button', className: 'btn meta-choice'});
+    btn.setAttribute('data-action', 'expedition');
+    btn.setAttribute('data-value', id);
+    btn.setAttribute('data-testid', `expedition-${id}`);
+    btn.setAttribute('aria-pressed', selected === id ? 'true' : 'false');
+    const minutes = Number.isFinite(entry.minutes) ? entry.minutes : 0;
+    const focus = textOf(entry.focus, lang);
+    const length = tx(api, lang, 'expeditionMinutes', `~${minutes} minutes`, `~${minutes} 分钟`);
+    btn.append(
+      h(doc, 'span', {text: textOf(entry.name, lang) || id}),
+      h(doc, 'span', {className: 'muted', text: focus ? `${focus} · ${length}` : length})
+    );
+    const clears = expeditionClears(profile, id);
+    if (clears > 0) {
+      btn.append(h(doc, 'span', {className: 'muted', text: tx(api, lang, 'expeditionClears', `Clears ${num(clears, lang)}`, `通关 ${num(clears, lang)}`)}));
+    }
+    listen(btn, () => {
+      local.expedition = id;
+      local.confirmStart = false;
+      ctx.rerender();
+    });
+    grid.append(btn);
+  }
+  block.append(grid);
+  const chosen = EXPEDITIONS[selected];
+  block.append(h(doc, 'p', {
+    'data-testid': 'expedition-summary',
+    text: textOf(chosen?.summary, lang)
+  }));
+  return block;
+}
+
 function difficultyGrid(ctx, idPrefix) {
   const {doc, api, lang} = ctx;
   const selected = selectedDifficulty(ctx.profile);
@@ -557,7 +650,7 @@ function difficultyGrid(ctx, idPrefix) {
     btn.append(
       h(doc, 'span', {text: textOf(entry.name, lang) || t(api, id)}),
       h(doc, 'span', {className: 'muted', text: `${t(api, 'rewardMultiplier')} ×${num(entry.reward, lang, 2)}`}),
-      h(doc, 'span', {className: 'muted', text: `${t(api, 'fence')} ${num(entry.fence, lang, 0)}`}),
+      h(doc, 'span', {className: 'muted', text: `${tx(api, lang, 'fenceBonus', 'Fence HP', '栅栏生命')} ${num(entry.fence, lang, 0)}`}),
       h(doc, 'span', {className: 'muted', text: pressureText(ctx, entry)})
     );
     listen(btn, () => {
@@ -571,6 +664,16 @@ function difficultyGrid(ctx, idPrefix) {
   return grid;
 }
 
+function catalogHead(ctx, id, name, description) {
+  const head = h(ctx.doc, 'div', {className: 'catalog-head'});
+  head.appendChild(catalogIcon(ctx.doc, id));
+  const copy = h(ctx.doc, 'div', {className: 'catalog-copy'});
+  copy.appendChild(h(ctx.doc, 'h3', {text: name}));
+  if (description) copy.appendChild(h(ctx.doc, 'p', {className: 'catalog-desc', text: description}));
+  head.appendChild(copy);
+  return head;
+}
+
 function equipmentCard(ctx, item) {
   const {doc, api, lang, profile} = ctx;
   const owned = profile.equipmentOwned.includes(item.id);
@@ -582,14 +685,13 @@ function equipmentCard(ctx, item) {
   card.setAttribute('data-owned', owned ? 'true' : 'false');
   card.setAttribute('data-equipped', equipped ? 'true' : 'false');
   if (cost != null) card.setAttribute('data-cost', String(cost));
-  card.append(h(doc, 'h3', {text: entryName(item, lang, item.id)}));
+  const description = entryDesc(item, lang);
+  card.append(catalogHead(ctx, item.id, entryName(item, lang, item.id), description));
   const badges = h(doc, 'div', {className: 'meta-badges'});
   badges.append(badge(ctx, slotLabel(ctx, slot)));
   if (equipped) badges.append(badge(ctx, t(api, 'equipped')));
   else if (owned) badges.append(badge(ctx, t(api, 'owned')));
   card.append(badges);
-  const description = entryDesc(item, lang);
-  if (description) card.append(h(doc, 'p', {text: description}));
   card.append(line(ctx, t(api, 'cost'), cost == null ? '—' : num(cost, lang)));
   const effects = bonusEntries(item.bonuses || item.bonus);
   if (effects.length) {
@@ -597,7 +699,7 @@ function equipmentCard(ctx, item) {
       card.append(line(ctx, tx(api, lang, 'bonus', 'Bonus', '加成'), equippedBonusLine(ctx, item), `equip-bonus-${cssId(item.id)}`));
     } else {
       card.append(h(doc, 'p', {className: 'muted', text: t(api, 'effect')}));
-      for (const [key, value] of effects) card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+      for (const [key, value] of effects) card.append(line(ctx, profileBonusLabel(ctx, key), formatBonusValue(key, value, lang)));
     }
   }
   if (!owned) {
@@ -639,13 +741,12 @@ function permanentCard(ctx, upgrade) {
   card.setAttribute('data-level', String(level));
   if (cap != null) card.setAttribute('data-cap', String(cap));
   if (cost != null) card.setAttribute('data-cost', String(cost));
-  card.append(h(doc, 'h3', {text: entryName(upgrade, lang, bonusLabel(ctx, upgrade.id))}));
   const description = entryDesc(upgrade, lang);
-  if (description) card.append(h(doc, 'p', {text: description}));
+  card.append(catalogHead(ctx, upgrade.id, entryName(upgrade, lang, bonusLabel(ctx, upgrade.id)), description));
   card.append(line(ctx, t(api, 'level'), cap == null ? num(level, lang) : `${num(level, lang)} / ${num(cap, lang)}`));
   const perLevel = perLevelBonus(upgrade);
   for (const [key, value] of bonusEntries(perLevel)) {
-    card.append(line(ctx, `${t(api, 'upgrade')} · ${bonusLabel(ctx, key)}`, formatBonusValue(key, value, lang)));
+    card.append(line(ctx, `${t(api, 'upgrade')} · ${profileBonusLabel(ctx, key)}`, formatBonusValue(key, value, lang)));
   }
   if (maxed) {
     card.append(badge(ctx, t(api, 'maxLevel')));
@@ -676,10 +777,9 @@ function renderTowers(ctx) {
   if (!towers.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'locked')}));
   for (const tower of towers) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-tower-${cssId(tower.id)}`});
-    card.append(h(doc, 'h3', {text: entryName(tower, lang, tower.id)}));
-    card.append(badge(ctx, `${t(api, 'rank')} 1`));
     const description = entryDesc(tower, lang);
-    if (description) card.append(h(doc, 'p', {text: description}));
+    card.append(catalogHead(ctx, tower.id, entryName(tower, lang, tower.id), description));
+    card.append(badge(ctx, `${t(api, 'rank')} 1`));
     card.append(statBlock(ctx, unitStatsOf(tower)));
     if (tower.id === 'support' || unitStatsOf(tower)?.aura) {
       card.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'helpAura',
@@ -712,7 +812,8 @@ function renderRecipes(ctx) {
     .sort((a, b) => Number(b.ready) - Number(a.ready) || a.index - b.index);
   for (const {recipe, parents, ready} of ordered) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-recipe-${cssId(recipe.id)}`});
-    card.append(h(doc, 'h3', {text: entryName(recipe, lang, recipe.id)}));
+    const description = entryDesc(recipe, lang);
+    card.append(catalogHead(ctx, recipe.id, entryName(recipe, lang, recipe.id), description));
     card.append(line(ctx, t(api, 'ingredients'), parents.map(parent => parentName(parent, lang)).join(' + ') || '—'));
     card.setAttribute('data-codex-ready', ready ? 'true' : 'false');
     const status = ready
@@ -731,8 +832,6 @@ function renderRecipes(ctx) {
     } else {
       card.append(mark);
     }
-    const description = entryDesc(recipe, lang);
-    if (description) card.append(h(doc, 'p', {text: description}));
     card.append(statBlock(ctx, unitStatsOf(recipe)));
     wrap.append(card);
   }
@@ -746,16 +845,21 @@ function renderEnemies(ctx) {
   if (!enemies.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'locked')}));
   for (const enemy of enemies) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-enemy-${cssId(enemy.id)}`});
-    card.append(h(doc, 'h3', {text: entryName(enemy, lang, enemy.id)}));
-    if (enemy.id === 'boss' || enemy.boss) card.append(badge(ctx, entryName(enemy, lang, 'boss')));
     const description = entryDesc(enemy, lang);
-    if (description) card.append(h(doc, 'p', {text: description}));
+    card.append(catalogHead(ctx, enemy.id, entryName(enemy, lang, enemy.id), description));
+    if (enemy.id === 'boss' || enemy.boss) card.append(badge(ctx, entryName(enemy, lang, 'boss')));
     const hp = Number.isFinite(enemy.maxHp) ? enemy.maxHp : Number.isFinite(enemy.hp) ? enemy.hp : enemy.health;
     if (Number.isFinite(hp)) card.append(line(ctx, tx(api, lang, 'health', 'Health', '生命'), num(hp, lang)));
-    if (Number.isFinite(enemy.speed)) card.append(line(ctx, t(api, 'speed'), num(enemy.speed, lang, 1)));
-    if (Number.isFinite(enemy.damage)) card.append(line(ctx, t(api, 'damage'), num(enemy.damage, lang)));
-    if (Number.isFinite(enemy.attackInterval)) card.append(line(ctx, t(api, 'attackSpeed'), `${num(enemy.attackInterval, lang, 2)} s`));
-    if (Number.isFinite(enemy.armor)) {
+    if (Number.isFinite(enemy.speed)) {
+      card.append(line(ctx, t(api, 'speed'), `${num(enemy.speed, lang, 1)} px/s`, `enemy-speed-${cssId(enemy.id)}`));
+    }
+    if (Number.isFinite(enemy.damage)) {
+      card.append(line(ctx, t(api, 'damage'), `${num(enemy.damage, lang)} / ${lang === 'zh' ? '口' : 'bite'}`, `enemy-damage-${cssId(enemy.id)}`));
+    }
+    if (Number.isFinite(enemy.attackInterval)) {
+      card.append(line(ctx, tx(api, lang, 'interval', 'Interval', '间隔'), `${num(enemy.attackInterval, lang, 2)} s`, `enemy-interval-${cssId(enemy.id)}`));
+    }
+    if (Number.isFinite(enemy.armor) && enemy.armor > 0) {
       card.append(line(ctx, tx(api, lang, 'armor', 'Armor', '护甲'), percent(enemy.armor, lang)));
     }
     if (Number.isFinite(enemy.xp)) card.append(line(ctx, t(api, 'xp'), num(enemy.xp, lang)));
@@ -781,11 +885,10 @@ function renderHeroCodex(ctx) {
   if (!upgrades.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'chooseUpgrade')}));
   for (const upgrade of upgrades) {
     const card = h(doc, 'article', {className: 'card', 'data-testid': `codex-hero-${cssId(upgrade.id)}`});
-    card.append(h(doc, 'h3', {text: entryName(upgrade, lang, upgrade.id)}));
-    const cap = upgradeCap(upgrade);
-    if (cap != null) card.append(line(ctx, t(api, 'maxLevel'), num(cap, lang)));
     const description = entryDesc(upgrade, lang);
-    if (description) card.append(h(doc, 'p', {text: description}));
+    card.append(catalogHead(ctx, upgrade.id, entryName(upgrade, lang, upgrade.id), description));
+    const cap = upgradeCap(upgrade);
+    if (cap != null) card.append(line(ctx, tx(api, lang, 'levelCap', 'Max level', '等级上限'), num(cap, lang)));
     appendEffect(ctx, card, upgrade);
     wrap.append(card);
   }
@@ -796,21 +899,41 @@ function statBlock(ctx, stats) {
   if (!stats) return null;
   const {doc, api, lang} = ctx;
   const box = h(doc, 'div', {className: 'meta-stack'});
-  if (Number.isFinite(stats.damage)) box.append(line(ctx, t(api, 'damage'), num(stats.damage, lang, 2)));
+  if (Number.isFinite(stats.damage)) {
+    const digits = Number.isInteger(stats.damage) ? 0 : 2;
+    const amount = num(stats.damage, lang, digits);
+    const hit = stats.damage > 0 ? `${amount} / ${lang === 'zh' ? '发' : 'shot'}` : amount;
+    box.append(line(ctx, t(api, 'damage'), hit));
+  }
   if (Number.isFinite(stats.interval) && stats.interval > 0) {
     box.append(line(ctx, t(api, 'attackSpeed'), `${num(1 / stats.interval, lang, 2)} /s`));
     box.append(line(ctx, tx(api, lang, 'interval', 'Interval', '间隔'), `${num(stats.interval, lang, 2)} s`));
   }
-  if (Number.isFinite(stats.range)) box.append(line(ctx, t(api, 'range'), num(stats.range, lang, 0)));
+  if (Number.isFinite(stats.range)) box.append(line(ctx, t(api, 'range'), `${num(stats.range, lang, 0)} px`));
   if (Number.isFinite(stats.critChance)) box.append(line(ctx, t(api, 'crit'), percent(stats.critChance, lang)));
   if (Number.isFinite(stats.critMultiplier) && stats.critMultiplier !== 1) {
     box.append(line(ctx, tx(api, lang, 'critMultiplier', 'Crit multiplier', '暴击倍率'), `×${num(stats.critMultiplier, lang, 2)}`));
   }
   if (Number.isFinite(stats.projectileSpeed)) {
-    box.append(line(ctx, tx(api, lang, 'projectileSpeed', 'Projectile speed', '弹速'), num(stats.projectileSpeed, lang, 0)));
+    box.append(line(ctx, tx(api, lang, 'projectileSpeed', 'Projectile speed', '弹速'), `${num(stats.projectileSpeed, lang, 0)} px/s`));
   }
   for (const key of ['splash', 'chain', 'chainRange', 'pierce']) {
-    if (Number.isFinite(stats[key]) && stats[key] !== 0) box.append(line(ctx, bonusLabel(ctx, key), num(stats[key], lang, 2)));
+    if (!(Number.isFinite(stats[key]) && stats[key] !== 0)) continue;
+    let value;
+    if (key === 'splash') {
+      const amount = num(stats[key], lang, 0);
+      value = lang === 'zh' ? `被命中的敌人周围 ${amount} px` : `${amount} px around the enemy that was hit`;
+    } else if (key === 'chainRange') {
+      const amount = num(stats[key], lang, 0);
+      value = lang === 'zh' ? `距上一名敌人 ${amount} px` : `${amount} px from the previous enemy`;
+    } else if (key === 'pierce') {
+      const amount = num(stats[key], lang, 0);
+      const one = Math.round(Number(stats[key])) === 1;
+      value = lang === 'zh' ? `额外 ${amount} 名敌人` : `${amount} extra ${one ? 'enemy' : 'enemies'}`;
+    } else {
+      value = num(stats[key], lang, 2);
+    }
+    box.append(line(ctx, bonusLabel(ctx, key), value));
   }
   for (const [label, value] of statusLines(ctx, stats)) box.append(line(ctx, label, value));
   if (Array.isArray(stats.mechanics)) {
@@ -835,7 +958,7 @@ function statusLines(ctx, stats) {
   }
   if (stats.poison && typeof stats.poison === 'object') {
     const extra = Number.isFinite(stats.poison.maxStacks) ? ` · ${tx(api, lang, 'stacks', 'Stacks', '层数')} ${num(stats.poison.maxStacks, lang, 0)}` : '';
-    lines.push([tx(api, lang, 'poison', 'Poison', '毒素'), `${dotText(ctx, stats.poison)}${extra}`]);
+    lines.push([tx(api, lang, '', 'Poison', '毒素'), `${dotText(ctx, stats.poison)}${extra}`]);
   }
   if (stats.slow && typeof stats.slow === 'object') {
     const parts = [];
@@ -1185,7 +1308,10 @@ function startRunBody(ctx) {
     return;
   }
   local.confirmStart = false;
-  const payload = {difficulty: selectedDifficulty(ctx.profile)};
+  const payload = {
+    difficulty: selectedDifficulty(ctx.profile),
+    expedition: selectedExpedition(ctx.rawProfile || ctx.profile)
+  };
   const seed = readSeed(local.seed);
   if (seed !== undefined) payload.seed = seed;
   const result = act(ctx, 'start', payload);
@@ -1235,6 +1361,7 @@ function appendEffect(ctx, card, entry) {
   for (const [key, value] of bonusEntries(effect)) {
     card.append(line(ctx, bonusLabel(ctx, key), formatBonusValue(key, value, ctx.lang)));
   }
+  if (effect.poison && typeof effect.poison === 'object') appendPoison(ctx, card, effect.poison);
 }
 
 function noteResult(ctx, result, okKey) {
@@ -1301,6 +1428,22 @@ function selectedDifficulty(profile) {
   if (local.difficulty && DIFFICULTIES[local.difficulty]) return local.difficulty;
   if (DIFFICULTIES[profile?.settings?.difficulty]) return profile.settings.difficulty;
   return 'normal';
+}
+
+function selectedExpedition(profile) {
+  if (local.expedition == null) {
+    const saved = profile?.settings?.expedition;
+    local.expedition = typeof saved === 'string' && Object.prototype.hasOwnProperty.call(EXPEDITIONS, saved) ? saved : 'watch';
+  }
+  if (!Object.prototype.hasOwnProperty.call(EXPEDITIONS, local.expedition)) local.expedition = 'watch';
+  return local.expedition;
+}
+
+function expeditionClears(profile, id) {
+  const book = profile?.expeditions;
+  const row = book && typeof book === 'object' && !Array.isArray(book) ? book[id] : null;
+  const clears = row && typeof row === 'object' ? row.clears : null;
+  return typeof clears === 'number' && Number.isFinite(clears) && clears > 0 ? clears : 0;
 }
 
 function runIsLive(run) {
@@ -1553,8 +1696,7 @@ function equippedBonusLine(ctx, item) {
 function equippedBonusPhrase(ctx, key, value) {
   const shown = formatBonusValue(key, value, ctx.lang);
   if (key === 'fence' || key === 'vitality') {
-    const label = ctx.lang === 'zh' ? '栅栏' : 'Fence HP';
-    return `${label} ${shown}`;
+    return `${bonusLabel(ctx, 'fence')} ${shown}`;
   }
   const heroLabel = {
     damage: ['Hero damage', '英雄伤害'],
@@ -1619,16 +1761,29 @@ function profileBonuses(profile) {
   }
 }
 
+function profileBonusLabel(ctx, key) {
+  const named = {
+    damage: ['Hero damage', '英雄伤害'],
+    haste: ['Hero attack speed', '英雄攻击速度'],
+    range: ['Hero range', '英雄射程'],
+    critChance: ['Hero crit chance', '英雄暴击率'],
+  }[key];
+  if (named) return ctx.lang === 'zh' ? named[1] : named[0];
+  return bonusLabel(ctx, key);
+}
+
 function bonusLabel(ctx, key) {
   const labels = {
     damage: ['damage', 'Damage', '伤害'],
+    damageAdd: ['damage', 'Damage', '伤害'],
     haste: ['haste', 'Haste', '攻速'],
     range: ['range', 'Range', '射程'],
     critChance: ['crit', 'Crit chance', '暴击率'],
+    critMultiplier: ['critMultiplier', 'Crit multiplier', '暴击倍率'],
     crit: ['crit', 'Crit', '暴击'],
-    fence: ['fence', 'Fence HP', '栅栏生命'],
+    fence: ['fenceBonus', 'Fence HP', '栅栏生命'],
     reward: ['rewardMultiplier', 'Reward', '奖励'],
-    vitality: ['vitality', 'Fence HP', '栅栏生命'],
+    vitality: ['fenceBonus', 'Fence HP', '栅栏生命'],
     splash: ['splash', 'Splash', '溅射'],
     chain: ['chain', 'Chain', '连锁'],
     chainRange: ['chainRange', 'Chain range', '连锁范围'],
@@ -1653,15 +1808,27 @@ function slotLabel(ctx, slot) {
 
 function formatBonusValue(key, value, lang) {
   if (!Number.isFinite(value)) return '—';
-  if (PIXEL_KEYS.has(key)) return signed(num(value, lang, 0), value);
+  if (PIXEL_KEYS.has(key) || key === 'damageAdd' || key === 'pierce') return signed(num(value, lang, 0), value);
+  if (key === 'critMultiplier') return signed(num(value, lang, 1), value);
   if (FLAT_KEYS.has(key)) return signed(num(value, lang, Number.isInteger(value) ? 0 : 1), value);
   if (FRACTION_KEYS.has(key) && Math.abs(value) <= 1.5) return signed(percent(value, lang), value);
   return signed(num(value, lang, 2), value);
 }
 
+function appendPoison(ctx, card, poison) {
+  const dps = Number(poison.dps);
+  const duration = Number(poison.duration);
+  if (!Number.isFinite(dps) && !Number.isFinite(duration)) return;
+  const lang = ctx.lang === 'zh' ? 'zh' : 'en';
+  const amount = num(dps, lang, Number.isInteger(dps) ? 0 : 1);
+  const seconds = num(duration, lang, Number.isInteger(duration) ? 0 : 1);
+  const value = lang === 'zh' ? `${amount}/秒，${seconds} 秒` : `${amount}/s for ${seconds}s`;
+  card.append(line(ctx, lang === 'zh' ? '毒素' : 'Poison', value));
+}
+
 function dotText(ctx, effect) {
   const parts = [];
-  if (Number.isFinite(effect.dps)) parts.push(`${t(ctx.api, 'damage')} ${num(effect.dps, ctx.lang, 2)}`);
+  if (Number.isFinite(effect.dps)) parts.push(`${num(effect.dps, ctx.lang, 2)}${ctx.lang === 'zh' ? '/秒' : '/s'}`);
   if (Number.isFinite(effect.duration)) parts.push(`${num(effect.duration, ctx.lang, 1)} s`);
   return parts.join(' · ') || '—';
 }
@@ -1732,11 +1899,16 @@ function appendEndlessOffer(ctx, card) {
 }
 
 function pressureText(ctx, entry) {
-  return [
-    `${tx(ctx.api, ctx.lang, 'health', 'Health', '生命')} ×${num(entry.health, ctx.lang, 2)}`,
-    `${t(ctx.api, 'speed')} ×${num(entry.speed, ctx.lang, 2)}`,
-    `${t(ctx.api, 'damage')} ×${num(entry.damage, ctx.lang, 2)}`
-  ].join(' · ');
+  const parts = [
+    ['enemyHealth', 'Enemy health', '敌人生命', entry.health],
+    ['enemySpeed', 'Enemy speed', '敌人速度', entry.speed],
+    ['enemyDamage', 'Enemy damage', '敌人伤害', entry.damage],
+    ['pressureCount', 'Enemy count', '敌人数量', entry.count],
+  ];
+  return parts
+    .filter(([, , , value]) => Number.isFinite(value))
+    .map(([key, en, zh, value]) => `${tx(ctx.api, ctx.lang, key, en, zh)} ×${num(value, ctx.lang, 2)}`)
+    .join(' · ');
 }
 
 function onOff(ctx, on) {

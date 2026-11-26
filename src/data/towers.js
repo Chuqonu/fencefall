@@ -9,10 +9,10 @@
  * inside that function; applying them here would count them twice.
  *
  * Attack range is logical pixels from the defender slot center to an enemy
- * center. Rear centers are y=592 and the fence is y=450, so the back row is
- * 142px from the fence. Every base range clears that gap and still covers at
- * least a neighboring column along the fence. Towers and hybrids never come
- * back below MIN_USEFUL_RANGE. Aura range does not use that floor.
+ * center. The back row sits just behind the front row, and the fence sits just
+ * ahead of the front row. Every base range clears the back-row gap to the fence
+ * and still covers at least a neighboring column along the fence. Towers and
+ * hybrids never come back below MIN_USEFUL_RANGE. Aura range does not use that floor.
  *
  * chain and pierce count extra targets after the primary, so the default 0
  * means a single target. Splash damages other enemies within that radius of
@@ -28,7 +28,7 @@
  * Every base tower fires on its interval, including support.
  * Unknown extra stat fields are copied through and are not rank-scaled.
  */
-import {BASE_TYPES} from '../shared.js';
+import {ARENA, BASE_TYPES, slotGeometry} from '../shared.js';
 import {RECIPES} from './recipes.js';
 import {getHeroStats} from '../systems/hero.js';
 
@@ -53,9 +53,9 @@ export const AURA_RULES = Object.freeze({
  */
 export const RANK_SCALE = Object.freeze({
   maxRank: 4,
-  damage: Object.freeze([1, 2.05, 4.3, 9]),
-  interval: Object.freeze([1, 0.94, 0.88, 0.82]),
-  rangeAdd: Object.freeze([0, 8, 16, 26]),
+  damage: Object.freeze([1, 2.6, 5.6, 12]),
+  interval: Object.freeze([1, 0.9, 0.82, 0.74]),
+  rangeAdd: Object.freeze([0, 18, 36, 56]),
   critAdd: Object.freeze([0, 0.015, 0.03, 0.05]),
   critMultiplierAdd: Object.freeze([0, 0.05, 0.1, 0.15]),
   projectileSpeedAdd: Object.freeze([0, 20, 40, 60]),
@@ -318,8 +318,11 @@ function percent(fraction) {
   return Math.round(fraction * 100);
 }
 
+const columnPitch = slotGeometry(1).x - slotGeometry(0).x;
+const rowPitch = ARENA.backY - ARENA.frontY;
+const twoSlotsAway = columnPitch * 2;
 const supportAuraMax = supportStats.aura.range + RANK_SCALE.auraRangeAdd[RANK_SCALE.maxRank - 1];
-const supportReach = supportAuraMax < 144
+const supportReach = supportAuraMax < twoSlotsAway
   ? {
       en: 'At every rank the aura covers neighboring slots, diagonals included, and does not reach a slot two places away.',
       zh: '每一阶的光环都能覆盖相邻槽位（含对角），但到不了隔一个槽位。'
@@ -402,8 +405,8 @@ export const TOWERS = Object.freeze({
     role: BASE_IDENTITY.bolt.role,
     name: BASE_IDENTITY.bolt.name,
     description: Object.freeze({
-      en: `Projectile shots pierce one extra enemy and can crit. ${boltPartners.en} Rank 1 deals ${boltStats.damage} damage every ${boltStats.interval}s. Attack range is ${boltStats.range}. It fires a fast rivet from its slot center at any enemy in that range. There are no lanes. It pierces ${boltStats.pierce} extra enemy and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
-      zh: `投射会贯穿额外一名敌人，并且可以暴击。${boltPartners.zh}1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，攻击射程 ${boltStats.range}。从槽位中心攻击该射程内的任意敌人，不按列锁定。可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
+      en: `Projectile shots pierce one extra enemy and can crit. ${boltPartners.en} Rank 1 deals ${boltStats.damage} damage every ${boltStats.interval}s. Attack range is ${boltStats.range}. It fires a fast rivet from its slot center at the enemy closest to the fence in that range. There are no lanes. It pierces ${boltStats.pierce} extra enemy and has a ${percent(boltStats.critChance)}% chance to crit for ${boltStats.critMultiplier}× damage. Ranks 2–4 raise damage, attack speed, crit, and range. Rank 4 pierces one more enemy. Rank never exceeds 4.`,
+      zh: `投射会贯穿额外一名敌人，并且可以暴击。${boltPartners.zh}1 阶伤害 ${boltStats.damage}，攻击间隔 ${boltStats.interval} 秒，攻击射程 ${boltStats.range}。从槽位中心攻击该射程内最靠近栅栏的敌人，不按列锁定。可额外贯穿 ${boltStats.pierce} 名敌人，并有 ${percent(boltStats.critChance)}% 几率造成 ${boltStats.critMultiplier} 倍暴击。2 至 4 阶提高伤害、攻速、暴击和射程。4 阶再多贯穿 1 名敌人。阶数最高为 4。`
     }),
     stats: Object.freeze(boltStats)
   }),
@@ -452,8 +455,8 @@ export const TOWERS = Object.freeze({
     role: BASE_IDENTITY.support.role,
     name: BASE_IDENTITY.support.name,
     description: Object.freeze({
-      en: `Support buffs nearby defenders, including itself, and this banner still fires. ${supportPartners.en} Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. Attack range is ${supportStats.range}. It shoots a light bolt at any enemy within that range of this slot's center, across columns, by the same rule as the other towers. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
-      zh: `辅助会强化附近的防御者（包括自身），同时这面旌旗仍然射击。${supportPartners.zh}1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。射击规则与其他塔相同：攻击距离槽位中心该射程以内的任意敌人，可以跨列。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
+      en: `Support buffs nearby defenders, including itself, and this banner still fires. ${supportPartners.en} Rank 1 deals ${supportStats.damage} damage every ${supportStats.interval}s. Attack range is ${supportStats.range}. It shoots a light bolt at the enemy closest to the fence within that range of this slot's center, across columns, by the same rule as the other towers. The aura does not target enemies. Its range is separate (${supportStats.aura.range} at rank 1). Every defender whose slot center is inside that aura, including this banner, gains +${percent(supportStats.aura.damage)}% damage and +${percent(supportStats.aura.haste)}% haste. Bonuses from several banners add together. Combat caps the combined damage bonus at ${percent(AURA_RULES.damageCap)}% and the combined haste at ${percent(AURA_RULES.hasteCap)}%. Haste sets the attack interval to interval ÷ (1 + haste). ${supportReach.en} Rank never exceeds 4.`,
+      zh: `辅助会强化附近的防御者（包括自身），同时这面旌旗仍然射击。${supportPartners.zh}1 阶伤害 ${supportStats.damage}，攻击间隔 ${supportStats.interval} 秒，攻击射程 ${supportStats.range}。射击规则与其他塔相同：攻击距离槽位中心该射程以内、最靠近栅栏的敌人，可以跨列。光环不锁定敌人，范围单独计算（1 阶为 ${supportStats.aura.range}）。槽位中心落在光环内的防御者（包括这面旌旗）获得 ${percent(supportStats.aura.damage)}% 伤害和 ${percent(supportStats.aura.haste)}% 急速。多面旌旗的加成相加。战斗把合计伤害加成限制在 ${percent(AURA_RULES.damageCap)}%，合计急速限制在 ${percent(AURA_RULES.hasteCap)}%。急速把攻击间隔改为间隔 ÷ (1 + 急速)。${supportReach.zh}阶数最高为 4。`
     }),
     stats: Object.freeze(supportStats)
   })
@@ -499,8 +502,8 @@ function assertCatalog() {
   const ids = ['bolt', 'fire', 'frost', 'lightning', 'poison', 'support'];
   if (Object.keys(TOWERS).join(',') !== ids.join(',')) throw new Error('TOWERS keys must match BASE_TYPES');
   const before = JSON.stringify(TOWERS);
-  const rearGap = 592 - 450;
-  const diagonal = Math.hypot(72, 84);
+  const rearGap = ARENA.backY - ARENA.fenceY;
+  const diagonal = Math.hypot(columnPitch, rowPitch);
   for (const id of ids) {
     const tower = TOWERS[id];
     if (!tower.name?.en || !tower.name?.zh || !tower.description?.en || !tower.description?.zh) throw new Error(`missing bilingual text: ${id}`);
@@ -529,7 +532,7 @@ function assertCatalog() {
     }
     if (!(tower.stats.range > rearGap)) throw new Error(`${id} cannot reach across the fence from the back row`);
     const reach = Math.sqrt(tower.stats.range * tower.stats.range - rearGap * rearGap);
-    if (!(reach >= 72)) throw new Error(`${id} back-row range misses the neighboring column at the fence`);
+    if (!(reach >= columnPitch)) throw new Error(`${id} back-row range misses the neighboring column at the fence`);
     for (let rank = 1; rank <= 4; rank += 1) {
       const stats = scaleStats(tower.stats, rank);
       if (!finiteTree(stats)) throw new Error(`${id} rank ${rank} is not finite`);
@@ -544,7 +547,10 @@ function assertCatalog() {
     }
   }
   if (!(TOWERS.support.stats.aura.range > diagonal)) throw new Error('support aura misses a diagonal neighbor');
-  if (!(supportAuraMax < 144)) throw new Error('support aura reaches two slots away, but the description says it does not');
+  const stopsShort = supportAuraMax < twoSlotsAway;
+  const saysShort = TOWERS.support.description.en.includes('does not reach a slot two places away')
+    && TOWERS.support.description.zh.includes('隔一个槽位');
+  if (stopsShort !== saysShort) throw new Error('support aura reach sentence does not match the column pitch');
   const unit = {kind: 'tower', type: 'bolt', rank: 2, cooldown: 1, kills: 0, upgrades: {}};
   const unitBefore = JSON.stringify(unit);
   const rolled = {rng: 99, nextId: 4};

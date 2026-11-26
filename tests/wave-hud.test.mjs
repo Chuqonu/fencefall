@@ -2,8 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun} from '../src/state.js';
-import {WAVES, getWaveInfo} from '../src/systems/waves.js';
+import {WAVES, getWaveInfo, updateWaves} from '../src/systems/waves.js';
 import {mountShell} from '../src/ui/shell.js';
+import {t as translate} from '../src/i18n.js';
 
 function makeNode(tag) {
   const names = new Set();
@@ -114,6 +115,7 @@ function mount(state, language = 'en') {
   const holder = {state};
   const view = mountShell(root, {
     act() {},
+    t(key, vars) { return translate(language, key, vars); },
     getState() { return holder.state; },
     getProfile() { return {settings: {language, sound: false, reducedMotion: false}}; },
     getUI() { return {screen: 'battle'}; }
@@ -121,6 +123,11 @@ function mount(state, language = 'en') {
   return {
     holder,
     text(id) { return findByTestId(root, id)?.textContent ?? ''; },
+    fenceFill() {
+      const meter = findByTestId(root, 'hud-fence');
+      const track = meter?.children?.find(child => String(child.className).includes('meter-track'));
+      return track?.children?.find(child => String(child.className).includes('meter-fill'))?.className ?? '';
+    },
     render() { view.render(); },
     close() {
       view.destroy();
@@ -140,6 +147,24 @@ function atProgress(wave, fraction) {
   state.time = current.start + (end - current.start) * fraction;
   return state;
 }
+
+test('the battle names the sortie without changing the wave number', () => {
+  const state = createRun({seed: 5, difficulty: 'normal', runId: 'wave-hud-sortie', expedition: 'leap'});
+  state.wave = 2;
+  const hud = mount(state);
+  try {
+    assert.equal(hud.text('hud-sortie'), 'Leap Ash');
+    assert.equal(hud.text('hud-wave-value'), '2');
+  } finally {
+    hud.close();
+  }
+  const zh = mount(state, 'zh');
+  try {
+    assert.equal(zh.text('hud-sortie'), '灰跃');
+  } finally {
+    zh.close();
+  }
+});
 
 test('the wave value stays a dash with no run and a plain number before wave 1', () => {
   const empty = mount(null);
@@ -181,5 +206,105 @@ test('a started wave keeps the number on the wave value and leaves the percent o
     assert.equal(hud.text('hud-wave-value').includes('%'), false);
   } finally {
     hud.close();
+  }
+});
+
+test('a failing fence uses the danger chip unless pause wins', () => {
+  const low = createRun({seed: 6, difficulty: 'normal', runId: 'fence-danger'});
+  low.fence.hp = 160;
+  low.fence.maxHp = 600;
+  const zh = mount(low, 'zh');
+  try {
+    assert.equal(zh.text('hud-phase'), '栅栏岌岌可危');
+    assert.match(zh.fenceFill(), /is-low/);
+  } finally {
+    zh.close();
+  }
+  const safe = createRun({seed: 6, difficulty: 'normal', runId: 'fence-safe'});
+  safe.fence.hp = 500;
+  safe.fence.maxHp = 600;
+  const calm = mount(safe, 'en');
+  try {
+    assert.equal(calm.text('hud-phase'), '');
+    assert.equal(calm.fenceFill().includes('is-low'), false);
+  } finally {
+    calm.close();
+  }
+  low.paused = true;
+  const paused = mount(low, 'en');
+  try {
+    assert.equal(paused.text('hud-phase'), 'Paused');
+  } finally {
+    paused.close();
+  }
+});
+
+test('an approaching boss puts the next wave hint on the battle line', () => {
+  const first = WAVES.find(wave => wave.boss === true);
+  const state = createRun({seed: 9, difficulty: 'normal', runId: 'boss-hint-line'});
+  state.time = first.start - 8;
+  state.director.nextWave = WAVES.indexOf(first);
+  state.director.playerHint = {en: 'Current ash.', zh: '当前灰烬。'};
+  updateWaves(state);
+  const hud = mount(state, 'en');
+  try {
+    assert.equal(hud.text('hud-phase'), 'Boss approaching');
+    assert.equal(hud.text('hud-hint'), state.director.nextHint.en);
+    assert.equal(hud.text('hud-hint').includes('Current ash'), false);
+  } finally {
+    hud.close();
+  }
+  const zh = mount(state, 'zh');
+  try {
+    assert.equal(zh.text('hud-hint'), state.director.nextHint.zh);
+  } finally {
+    zh.close();
+  }
+});
+
+test('a queued boss keeps the boss hint instead of the following pack', () => {
+  const first = WAVES.find(wave => wave.boss === true);
+  const state = createRun({seed: 9, difficulty: 'normal', runId: 'boss-queued-hint'});
+  state.time = first.start - 8;
+  state.director.nextWave = WAVES.indexOf(first);
+  updateWaves(state);
+  state.time = first.start;
+  updateWaves(state);
+  const hud = mount(state, 'en');
+  try {
+    assert.equal(hud.text('hud-phase'), 'Boss approaching');
+    assert.equal(hud.text('hud-hint'), state.director.playerHint.en);
+    assert.equal(hud.text('hud-hint').includes('advance on the fence'), false);
+  } finally {
+    hud.close();
+  }
+  const zh = mount(state, 'zh');
+  try {
+    assert.equal(zh.text('hud-hint'), state.director.playerHint.zh);
+    assert.equal(zh.text('hud-hint').includes('正向栅栏推进'), false);
+  } finally {
+    zh.close();
+  }
+});
+
+test('the fight HUD keeps 1×, 1.5×, 3×, and 10×', () => {
+  const state = createRun({seed: 5, difficulty: 'normal', runId: 'speed-hud'});
+  const hud = mount(state, 'en');
+  try {
+    assert.equal(hud.text('btn-speed-1'), '1×');
+    assert.equal(hud.text('btn-speed-1-5'), '1.5×');
+    assert.equal(hud.text('btn-speed-3'), '3×');
+    assert.equal(hud.text('btn-speed-10'), '10×');
+  } finally {
+    hud.close();
+  }
+  const zh = mount(state, 'zh');
+  try {
+    assert.equal(zh.text('btn-speed-1'), '1×');
+    assert.equal(zh.text('btn-speed-1-5'), '1.5×');
+    assert.equal(zh.text('btn-speed-3'), '3×');
+    assert.equal(zh.text('btn-speed-10'), '10×');
+  } finally {
+    zh.close();
   }
 });

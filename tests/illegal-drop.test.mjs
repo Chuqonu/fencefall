@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createUnit} from '../src/shared.js';
-import {createRun} from '../src/state.js';
+import {createRun, simulate} from '../src/engine.js';
 import {previewMerge, mergeUnits} from '../src/systems/merges.js';
 import {createController} from '../src/boot.js';
 
@@ -115,10 +115,11 @@ test('an invalid merge leaves every unit in place and keeps one hero', () => {
   assert.equal(state.phase, 'playing');
   const snap = capture(state);
 
-  rejectMerge(state, snap, hero, 9, 0, 'not_planning');
-  rejectMerge(state, snap, hero, 0, 9, 'not_planning');
-  rejectMerge(state, snap, hero, 0, 3, 'not_planning');
-  rejectMerge(state, snap, hero, 4, 5, 'not_planning');
+  rejectMerge(state, snap, hero, 9, 0, 'hero_protected');
+  rejectMerge(state, snap, hero, 0, 9, 'hero_protected');
+  rejectMerge(state, snap, hero, 4, 5, 'rank_cap');
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
 
   state.paused = true;
   const illegal = [
@@ -185,14 +186,27 @@ test('an illegal drop, including one onto the hero, keeps both units', async () 
 
   const blocked = api.act('dragDrop', {from: 2, to: 0});
   assert.equal(blocked.ok, false);
-  assert.equal(blocked.reason, 'not-planning');
+  assert.equal(blocked.reason, 'heroProtected');
   assert.equal(blocked.snapped, true);
-  assertUntouched(state, snap, hero, 'drop before pause');
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assertUntouched(state, snap, hero, 'drop during play');
   const blockedPair = api.act('dragDrop', {from: 0, to: 1});
   assert.equal(blockedPair.ok, false);
-  assert.equal(blockedPair.reason, 'not-planning');
+  assert.equal(blockedPair.reason, 'rank_mismatch');
   assert.equal(blockedPair.snapped, true);
-  assertUntouched(state, snap, hero, 'pair before pause');
+  assert.equal(state.paused, false);
+  assertUntouched(state, snap, hero, 'pair during play');
+
+  const livePreview = api.act('mergePreview', {from: 0, to: 3});
+  assert.equal(livePreview.ok, true, livePreview.reason);
+  assert.equal(state.paused, false);
+  assertUntouched(state, snap, hero, 'live preview');
+  assert.equal(api.act('mergeCancel').ok, true);
+  assert.equal(api.getUI().mergePreview, null);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assertUntouched(state, snap, hero, 'live cancel');
 
   assert.equal(api.act('pause').paused, true);
   const drops = [
@@ -247,4 +261,23 @@ test('an illegal drop, including one onto the hero, keeps both units', async () 
   assert.equal(state.slots[7].unit, hail);
   assert.equal(heroCount(state), 1);
   assert.equal(state.stats.merges, 0);
+
+  assert.equal(api.act('resume').paused, false);
+  state.nextDraftXp = 1e9;
+  const time = state.time;
+  const tick = state.tick;
+  const confirmed = api.act('mergeConfirm', {from: 0, to: 3});
+  assert.equal(confirmed.ok, true, confirmed.reason);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.slots[0].unit, null);
+  assert.equal(state.slots[3].unit.type, 'cinderbolt');
+  assert.equal(state.slots[2].unit, hero);
+  assert.equal(heroCount(state), 1);
+  simulate(state, 0.5);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assert.ok(state.time > time);
+  assert.ok(state.tick > tick);
+  assert.equal(state.slots[3].unit.type, 'cinderbolt');
 });

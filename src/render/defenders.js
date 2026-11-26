@@ -3,7 +3,7 @@
  *
  * drawDefender(ctx, unit, x, y) plants the sprite's feet — including the
  * contact-shadow row — on (x, y). The cached image is 40×40, inside the
- * 24–40px art range, and slots are 64×72.
+ * 24–40px art range, and that body stays inside the slot.
  *
  * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Each
  * hybrid joins that pair's two parent shapes — bow, flame bowl, crystal,
@@ -16,7 +16,7 @@
  * The ring sits outside the body, so chevrons and hybrid shapes stay put.
  * Nothing here reads or writes gameplay RNG or run state.
  */
-import {BASE_TYPES, clamp} from '../shared.js';
+import {ARENA, BASE_TYPES, clamp} from '../shared.js';
 import {RECIPES} from '../data/recipes.js';
 import {getUnitStats} from '../data/towers.js';
 
@@ -244,12 +244,15 @@ function drawPixelCircle(ctx, cx, cy, radius, color) {
 }
 
 // Halo in the slot padding, outside the 40px body. Outer radius stays inside
-// the 64px slot and off the silhouette, chevrons, and contact shadow.
+// the slot and off the silhouette, chevrons, and contact shadow.
 function drawAuraRing(ctx, dx, dy, dw, dh) {
   const cx = Math.round(dx + dw / 2);
   const cy = Math.round(dy + dh / 2);
   const reach = Math.round(Math.min(dw, dh) / 2);
-  const outer = reach + Math.max(8, Math.round(Math.min(dw, dh) * 0.25));
+  const wanted = reach + Math.max(4, Math.round(Math.min(dw, dh) * 0.12));
+  const slotLimit = Math.floor(Math.min(ARENA.slotWidth, ARENA.slotHeight) / 2) - 1;
+  const outer = Math.min(wanted, slotLimit);
+  if (!(outer > reach + 1)) return;
   drawPixelCircle(ctx, cx, cy, outer, '#0c3f36');
   drawPixelCircle(ctx, cx, cy, outer - 1, '#7dcec0');
   drawPixelCircle(ctx, cx, cy, outer - 2, '#e7fff8');

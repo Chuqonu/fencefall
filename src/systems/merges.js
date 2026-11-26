@@ -1,6 +1,6 @@
 // Merge planning. previewMerge is pure; mergeUnits is the only mutation.
-// Merges are legal only while canPlan(state) is true (paused, or phase draft).
-// The source slot is consumed and the target slot receives the result.
+// Merges are legal while canPlan(state) is true: a running fight, a pause, or a draft.
+// A merge does not pause the clock. The source slot is consumed and the target receives the result.
 import { BASE_TYPES, canPlan, createUnit, emit } from '../shared.js';
 import { HYBRID_RANK_MAX, findRecipe, getRecipe, isRecipeId } from '../data/recipes.js';
 import { TOWERS } from '../data/towers.js';
@@ -142,7 +142,7 @@ function hybridDescription(entry, rank, fromType, toType) {
   const left = displayName(fromType);
   const right = displayName(toType);
   const lead = resultLead(entry.name, rank);
-  return hudLine(lead, `${left.en} + ${right.en} keep rank ${rank}.`, `${left.zh}＋${right.zh}仍是 ${rank} 阶。`);
+  return hudLine(lead, `${left.en} and ${right.en} combine into it.`, `${left.zh}与${right.zh}合成它。`);
 }
 
 function planMerge(state, fromIndex, toIndex) {
@@ -198,4 +198,31 @@ export function mergeUnits(state, fromIndex, toIndex) {
   if (plan.parents) event.parents = [...plan.parents];
   emit(state, 'merge', event);
   return { ok: true, unit };
+}
+
+// Slots that have at least one legal merge partner. The hero is never included.
+// previewMerge stays pure, so the battlefield can mark these without changing the run.
+export function mergeableSlotIndexes(state) {
+  const marks = [];
+  const slots = state?.slots;
+  if (!Array.isArray(slots)) return marks;
+  const seen = new Set();
+  for (let i = 0; i < slots.length; i++) {
+    const left = slots[i]?.unit;
+    if (!left || left.kind === 'hero') continue;
+    for (let j = i + 1; j < slots.length; j++) {
+      const right = slots[j]?.unit;
+      if (!right || right.kind === 'hero') continue;
+      if (previewMerge(state, i, j).ok !== true) continue;
+      if (!seen.has(i)) {
+        seen.add(i);
+        marks.push(i);
+      }
+      if (!seen.has(j)) {
+        seen.add(j);
+        marks.push(j);
+      }
+    }
+  }
+  return marks;
 }

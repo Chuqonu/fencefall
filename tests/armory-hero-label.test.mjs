@@ -71,3 +71,123 @@ test('equipped haste gear names the hero in both languages', () => {
     assert.doesNotMatch(line, /栅栏/);
   }
 });
+
+function rowText(node) {
+  const rows = [];
+  const walk = (current) => {
+    if (current?.className === 'meta-line') {
+      rows.push((current.children || []).map(child => child.textContent).join(' '));
+    }
+    for (const child of current?.children || []) walk(child);
+  };
+  walk(node);
+  return rows.join(' | ');
+}
+
+test('an Armory fence bonus says fence HP, not the fence itself', () => {
+  for (const language of ['en', 'zh']) {
+    const doc = documentStub();
+    const container = element(doc, 'div');
+    renderMetaPanel(container, 'armory', null, createProfile(language), {
+      t: key => t(language, key),
+      act: () => ({ok: false}),
+      getUI: () => ({}),
+    });
+    const roots = rowText(findByTestId(container, 'perm-vitality'));
+    const nails = rowText(findByTestId(container, 'equip-card-fence_nails'));
+    if (language === 'zh') {
+      assert.match(roots, /升级 · 栅栏生命 \+12/);
+      assert.equal(roots.includes('升级 · 栅栏 +12'), false);
+      assert.match(nails, /栅栏生命 \+30/);
+    } else {
+      assert.match(roots, /Upgrade · Fence HP \+12/);
+      assert.equal(roots.includes('Upgrade · Fence +12'), false);
+      assert.match(nails, /Fence HP \+30/);
+    }
+  }
+});
+
+test('permanent damage and haste name the hero', () => {
+  for (const language of ['en', 'zh']) {
+    const doc = documentStub();
+    const container = element(doc, 'div');
+    renderMetaPanel(container, 'armory', null, createProfile(language), {
+      t: key => t(language, key),
+      act: () => ({ok: false}),
+      getUI: () => ({}),
+    });
+    const damage = rowText(findByTestId(container, 'perm-damage'));
+    const haste = rowText(findByTestId(container, 'perm-haste'));
+    if (language === 'zh') {
+      assert.match(damage, /升级 · 英雄伤害 \+2/);
+      assert.match(haste, /升级 · 英雄攻击速度 \+2/);
+      assert.equal(damage.includes('升级 · 伤害'), false);
+      assert.equal(haste.includes('升级 · 急速'), false);
+    } else {
+      assert.match(damage, /Upgrade · Hero damage \+2/);
+      assert.match(haste, /Upgrade · Hero attack speed \+2/);
+      assert.equal(damage.includes('Upgrade · Damage'), false);
+      assert.equal(haste.includes('Upgrade · Haste'), false);
+    }
+  }
+});
+
+test('Armory totals and an equipped fence bonus name the hero and the fence HP', () => {
+  for (const language of ['en', 'zh']) {
+    const doc = documentStub();
+    const container = element(doc, 'div');
+    const profile = createProfile(language);
+    profile.equipmentOwned = ['fence_nails'];
+    profile.equipped.armor = 'fence_nails';
+    renderMetaPanel(container, 'armory', null, profile, {
+      t: key => t(language, key),
+      act: () => ({ok: false}),
+      getUI: () => ({}),
+    });
+    const damage = rowText(findByTestId(container, 'bonus-damage'));
+    const haste = rowText(findByTestId(container, 'bonus-haste'));
+    const fence = rowText(findByTestId(container, 'bonus-fence'));
+    const equipped = texts(findByTestId(container, 'equipped-bonus-armor'));
+    if (language === 'zh') {
+      assert.match(damage, /英雄伤害/);
+      assert.match(haste, /英雄攻击速度/);
+      assert.match(fence, /栅栏生命/);
+      assert.match(equipped, /栅栏生命 \+30/);
+      assert.equal(equipped.includes('栅栏 +30'), false);
+    } else {
+      assert.match(damage, /Hero damage/);
+      assert.match(haste, /Hero attack speed/);
+      assert.match(fence, /Fence HP/);
+      assert.match(equipped, /Fence HP \+30/);
+    }
+  }
+});
+
+test('a Normal new-run button calls 600 fence HP', () => {
+  for (const language of ['en', 'zh']) {
+    const doc = documentStub();
+    const container = element(doc, 'div');
+    renderMetaPanel(container, 'menu', null, createProfile(language), {
+      t: key => t(language, key),
+      act: () => ({ok: false}),
+      getUI: () => ({}),
+    });
+    const button = findByTestId(container, 'difficulty-normal');
+    const line = (button?.children || []).map(child => child.textContent).join(' | ');
+    if (language === 'zh') {
+      assert.match(line, /栅栏生命 600/);
+      assert.equal(line.includes('栅栏 600'), false);
+      assert.match(line, /敌人生命 ×1/);
+      assert.match(line, /敌人速度 ×1/);
+      assert.match(line, /敌人伤害 ×1/);
+      assert.match(line, /敌人数量 ×1/);
+    } else {
+      assert.match(line, /Fence HP 600/);
+      assert.equal(line.includes('Fence 600'), false);
+      assert.match(line, /Enemy health ×1/);
+      assert.match(line, /Enemy speed ×1/);
+      assert.match(line, /Enemy damage ×1/);
+      assert.match(line, /Enemy count ×1/);
+    }
+  }
+});

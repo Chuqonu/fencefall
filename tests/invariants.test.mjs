@@ -65,13 +65,19 @@ test('1x and 3x spend the same number of fixed steps for the same simulation tim
   }
   const one = run(1);
   const triple = run(3);
+  const ten = run(10);
   assert.equal(one.speed, 1);
   assert.equal(triple.speed, 3);
+  assert.equal(ten.speed, 10);
   assert.equal(one.phase, 'playing');
   assert.equal(triple.phase, 'playing');
+  assert.equal(ten.phase, 'playing');
   assert.equal(one.tick, triple.tick);
+  assert.equal(one.tick, ten.tick);
   assert.equal(one.tick, simSeconds * 60);
   assert.ok(Math.abs(one.time - triple.time) < 1e-9);
+  assert.ok(Math.abs(one.time - ten.time) < 1e-9);
   assert.ok(Math.abs(one.time - simSeconds) < 1e-6);
   assert.deepEqual(withoutSpeed(one), withoutSpeed(triple));
+  assert.deepEqual(withoutSpeed(one), withoutSpeed(ten));
 });

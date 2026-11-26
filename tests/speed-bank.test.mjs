@@ -28,18 +28,20 @@ function withoutSpeed(state) {
 
 test('advancing with a large gap, then pausing, does not apply that gap after resume', () => {
   for (const flag of ['paused', 'hiddenPaused']) {
-    for (const speed of [1, 3]) {
+    for (const speed of [1, 3, 10]) {
       const subject = fresh(`${flag}-${speed}`, speed);
       advance(subject, STEP * 0.6);
       assert.equal(subject.phase, 'playing');
-      assert.ok(subject.accumulator > 0, `${flag} ${speed}x banked a partial step`);
+      if (speed === 10) assert.equal(subject.accumulator, 0, `${flag} 10x spent the opening slice in whole steps`);
+      else assert.ok(subject.accumulator > 0, `${flag} ${speed}x banked a partial step`);
 
       advance(subject, GAP);
       const added = simAdded(speed);
       const tickAfterGap = Math.floor(added / STEP + 1e-10);
       assert.equal(subject.tick, tickAfterGap, `${flag} ${speed}x applied only the capped slice`);
       assert.ok(subject.tick < GAP * speed * 60, `${flag} ${speed}x ran the whole gap`);
-      assert.ok(subject.accumulator > 0 && subject.accumulator < STEP, `${flag} ${speed}x left a bank`);
+      if (speed === 10) assert.equal(subject.accumulator, 0, `${flag} 10x should spend the wall cap in whole steps`);
+      else assert.ok(subject.accumulator > 0 && subject.accumulator < STEP, `${flag} ${speed}x left a bank`);
       assert.ok(Math.abs(subject.time - tickAfterGap * STEP) < 1e-9);
 
       const timeAfterGap = subject.time;
@@ -94,15 +96,22 @@ test('1x and 3x spend the same fixed steps for the same simulation time', () => 
 
   const one = run(1);
   const triple = run(3);
+  const ten = run(10);
   assert.equal(one.speed, 1);
   assert.equal(triple.speed, 3);
+  assert.equal(ten.speed, 10);
   assert.equal(one.phase, 'playing');
   assert.equal(triple.phase, 'playing');
+  assert.equal(ten.phase, 'playing');
   assert.equal(one.tick, triple.tick);
+  assert.equal(one.tick, ten.tick);
   assert.equal(one.tick, simSeconds * 60);
   assert.equal(one.accumulator, 0);
   assert.equal(triple.accumulator, 0);
+  assert.equal(ten.accumulator, 0);
   assert.ok(Math.abs(one.time - triple.time) < 1e-9);
+  assert.ok(Math.abs(one.time - ten.time) < 1e-9);
   assert.ok(Math.abs(one.time - simSeconds) < 1e-6);
   assert.deepEqual(withoutSpeed(one), withoutSpeed(triple));
+  assert.deepEqual(withoutSpeed(one), withoutSpeed(ten));
 });

@@ -2,6 +2,8 @@
  * Battlefield backdrop, logical 360×640.
  * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
  * then the ground both defender rows stand on, with exactly two rows of five slots.
+ * The deck beside that block stays open. A thin sill continues the fence to the
+ * edge, and the side rooms are left clear for a later element.
  * Fence art follows hp/maxHp: intact above about 60%, cracked below that, failing below about 30%.
  * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
  * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
@@ -35,9 +37,15 @@ const BREAK_RANK = (() => {
   return rank;
 })();
 
+const FENCE_ART_Y = 450;
+const FENCE_DY = ARENA.fenceY - FENCE_ART_Y;
+const SLEEPER_ART_Y = 466;
+const SLEEPER_Y = SLEEPER_ART_Y + FENCE_DY;
+const APPROACH_TOP = 418 + FENCE_DY;
 const TUFTS = Object.freeze([
   [5, 120], [10, 188], [4, 252], [13, 318], [8, 378],
-  [354, 142], [348, 214], [353, 286], [344, 348], [350, 396]
+  [354, 142], [348, 214], [353, 286], [344, 348], [350, 396],
+  [22, APPROACH_TOP - 48], [338, APPROACH_TOP - 28]
 ]);
 const TREES = Object.freeze([
   [8, 22], [28, 14], [50, 18], [96, 9], [154, 7], [214, 8], [270, 10], [318, 15], [340, 22], [354, 12]
@@ -48,8 +56,6 @@ const STARS = Object.freeze([
 ]);
 const POSTS = Object.freeze([0, 86, 174, 262, 348]);
 const ENTRY_Y = 46;
-const SLEEPER_Y = 466;
-const GROUND_Y = 472;
 const SCUFFS = Object.freeze([
   [28, 128, 42], [196, 168, 34], [64, 214, 30], [236, 258, 40],
   [36, 304, 28], [176, 346, 32], [88, 392, 24], [214, 418, 22]
@@ -296,16 +302,17 @@ function paintEntryEdge(ctx) {
 }
 
 function paintApproach(ctx) {
+  const top = APPROACH_TOP;
   ctx.fillStyle = '#161e1c';
-  ctx.fillRect(0, 418, W, 48);
+  ctx.fillRect(0, top, W, 48);
   ctx.fillStyle = '#4a5c52';
-  ctx.fillRect(0, 418, W, 1);
+  ctx.fillRect(0, top, W, 1);
   ctx.fillStyle = '#101816';
-  ctx.fillRect(0, 454, W, 12);
+  ctx.fillRect(0, top + 36, W, 12);
   for (let x = 0; x < W; x += 4) {
     const n = hash2(x, 422);
     if ((n & 3) !== 0) continue;
-    const y = 422 + ((n >>> 2) & 7) * 2;
+    const y = top + 4 + ((n >>> 2) & 7) * 2;
     ctx.fillStyle = (n & 16) ? '#2a3830' : '#101816';
     ctx.fillRect(x, y, 3 + (n & 1), 1);
   }
@@ -357,7 +364,7 @@ function paintField(ctx) {
     ctx.fillRect(x, y0, 2, 1);
   }
   for (const [x, height] of TREES) drawTree(ctx, x, height);
-  for (let y = 64; y < 448; y += 4) {
+  for (let y = 64; y < APPROACH_TOP; y += 4) {
     for (let x = 8; x < 352; x += 4) {
       const dx = Math.abs(x - 180) / 180;
       const n = hash2(x, y);
@@ -370,7 +377,7 @@ function paintField(ctx) {
       }
     }
   }
-  for (let y = 404; y < 456; y += 3) {
+  for (let y = APPROACH_TOP - 14; y < SLEEPER_Y - 8; y += 3) {
     for (let x = 0; x < W; x += 3) {
       if ((hash2(x + 19, y) & 3) === 0) {
         ctx.fillStyle = '#1e2622';
@@ -385,13 +392,15 @@ function paintField(ctx) {
     [24, 412, 28, 3, '#1c2420'], [250, 404, 22, 3, '#1c2420']
   ];
   for (const [x, y, width, height, color] of patches) {
+    const py = y >= 390 ? y + FENCE_DY : y;
     ctx.fillStyle = color;
-    ctx.fillRect(x, y, width, height);
+    ctx.fillRect(x, py, width, height);
   }
   ctx.fillStyle = '#1a2420';
   for (const [x, y, width] of SCUFFS) {
-    ctx.fillRect(x, y, width, 1);
-    ctx.fillRect(x + 5, y + 2, Math.max(8, width - 12), 1);
+    const sy = y >= 380 ? y + FENCE_DY : y;
+    ctx.fillRect(x, sy, width, 1);
+    ctx.fillRect(x + 5, sy + 2, Math.max(8, width - 12), 1);
   }
   drawEdgeRuins(ctx);
   for (let i = 0; i < 16; i++) {
@@ -420,24 +429,39 @@ function drawEdgeRuins(ctx) {
 }
 
 function paintYard(ctx) {
-  fillStandingGround(ctx, 0, GROUND_Y, W, H - GROUND_Y);
-  for (let y = 476; y < 632; y += 4) {
+  const front = slotGeometry(0);
+  const back = slotGeometry(ARENA.cols);
+  const groundY = SLEEPER_Y + 6;
+  fillStandingGround(ctx, 0, groundY, W, H - groundY);
+  for (let y = groundY + 4; y < H - 8; y += 4) {
     ctx.fillStyle = ((y >> 2) & 1) ? '#34281f' : '#463628';
     ctx.fillRect(0, y, W, 1);
   }
   // Footing under each row, then the open board between the rows and at the heel.
-  fillStandingGround(ctx, 0, 524, W, 20);
-  fillStandingGround(ctx, 0, 608, W, 20);
-  fillStandingGround(ctx, 0, 544, W, 12);
-  fillStandingGround(ctx, 0, 628, W, 12);
-  for (let x = 5; x < W; x += 13) {
-    const n = hash2(x, 548);
+  const foot = (slot) => {
+    const height = Math.min(14, Math.max(8, Math.round(slot.height * 0.3)));
+    const y = slot.top + slot.height - height - 2;
+    fillStandingGround(ctx, 0, y, W, height);
+  };
+  foot(front);
+  foot(back);
+  const gapTop = front.top + front.height;
+  const gapH = back.top - gapTop;
+  if (gapH > 0) fillStandingGround(ctx, 0, gapTop, W, gapH);
+  const heel = back.top + back.height;
+  if (heel < H - 1) fillStandingGround(ctx, heel, W, Math.min(10, H - heel));
+  const blockLeft = front.left;
+  const blockRight = slotGeometry(ARENA.cols - 1).left + front.width;
+  const gapMark = gapTop + Math.floor(Math.max(gapH, 1) / 2);
+  const heelMark = Math.min(H - 6, heel + 2);
+  for (let x = blockLeft; x < blockRight; x += 13) {
+    const n = hash2(x, front.y);
     ctx.fillStyle = (n & 1) ? '#c4a06a' : '#6e5432';
-    ctx.fillRect(x + (n & 3), 548, 1, 1);
-    ctx.fillRect(x + ((n >>> 2) & 3), 632, 1, 1);
+    ctx.fillRect(x + (n & 3), gapMark, 1, 1);
+    ctx.fillRect(x + ((n >>> 2) & 3), heelMark, 1, 1);
   }
   ctx.fillStyle = '#1c1612';
-  ctx.fillRect(0, 636, W, 4);
+  ctx.fillRect(0, H - 4, W, 4);
 }
 
 function paintBackdrop(ctx) {
@@ -492,7 +516,7 @@ function directorHasBoss(state) {
 }
 
 // Wash laid over the cached night, only while a boss wave is current.
-// Full-width bands, never columns. Fence posts begin at y=418, so the veil stops above them.
+// Full-width bands, never columns. Fence posts begin just above the rail, so the veil stops above them.
 // The sky and the open field stay translucent so the moon, stars, and tree line still read.
 // The pale entry stones are the one bright band above the fence; a dark crimson cover
 // keeps that lip under the fence rail, including after the rail has worn down.
@@ -510,7 +534,9 @@ function drawBossWave(ctx, time, reduced) {
   ctx.fillRect(0, 64, W, 154);
   ctx.globalAlpha = base * 0.2;
   ctx.fillStyle = '#6a2030';
-  ctx.fillRect(0, 218, W, 190);
+  const veilTop = 218;
+  const veilBottom = 418 + FENCE_DY - 10;
+  ctx.fillRect(0, veilTop, W, Math.max(0, veilBottom - veilTop));
   // The entry stones are a pale full-width band. Cover them, then lay a short
   // crimson lip whose row stays under the fence rail, worn or intact.
   ctx.globalAlpha = base * 0.86;
@@ -676,8 +702,21 @@ function drawRubble(ctx, kit, ratio) {
   ctx.fillRect(300, 458, 22, 1);
 }
 
+function shiftFenceArt(ctx, draw) {
+  const can = typeof ctx.save === 'function' && typeof ctx.restore === 'function' && typeof ctx.translate === 'function';
+  if (can) {
+    ctx.save();
+    ctx.translate(0, FENCE_DY);
+  }
+  try {
+    draw();
+  } finally {
+    if (can) ctx.restore();
+  }
+}
+
 function drawSleeper(ctx, ratio, kit) {
-  const y = SLEEPER_Y;
+  const y = SLEEPER_ART_Y;
   ctx.fillStyle = kit.edge;
   ctx.fillRect(0, y, W, 6);
   ctx.fillStyle = kit.dark;
@@ -700,17 +739,23 @@ function drawSleeper(ctx, ratio, kit) {
 }
 
 function drawFence(ctx, ratio) {
-  const kit = woodKit(ratio);
-  const intact = new Array(PICKETS);
-  for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
-  drawWire(ctx, intact, kit, ratio);
-  drawSleeper(ctx, ratio, kit);
-  for (const x of POSTS) drawPost(ctx, x, ratio, kit);
-  drawRubble(ctx, kit, ratio);
+  shiftFenceArt(ctx, () => {
+    const kit = woodKit(ratio);
+    const intact = new Array(PICKETS);
+    for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
+    drawWire(ctx, intact, kit, ratio);
+    drawSleeper(ctx, ratio, kit);
+    for (const x of POSTS) drawPost(ctx, x, ratio, kit);
+    drawRubble(ctx, kit, ratio);
+  });
 }
 
 function drawBanner(ctx, ratio, time, reduced, phase) {
   if (ratio < FENCE_RUIN || postFalls(174, ratio)) return;
+  shiftFenceArt(ctx, () => drawBannerArt(ctx, ratio, time, reduced, phase));
+}
+
+function drawBannerArt(ctx, ratio, time, reduced, phase) {
   const wave = reduced ? 0 : (Math.sin(time * 2.2) > 0 ? 1 : 0);
   const y = 416 + wave;
   ctx.fillStyle = '#6e5432';
@@ -739,6 +784,10 @@ function drawBanner(ctx, ratio, time, reduced, phase) {
 
 function drawEmbers(ctx, ratio, time, reduced) {
   if (ratio > FENCE_FAILING) return;
+  shiftFenceArt(ctx, () => drawEmberArt(ctx, ratio, time, reduced));
+}
+
+function drawEmberArt(ctx, ratio, time, reduced) {
   const base = readAlpha(ctx);
   for (let i = 0; i < PICKETS; i++) {
     if (ratio > breakAt(i) || (i % 3) !== 0) continue;
@@ -752,93 +801,121 @@ function drawEmbers(ctx, ratio, time, reduced) {
   ctx.globalAlpha = base;
 }
 
-function drawBrackets(ctx, x, y) {
+function drawBrackets(ctx, x, y, w, h) {
+  const arm = Math.max(5, Math.min(8, Math.round(Math.min(w, h) * 0.16)));
   ctx.fillStyle = '#d3b984';
-  ctx.fillRect(x + 2, y + 2, 7, 2);
-  ctx.fillRect(x + 2, y + 2, 2, 7);
-  ctx.fillRect(x + 55, y + 2, 7, 2);
-  ctx.fillRect(x + 60, y + 2, 2, 7);
-  ctx.fillRect(x + 2, y + 68, 7, 2);
-  ctx.fillRect(x + 2, y + 63, 2, 7);
-  ctx.fillRect(x + 55, y + 68, 7, 2);
-  ctx.fillRect(x + 60, y + 63, 2, 7);
+  ctx.fillRect(x + 1, y + 1, arm, 2);
+  ctx.fillRect(x + 1, y + 1, 2, arm);
+  ctx.fillRect(x + w - arm - 1, y + 1, arm, 2);
+  ctx.fillRect(x + w - 3, y + 1, 2, arm);
+  ctx.fillRect(x + 1, y + h - 3, arm, 2);
+  ctx.fillRect(x + 1, y + h - arm - 1, 2, arm);
+  ctx.fillRect(x + w - arm - 1, y + h - 3, arm, 2);
+  ctx.fillRect(x + w - 3, y + h - arm - 1, 2, arm);
   ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x + 2, y + 2, 3, 1);
-  ctx.fillRect(x + 59, y + 2, 3, 1);
+  ctx.fillRect(x + 1, y + 1, 3, 1);
+  ctx.fillRect(x + w - 4, y + 1, 3, 1);
   ctx.fillStyle = '#7a6240';
-  ctx.fillRect(x + 2, y + 69, 7, 1);
-  ctx.fillRect(x + 55, y + 69, 7, 1);
+  ctx.fillRect(x + 1, y + h - 2, arm, 1);
+  ctx.fillRect(x + w - arm - 1, y + h - 2, arm, 1);
 }
 
 function drawSlot(ctx, slot, time, reduced, phase) {
   const x = slot.left;
   const y = slot.top;
+  const w = slot.width;
+  const h = slot.height;
   const unit = slot.unit;
   const occupied = !!(unit && typeof unit === 'object');
   const hero = occupied && (unit.kind === 'hero' || unit.type === 'hero');
   const front = slot.row === 0;
   ctx.fillStyle = '#070b0e';
-  ctx.fillRect(x + 2, y + 2, 64, 72);
+  ctx.fillRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
   ctx.fillStyle = front ? '#20323c' : '#182830';
-  ctx.fillRect(x, y, 64, 72);
+  ctx.fillRect(x, y, w, h);
   ctx.fillStyle = hero ? '#8a7044' : (occupied ? '#4e6470' : '#9eb4be');
-  ctx.fillRect(x, y, 64, 1);
-  ctx.fillRect(x, y, 1, 72);
+  ctx.fillRect(x, y, w, 1);
+  ctx.fillRect(x, y, 1, h);
   ctx.fillStyle = '#0c1216';
-  ctx.fillRect(x, y + 71, 64, 1);
-  ctx.fillRect(x + 63, y, 1, 72);
+  ctx.fillRect(x, y + h - 1, w, 1);
+  ctx.fillRect(x + w - 1, y, 1, h);
+  const pad = 3;
+  const wellH = Math.max(8, Math.round(h * 0.5));
   ctx.fillStyle = occupied ? (front ? '#1a2c36' : '#14242c') : '#0e161c';
-  ctx.fillRect(x + 4, y + 4, 56, 48);
+  ctx.fillRect(x + pad, y + pad, w - pad * 2, wellH);
   ctx.fillStyle = '#5c6a72';
-  ctx.fillRect(x + 3, y + 3, 2, 2);
-  ctx.fillRect(x + 59, y + 3, 2, 2);
-  ctx.fillRect(x + 3, y + 48, 2, 2);
-  ctx.fillRect(x + 59, y + 48, 2, 2);
-  const foot = y + 36;
+  ctx.fillRect(x + 2, y + 2, 2, 2);
+  ctx.fillRect(x + w - 4, y + 2, 2, 2);
+  ctx.fillRect(x + 2, y + pad + wellH - 2, 2, 2);
+  ctx.fillRect(x + w - 4, y + pad + wellH - 2, 2, 2);
+  const foot = y + Math.round(h / 2);
+  const footW = w - 12;
+  const footX = x + 6;
+  const footH = Math.min(10, y + h - foot - 4);
   ctx.fillStyle = front ? '#314654' : '#283848';
-  ctx.fillRect(x + 8, foot - 2, 48, 14);
+  ctx.fillRect(footX, foot - 1, footW, footH);
   ctx.fillStyle = hero ? '#d3b984' : '#6a8490';
-  ctx.fillRect(x + 8, foot - 2, 48, 1);
+  ctx.fillRect(footX, foot - 1, footW, 1);
   ctx.fillStyle = '#10181c';
-  ctx.fillRect(x + 10, foot + 8, 44, 3);
+  ctx.fillRect(footX + 2, foot + 5, footW - 4, 2);
   ctx.fillStyle = '#243844';
-  ctx.fillRect(x + 6, foot, 4, 8);
-  ctx.fillRect(x + 54, foot, 4, 8);
-  fillStandingGround(ctx, x + 2, y + 52, 60, 18);
+  ctx.fillRect(x + 4, foot, 3, 6);
+  ctx.fillRect(x + w - 7, foot, 3, 6);
+  const groundTop = foot + 4;
+  const groundH = Math.max(4, y + h - 2 - groundTop);
+  fillStandingGround(ctx, x + 2, groundTop, w - 4, groundH);
   if (!occupied) {
     const pulse = phase === 'placing' && !reduced && Math.sin(time * 3) > 0;
-    const cx = x + 31;
-    const cy = y + 18;
+    const cx = x + Math.round(w / 2) - 1;
+    const cy = y + Math.round(h * 0.28);
     ctx.fillStyle = pulse ? '#d7f3f8' : '#6d8794';
-    ctx.fillRect(cx, cy - 6, 2, 14);
-    ctx.fillRect(cx - 6, cy, 14, 2);
+    ctx.fillRect(cx, cy - 5, 2, 10);
+    ctx.fillRect(cx - 5, cy, 12, 2);
     ctx.fillStyle = '#d5e6ea';
     ctx.fillRect(cx, cy, 2, 2);
   } else {
     ctx.fillStyle = '#8aa0aa';
-    ctx.fillRect(x + 12, foot - 1, 2, 2);
-    ctx.fillRect(x + 50, foot - 1, 2, 2);
+    ctx.fillRect(footX, foot - 1, 2, 2);
+    ctx.fillRect(footX + footW - 2, foot - 1, 2, 2);
   }
   if (hero) {
-    drawBrackets(ctx, x, y);
+    drawBrackets(ctx, x, y, w, h);
     ctx.fillStyle = '#7a6240';
-    ctx.fillRect(x + 12, foot + 5, 40, 2);
+    ctx.fillRect(footX, foot + 3, footW, 2);
     ctx.fillStyle = '#f0cb72';
-    ctx.fillRect(x + 12, foot + 5, 40, 1);
+    ctx.fillRect(footX, foot + 3, footW, 1);
   }
 }
 
-function drawTies(ctx, top) {
-  const y = top + 44;
-  ctx.fillStyle = '#8ea0a6';
-  ctx.fillRect(0, y, 4, 1);
-  ctx.fillRect(356, y, 4, 1);
-  for (const gap of [68, 140, 212, 284]) {
+function drawTies(ctx, row) {
+  const y = slotGeometry(row * ARENA.cols).y + 6;
+  for (let col = 0; col < ARENA.cols - 1; col += 1) {
+    const slot = slotGeometry(row * ARENA.cols + col);
+    const seam = slot.left + slot.width - 1;
     ctx.fillStyle = '#5c6a72';
-    ctx.fillRect(gap, y, 8, 2);
+    ctx.fillRect(seam, y, 2, 2);
     ctx.fillStyle = '#c5d0d4';
-    ctx.fillRect(gap, y, 8, 1);
+    ctx.fillRect(seam, y, 2, 1);
   }
+}
+
+// The side rooms stay open for a later element. Only a thin sill continues
+// the fence footing to the edge, and it stops above the slot rows.
+function drawShoulders(ctx, ratio) {
+  const kit = woodKit(ratio);
+  const margin = ARENA.sideMargin;
+  drawSill(ctx, 0, margin, kit);
+  drawSill(ctx, W - margin, margin, kit);
+}
+
+function drawSill(ctx, x, width, kit) {
+  const y = SLEEPER_Y + 2;
+  ctx.fillStyle = kit.light;
+  ctx.fillRect(x, y, width, 1);
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(x, y + 1, width, 2);
+  ctx.fillStyle = kit.edge;
+  ctx.fillRect(x, y + 3, width, 1);
 }
 
 function readSlots(state) {
@@ -877,9 +954,10 @@ export function drawWorld(ctx, state, options) {
     drawFence(ctx, ratio);
     drawBanner(ctx, ratio, time, reduced, phase);
     drawEmbers(ctx, ratio, time, reduced);
+    drawShoulders(ctx, ratio);
     for (const slot of readSlots(state)) drawSlot(ctx, slot, time, reduced, phase);
-    drawTies(ctx, ARENA.frontY - 36);
-    drawTies(ctx, ARENA.backY - 36);
+    drawTies(ctx, 0);
+    drawTies(ctx, 1);
   } finally {
     if (canStack) ctx.restore();
   }

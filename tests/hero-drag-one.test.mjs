@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRun} from '../src/state.js';
+import {createRun, simulate} from '../src/engine.js';
 import {createUnit} from '../src/shared.js';
 import {createController} from '../src/boot.js';
 
@@ -66,18 +66,33 @@ test('moving the hero onto an empty slot leaves exactly one hero in the destinat
   const hero = state.slots[2].unit;
   assertOneHero(state, hero, 2, 'before move');
 
-  const blocked = api.act('dragDrop', {from: 2, to: 0});
-  assert.equal(blocked.ok, false);
-  assert.equal(blocked.reason, 'not-planning');
-  assertOneHero(state, hero, 2, 'unpaused drag');
+  state.nextDraftXp = 1e9;
+  const time = state.time;
+  const tick = state.tick;
+  const movedLive = api.act('dragDrop', {from: 2, to: 0});
+  assert.equal(movedLive.ok, true, movedLive.reason || '');
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assertOneHero(state, hero, 0, 'unpaused drag');
+  simulate(state, 0.25);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assert.ok(state.time > time);
+  assert.ok(state.tick > tick);
 
   assert.equal(api.act('pause').paused, true);
+  assert.equal(api.act('dragDrop', {from: 0, to: 2}).ok, true);
+  assert.equal(state.paused, true);
+  assertOneHero(state, hero, 2, 'paused drag');
+  assert.equal(api.act('resume').paused, false);
+
   const nextId = state.nextId;
   let from = 2;
   for (const to of [0, 1, 3, 4, 5, 6, 7, 8, 9, 2]) {
     const label = `${from}->${to}`;
     const moved = api.act('dragDrop', {from, to});
     assert.equal(moved.ok, true, `${label} ${moved.reason || ''}`);
+    assert.equal(state.paused, false, `${label} clock`);
     assert.equal(state.slots[from].unit, null, `${label} source`);
     assertOneHero(state, hero, to, label);
     assert.equal(state.slots.filter(slot => slot.unit).length, 1, `${label} board`);

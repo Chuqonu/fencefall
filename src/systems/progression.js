@@ -61,6 +61,21 @@ const EQUIP_SLOTS = ['weapon', 'charm', 'armor'];
 // Profile saves reject settledRuns longer than 2000. Stay under that ceiling.
 const PAID_RUN_LIMIT = 2000;
 const PERMANENT_KEYS = ['damage', 'haste', 'vitality'];
+// After a loss, suggest the fence first when two buys cost the same.
+const NEXT_BUY_RANK = Object.freeze({
+  vitality: 0,
+  fence_nails: 1,
+  ward_planks: 2,
+  bastion_mail: 3,
+  damage: 4,
+  splinter_bow: 5,
+  hawk_brace: 6,
+  stormglass_edge: 7,
+  haste: 8,
+  runner_charm: 9,
+  survey_bead: 10,
+  bounty_seal: 11,
+});
 const FRACTION_KEYS = ['damage', 'haste', 'critChance', 'reward'];
 const ABSOLUTE_KEYS = ['range', 'fence'];
 const OUTPUT_CAP_MILLI = Object.freeze({damage: 400, haste: 400, critChance: 200, reward: 250});
@@ -359,6 +374,52 @@ export function purchasePermanent(profile, id) {
   return {ok: true};
 }
 
+function buyRank(id) {
+  return NEXT_BUY_RANK[id] ?? 50;
+}
+
+/**
+ * The next Armory action after a loss. An owned item in an empty slot comes first.
+ * Otherwise the cheapest remaining purchase, with the fence ahead of a tie.
+ * Null when nothing is left to buy or equip.
+ */
+export function nextArmoryBuy(profile) {
+  if (!isProfile(profile)) return null;
+  const currency = currencyOf(profile);
+  if (currency == null) return null;
+  const equipped = profile.equipped && typeof profile.equipped === 'object' && !Array.isArray(profile.equipped)
+    ? profile.equipped
+    : {};
+  const owned = Array.isArray(profile.equipmentOwned) ? profile.equipmentOwned : [];
+  const waiting = [];
+  for (const id of owned) {
+    const item = EQUIPMENT[id];
+    if (!item || equipped[item.slot]) continue;
+    waiting.push(item);
+  }
+  if (waiting.length) {
+    waiting.sort((a, b) => buyRank(a.id) - buyRank(b.id) || a.id.localeCompare(b.id));
+    const item = waiting[0];
+    return {kind: 'equip', id: item.id, cost: 0, short: 0, affordable: true, name: item.name};
+  }
+  const options = [];
+  for (const id of PERMANENT_KEYS) {
+    const spec = PERMANENT_UPGRADES[id];
+    const level = levelForPurchase(profile, id);
+    if (level == null || level >= spec.cap) continue;
+    options.push({kind: 'permanent', id, cost: spec.costs[level], name: spec.name});
+  }
+  for (const [id, item] of Object.entries(EQUIPMENT)) {
+    if (owns(profile, id)) continue;
+    options.push({kind: 'equipment', id, cost: item.cost, name: item.name});
+  }
+  if (!options.length) return null;
+  options.sort((a, b) => a.cost - b.cost || buyRank(a.id) - buyRank(b.id) || a.id.localeCompare(b.id));
+  const pick = options[0];
+  const short = Math.max(0, pick.cost - currency);
+  return {kind: pick.kind, id: pick.id, cost: pick.cost, short, affordable: short === 0, name: pick.name};
+}
+
 function cleanNumber(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
   return value;
@@ -520,6 +581,21 @@ function updateBest(profile, settlement) {
   };
 }
 
+// One victorious sortie clear, written only on the first settlement of a run.
+function recordExpedition(profile, state, settlement) {
+  if (!settlement || settlement.result !== 'victory') return;
+  const id = typeof state.expedition === 'string' && state.expedition ? state.expedition : 'watch';
+  if (!profile.expeditions || typeof profile.expeditions !== 'object' || Array.isArray(profile.expeditions)) profile.expeditions = {};
+  const prev = profile.expeditions[id];
+  const prevClears = prev && typeof prev === 'object' && Number.isFinite(prev.clears) ? prev.clears : 0;
+  const prevBest = prev && typeof prev === 'object' && Number.isFinite(prev.bestTime) ? prev.bestTime : null;
+  const time = Number.isFinite(settlement.time) ? settlement.time : 0;
+  profile.expeditions[id] = {
+    clears: prevClears + 1,
+    bestTime: prevBest == null ? time : Math.min(prevBest, time),
+  };
+}
+
 function buildSettlement(state, currency, result) {
   return {
     runId: typeof state.runId === 'string' ? state.runId : '',
@@ -582,5 +658,6 @@ export function settleRun(profile, state) {
   remember(profile, settlement);
   rememberUnkeyed(state, settlement);
   updateBest(profile, settlement);
+  recordExpedition(profile, state, settlement);
   return settlement;
 }

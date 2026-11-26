@@ -1,18 +1,23 @@
 import { ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry } from '../shared.js';
 import { previewMerge } from '../systems/merges.js';
 import { bossApproaching } from '../systems/waves.js';
+import { ENEMIES } from '../data/enemies.js';
+import { EXPEDITIONS } from '../data/expeditions.js';
+import { catalogIcon } from './icons.js';
 import { formatNumber, localize } from '../i18n.js';
 
-const SPEEDS = [1, 1.5, 3];
+const SPEEDS = [1, 1.5, 3, 10];
 const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
 
 /**
  * App shell and live HUD.
  * Pointer hits map the canvas CSS box linearly onto the 360×640 arena.
- * Dragging a defender onto another slot moves it or merges it while planning.
+ * Dragging a defender onto another slot moves it or merges it during the fight.
+ * Pause, a draft, and the menu still allow the same actions. A drag does not pause the clock.
  * An illegal drop snaps back and leaves the board unchanged.
  * Renderer resize must use that same full-box mapping (no inner letterbox).
- * `pause` is sent with no payload and is a toggle; `resume` stays the continue-run action.
+ * The fight-row button says Pause while the fight is moving and Resume while it is held.
+ * Resume is one tap: it clears a pause from hiding the page, then a pause the player turned on.
  * Containers marked data-ui are never cleared here — panel modules own their children.
  * When director.playerHint has en and zh, the battle HUD shows that text in the active language.
  */
@@ -89,7 +94,7 @@ export function mountShell(root, api) {
   const xpLabel = el('span', { class: 'meter-label' });
   const xpValue = el('strong', { class: 'meter-value', 'data-testid': 'hud-xp-value' });
   const xpFill = el('div', { class: 'meter-fill is-xp' });
-  const xpMeter = el('div', { class: 'meter', 'data-testid': 'hud-xp' });
+  const xpMeter = el('div', { class: 'meter hud-quiet', 'data-testid': 'hud-xp' });
   xpMeter.append(
     el('div', { class: 'meter-head' }, [xpLabel, xpValue]),
     el('div', { class: 'meter-track' }, [xpFill])
@@ -100,17 +105,18 @@ export function mountShell(root, api) {
   const waveStat = stat('hud-wave', waveLabel, waveValue);
   const killsLabel = el('span', { class: 'stat-label' });
   const killsValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-kills-value' });
-  const killsStat = stat('hud-kills', killsLabel, killsValue);
+  const killsStat = stat('hud-kills', killsLabel, killsValue, 'hud-quiet');
   const timeLabel = el('span', { class: 'stat-label' });
   const timeValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-time-value' });
-  const timeStat = stat('hud-time', timeLabel, timeValue);
+  const timeStat = stat('hud-time', timeLabel, timeValue, 'hud-quiet');
   const currencyLabel = el('span', { class: 'stat-label' });
   const currencyValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-currency-value' });
-  const currencyStat = stat('hud-currency', currencyLabel, currencyValue);
-  const difficulty = el('span', { class: 'badge', 'data-testid': 'hud-difficulty' });
+  const currencyStat = stat('hud-currency', currencyLabel, currencyValue, 'hud-quiet');
+  const difficulty = el('span', { class: 'badge hud-quiet', 'data-testid': 'hud-difficulty' });
   const phase = el('span', { class: 'badge', 'data-testid': 'hud-phase' });
+  const sortie = el('span', { class: 'badge hud-sortie', 'data-testid': 'hud-sortie' });
   const stats = el('div', { class: 'hud-stats' });
-  stats.append(waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
+  stats.append(sortie, waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
 
   const pauseButton = controlButton('btn-pause', 'pause');
   const speedButtons = SPEEDS.map((value) => {
@@ -123,8 +129,10 @@ export function mountShell(root, api) {
   speedRow.append(...speedButtons);
   const detailsButton = controlButton('btn-details', 'details');
   detailsButton.setAttribute('aria-expanded', 'false');
+  const menuButton = controlButton('btn-fight-menu', 'screen');
+  menuButton.dataset.name = 'menu';
   const controls = el('div', { class: 'hud-controls' });
-  controls.append(pauseButton, speedRow, detailsButton);
+  controls.append(pauseButton, speedRow, menuButton, detailsButton);
 
   const message = el('p', { class: 'hud-message', 'data-testid': 'hud-message' });
   const waveHint = el('p', { class: 'hud-hint', 'data-testid': 'hud-hint' });
@@ -254,7 +262,8 @@ export function mountShell(root, api) {
       setText(detailsButton, text(open ? 'hideDetails' : 'details'));
       return;
     }
-    if (action === 'pause' || action === 'sound') api.act(action);
+    if (action === 'resume') releaseHold();
+    else if (action === 'pause' || action === 'sound') api.act(action);
   }
 
   function onKey(event) {
@@ -306,9 +315,12 @@ export function mountShell(root, api) {
     }
 
     if ((event.code === 'Space' || event.code === 'KeyP') && screen === 'battle' && state) {
-      if (phaseName === 'victory' || phaseName === 'defeat' || phaseName === 'draft' || phaseName === 'placing') return;
+      if (phaseName === 'victory' || phaseName === 'defeat') return;
+      const held = state.paused === true || state.hiddenPaused === true;
+      if ((phaseName === 'draft' || phaseName === 'placing') && !held) return;
       event.preventDefault();
-      api.act('pause');
+      if (held) releaseHold();
+      else api.act('pause');
       return;
     }
 
@@ -361,7 +373,7 @@ export function mountShell(root, api) {
     const phaseName = state?.phase || '';
     const paused = Boolean(state?.paused);
     const hiddenPaused = Boolean(state?.hiddenPaused);
-    const planning = Boolean(state) && canPlan(state) && phaseName !== 'victory' && phaseName !== 'defeat';
+    const planning = Boolean(state) && canPlan(state) && (state.paused === true || state.phase === 'draft') && phaseName !== 'victory' && phaseName !== 'defeat';
 
     setText(title, text('title'));
     setText(subtitle, text('subtitle'));
@@ -384,8 +396,20 @@ export function mountShell(root, api) {
     fieldSlot.inert = menuOpen || phaseName === 'draft';
     panelWrap.inert = menuOpen;
     hud.inert = menuOpen;
-    const topbarHeight = topbar.offsetHeight;
-    if (topbarHeight > 0) shell.style.setProperty('--topbar-height', `${topbarHeight}px`);
+    const chrome = screen === 'battle' ? hud.offsetHeight : topbar.offsetHeight;
+    if (chrome > 0) shell.style.setProperty('--topbar-height', `${chrome}px`);
+    const frameBox = typeof fieldFrame.getBoundingClientRect === 'function' ? fieldFrame.getBoundingClientRect() : null;
+    const shellBox = typeof shell.getBoundingClientRect === 'function' ? shell.getBoundingClientRect() : null;
+    let boardLeft = 0;
+    if (frameBox && shellBox && frameBox.width > 0 && shellBox.width > 0) {
+      boardLeft = Math.max(0, Math.round(frameBox.left - shellBox.left));
+      shell.style.setProperty('--board-left', `${boardLeft}px`);
+      shell.style.setProperty('--board-width', `${Math.round(frameBox.width)}px`);
+      shell.style.setProperty('--board-top', `${Math.max(0, Math.round(frameBox.top - shellBox.top))}px`);
+      shell.style.setProperty('--board-height', `${Math.round(frameBox.height)}px`);
+    }
+    // A side margin this wide can hold the stats card without covering the board.
+    shell.classList.toggle('has-side-card', screen === 'battle' && boardLeft >= 240);
 
     nav.setAttribute('aria-label', titleText || 'Fencefall');
     for (const [name, button] of screenButtons) {
@@ -410,6 +434,9 @@ export function mountShell(root, api) {
     soundButton.classList.toggle('is-active', soundOn);
 
     const mergeOpen = Boolean(ui?.mergePreview);
+    const selected = slotIndex(ui?.selectedSlot);
+    const unitOpen = screen === 'battle' && selected >= 0 && phaseName !== 'draft' && phaseName !== 'placing' && !mergeOpen;
+    shell.classList.toggle('is-unit-open', unitOpen);
     const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing' || mergeOpen);
     overlayRoot.classList.toggle('is-open', overlayOpen);
     overlayRoot.classList.toggle('is-modal', (phaseName === 'draft' || mergeOpen) && overlayOpen);
@@ -421,10 +448,11 @@ export function mountShell(root, api) {
 
     const runReady = Boolean(state);
     const speedLocked = !runReady || phaseName === 'victory' || phaseName === 'defeat';
-    const hiddenOnly = hiddenPaused && !paused;
-    pauseButton.disabled = speedLocked || hiddenOnly;
-    setText(pauseButton, hiddenOnly ? text('pausedHidden') : (paused ? text('resume') : text('pause')));
-    pauseButton.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    const held = paused || hiddenPaused;
+    pauseButton.disabled = speedLocked;
+    pauseButton.setAttribute('data-action', held ? 'resume' : 'pause');
+    setText(pauseButton, held ? text('resume') : text('pause'));
+    pauseButton.setAttribute('aria-pressed', held ? 'true' : 'false');
     speedRow.setAttribute('aria-label', text('speed'));
     for (const button of speedButtons) {
       const value = Number(button.dataset.value);
@@ -442,7 +470,7 @@ export function mountShell(root, api) {
     const fencePct = fenceMax > 0 ? clamp01(fenceHp / fenceMax) : 0;
     setText(fenceLabel, text('fence'));
     setText(fenceValue, runReady ? `${num(Math.max(0, fenceHp), language)} / ${num(fenceMax, language)}` : '—');
-    fenceFill.className = `meter-fill${fencePct <= 0.25 ? ' is-low' : fencePct <= 0.55 ? ' is-mid' : ''}`;
+    fenceFill.className = `meter-fill${fencePct <= 0.3 ? ' is-low' : fencePct <= 0.6 ? ' is-mid' : ''}`;
     setWidth(fenceFill, fencePct);
 
     const xp = finite(state?.xp, 0);
@@ -453,6 +481,9 @@ export function mountShell(root, api) {
     setText(xpValue, runReady ? `${levelBit}${num(xp, language)} / ${num(nextXp, language)}` : '—');
     setWidth(xpFill, xpPct);
 
+    const sortieName = runReady ? sortieLabel(state, language) : '';
+    setText(sortie, sortieName);
+    sortie.hidden = !sortieName;
     setText(waveLabel, text('wave'));
     setText(waveValue, runReady ? num(finite(state?.wave, 0), language) : '—');
     setText(killsLabel, text('kills'));
@@ -471,8 +502,10 @@ export function mountShell(root, api) {
     phase.classList.toggle('is-boss', !!phaseText && phaseText === text('bossWarning'));
 
     if (screen !== 'battle') shell.classList.remove('is-details-open');
+    detailsButton.hidden = true;
+    menuButton.hidden = screen !== 'battle';
+    setText(menuButton, text('menu'));
     const detailsOpen = shell.classList.contains('is-details-open');
-    detailsButton.hidden = screen !== 'battle';
     detailsButton.setAttribute('aria-expanded', detailsOpen ? 'true' : 'false');
     setText(detailsButton, text(detailsOpen ? 'hideDetails' : 'details'));
     const note = messageText(ui?.message, language, ui);
@@ -481,6 +514,7 @@ export function mountShell(root, api) {
     const nextLine = hintLine ? nextHintLine(state, language) : '';
     setText(waveHint, hintLine);
     waveHint.hidden = !hintLine;
+    paintHintIcon(waveHint, hintKind(state, language, hintLine));
     const hintTitle = [hintLine, nextLine].filter(Boolean).join(' · ');
     if (hintTitle) waveHint.title = hintTitle;
     else waveHint.removeAttribute('title');
@@ -737,15 +771,21 @@ export function mountShell(root, api) {
     return text(name);
   }
 
+  function releaseHold() {
+    api.act('resume');
+    const state = readState();
+    if (state && (state.hiddenPaused === true || state.paused === true)) api.act('resume');
+  }
+
   function phaseBadge(state, planning) {
     if (!state) return '';
-    if (state.hiddenPaused) return text('pausedHidden');
     if (state.phase === 'victory') return text('victory');
     if (state.phase === 'defeat') return text('defeat');
     if (state.phase === 'draft') return text('chooseOneOfThree');
     if (state.phase === 'placing') return text('chooseSlot');
-    if (state.paused && state.phase === 'playing') return text('paused');
+    if (state.phase === 'playing' && (state.paused || state.hiddenPaused)) return text('paused');
     if (bossApproaching(state)) return text('bossWarning');
+    if (fenceFailing(state)) return text('fenceDanger');
     if (planning) return text('planning');
     return '';
   }
@@ -781,7 +821,77 @@ function hintLineFrom(hint, language) {
   return typeof line === 'string' ? line.trim() : '';
 }
 
+function queuedBoss(state) {
+  const queue = state?.director?.queue;
+  return Array.isArray(queue) && queue.some(item => item && item.kind === 'boss');
+}
+
+function sortieLabel(state, language) {
+  const id = state?.expedition;
+  const row = typeof id === 'string' ? EXPEDITIONS[id] : null;
+  const name = row?.name;
+  if (!name || typeof name !== 'object') return '';
+  const line = name[language] || name.en;
+  return typeof line === 'string' ? line : '';
+}
+
+function hintKind(state, language, shown) {
+  if (!shown) return '';
+  const current = hintLineFrom(state?.director?.playerHint, language);
+  if (shown !== current) return '';
+  const intro = state?.systems?.waves?.current?.intro;
+  return typeof intro === 'string' && ENEMIES[intro] ? intro : '';
+}
+
+function existingHintIcon(node) {
+  if (typeof node.querySelector === 'function') {
+    const found = node.querySelector('[data-hint-icon]');
+    if (found) return found;
+  }
+  const children = node.children || [];
+  for (const child of children) {
+    if (child?.getAttribute?.('data-hint-icon') === 'true') return child;
+  }
+  return null;
+}
+
+function paintHintIcon(node, kind) {
+  const previous = existingHintIcon(node);
+  if (!kind) {
+    if (previous?.remove) previous.remove();
+    node.classList?.remove('has-icon');
+    return;
+  }
+  if (previous?.getAttribute?.('data-icon') === kind) {
+    node.classList?.add('has-icon');
+    return;
+  }
+  if (previous?.remove) previous.remove();
+  const doc = node.ownerDocument || globalThis.document;
+  if (!doc || typeof doc.createElement !== 'function') return;
+  try {
+    const icon = catalogIcon(doc, kind);
+    icon.setAttribute('data-hint-icon', 'true');
+    icon.setAttribute('aria-hidden', 'true');
+    if (icon.style) {
+      icon.style.width = '22px';
+      icon.style.height = '22px';
+      icon.style.minWidth = '22px';
+      icon.style.minHeight = '22px';
+    }
+    if (typeof node.append === 'function') node.append(icon);
+    else node.appendChild?.(icon);
+    node.classList?.add('has-icon');
+  } catch {
+    node.classList?.remove('has-icon');
+  }
+}
+
 function playerHintLine(state, language) {
+  if (!queuedBoss(state) && bossApproaching(state)) {
+    const upcoming = nextHintLine(state, language);
+    if (upcoming) return upcoming;
+  }
   return hintLineFrom(state?.director?.playerHint, language);
 }
 
@@ -800,8 +910,8 @@ function controlButton(testid, action) {
   return button;
 }
 
-function stat(testid, label, value) {
-  return el('div', { class: 'stat', 'data-testid': testid }, [label, value]);
+function stat(testid, label, value, extraClass) {
+  return el('div', { class: extraClass ? `stat ${extraClass}` : 'stat', 'data-testid': testid }, [label, value]);
 }
 
 function el(tag, attrs, children) {
@@ -936,6 +1046,13 @@ function num(value, language) {
   } catch {
     return String(n);
   }
+}
+
+function fenceFailing(state) {
+  const hp = state?.fence?.hp;
+  const max = state?.fence?.maxHp;
+  if (typeof hp !== 'number' || typeof max !== 'number' || !(max > 0) || !(hp > 0)) return false;
+  return hp / max <= 0.3;
 }
 
 function playerHintKey(hint) {

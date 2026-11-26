@@ -2,7 +2,7 @@
 // second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit} from './shared.js';
 import {updateMovement} from './systems/movement.js';
-import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
+import {damageEnemy, killEnemy, regenerateFence, updateCombat} from './systems/combat.js';
 import {updateStatuses} from './systems/status.js';
 import {updateWaves} from './systems/waves.js';
 import {updateDrafts} from './systems/drafts.js';
@@ -110,6 +110,7 @@ function stepBody(state) {
   state.tick += 1;
   updateWaves(state, STEP);
   if (halted(state)) return;
+  regenerateFence(state, STEP);
   updateMovement(state, STEP);
   if (halted(state)) return;
   updateStatuses(state, STEP, damageEnemy);
@@ -128,6 +129,8 @@ export function step(state) {
   return state;
 }
 
+const SPEEDS = Object.freeze([1, 1.5, 3, 10]);
+
 export function advance(state, realDt) {
   if (!state || !Number.isFinite(realDt) || realDt < 0) return state;
   prepare(state);
@@ -135,10 +138,11 @@ export function advance(state, realDt) {
     state.accumulator = 0;
     return state;
   }
-  const speed = state.speed === 1.5 || state.speed === 3 ? state.speed : 1;
+  const speed = SPEEDS.includes(state.speed) ? state.speed : 1;
   state.accumulator += Math.min(realDt, 0.25) * speed;
   let count = 0;
-  while (state.accumulator + 1e-10 >= STEP && count++ < 90) {
+  // 0.25s of wall time at 10× is 150 shared steps, so one slice can finish.
+  while (state.accumulator + 1e-10 >= STEP && count++ < 150) {
     state.accumulator -= STEP;
     stepBody(state);
     if (halted(state)) {
@@ -164,7 +168,7 @@ export function simulate(state, seconds) {
 }
 
 export function setSpeed(state, speed) {
-  if (state && [1, 1.5, 3].includes(speed)) state.speed = speed;
+  if (state && SPEEDS.includes(speed)) state.speed = speed;
 }
 
 export function takeEvents(state) {

@@ -10,6 +10,10 @@ test('describeFeedback marks a boss warning as approach and leaves other boss cu
   assert.ok(enter);
   assert.equal(enter.type, 'boss');
   assert.equal(enter.approach, true);
+  const named = describeFeedback({type: 'boss_approach', warning: true, x: 180, y: 24});
+  assert.ok(named);
+  assert.equal(named.type, 'boss');
+  assert.equal(named.approach, true);
 
   const enrage = describeFeedback({type: 'boss_enrage', x: 10, y: 20});
   assert.ok(enrage);
@@ -101,6 +105,8 @@ test('reduced motion keeps the execute tick in place and adds no separate animat
 test('a boss warning skips the field flash and a spawn or enrage still draws it', () => {
   const approach = paint([{type: 'boss_enter', warning: true, x: 10, y: 20}], {});
   assert.equal(approach.length, 0);
+  const named = paint([{type: 'boss_approach', warning: true, x: 180, y: 24}], {});
+  assert.equal(named.length, 0);
   const enrage = paint([{type: 'boss_enrage', x: 10, y: 20}], {});
   const spawn = paint([{type: 'boss_spawn', x: 10, y: 20}], {});
   assert.ok(enrage.length > 0);
@@ -287,8 +293,8 @@ test('an approaching boss plays two short rising tones and a spawn or enrage kee
   assert.ok(tones[1].when > tones[0].when);
   for (const tone of tones) {
     assert.ok(tone.length < 0.12, `tone length ${tone.length}`);
-    assert.ok(tone.peak <= 0.05, `tone gain ${tone.peak}`);
-    assert.ok(tone.peak > 0);
+    assert.ok(tone.peak <= 0.35, `tone gain ${tone.peak}`);
+    assert.ok(tone.peak >= 0.2, `tone gain ${tone.peak}`);
   }
 
   for (const type of ['boss_enrage', 'boss_spawn']) {

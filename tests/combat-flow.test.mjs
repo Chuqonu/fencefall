@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun, integrationInfo, step} from '../src/engine.js';
+import {ARENA} from '../src/shared.js';
 
 test('the hero draft opens after one fence-side enemy falls', () => {
   const state = createRun({seed: 4, runId: 'fight', difficulty: 'normal'});
@@ -8,7 +9,7 @@ test('the hero draft opens after one fence-side enemy falls', () => {
     id: 'e1',
     kind: 'shambler',
     x: 180,
-    y: 438,
+    y: ARENA.fenceY - 12,
     hp: 40,
     maxHp: 40,
     speed: 0,

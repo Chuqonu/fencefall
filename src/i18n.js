@@ -81,17 +81,19 @@ const ROWS = [
   ['pausedHidden', 'Paused while this page is hidden', '页面已隐藏，战斗暂停'],
   ['pausedHiddenBody', 'The fight is stopped. A pause you turned on stays on when you come back.', '战斗已停止。你打开的暂停在回到页面后仍然保留。'],
   ['planning', 'Planning', '布阵'],
-  ['planningHint', 'Planning is open. The fight is frozen.', '正在布阵，战斗已冻结。'],
+  ['planningHint', 'Move and merge while the fight is running. Pause only if you want the clock to stop.', '战斗进行中就可以移动和合成。只有想让时钟停下时才需要暂停。'],
   ['playing', 'Fighting', '战斗中'],
   ['speed', 'Speed', '速度'],
   ['speed1', '1×', '1×'],
   ['speed15', '1.5×', '1.5×'],
   ['speed3', '3×', '3×'],
+  ['speed10', '10×', '10×'],
   ['speedValue', '{value}×', '{value}×'],
-  ['speedHint', '1×, 1.5×, and 3× share the same fight clock.', '1×、1.5× 和 3× 共用同一个战斗时钟。'],
+  ['speedHint', '1×, 1.5×, 3×, and 10× share the same fight clock.', '1×、1.5×、3× 和 10× 共用同一个战斗时钟。'],
   ['speedWhilePaused', 'The new speed is used when the fight is moving.', '新的速度会在战斗继续推进时生效。'],
   ['fence', 'Fence', '栅栏'],
   ['fenceHp', 'Fence {current}/{max}', '栅栏 {current}/{max}'],
+  ['fenceBonus', 'Fence HP', '栅栏生命'],
   ['fenceDanger', 'Fence is failing', '栅栏岌岌可危'],
   ['fenceSafe', 'Fence is holding', '栅栏仍然稳固'],
   ['wave', 'Wave', '波次'],
@@ -247,9 +249,9 @@ const ROWS = [
   ['rankCap', 'Ranks run from 1 to 4', '阶数从 1 到 4'],
   ['equalRank', 'Requires equal rank', '需要相同阶数'],
   ['maxRank', 'Already at max rank', '已经达到最高阶'],
-  ['notPlanning', 'Pause or open a draft before you move or merge', '请先暂停或进入整备，再移动或合成'],
-  ['planningRequired', 'Pause or open a draft before you move or merge', '请先暂停或进入整备，再移动或合成'],
-  ['cannotMoveDuringFight', 'You can move units during planning', '战斗进行时不能移动，请先布阵'],
+  ['notPlanning', 'You cannot move or merge right now', '现在不能移动或合成'],
+  ['planningRequired', 'You cannot move or merge right now', '现在不能移动或合成'],
+  ['cannotMoveDuringFight', 'You can move units while the fight is running', '战斗进行时也可以移动单位'],
   ['sameSlot', 'Choose two different slots', '请选择两个不同的格子'],
   ['invalidSlot', 'That slot is not on the board', '没有这个格子'],
   ['missingUnit', 'Choose two occupied slots', '请选择两个有单位的格子'],
@@ -330,6 +332,7 @@ const ROWS = [
   ['levelValue', 'Level {level}', '{level} 级'],
   ['levelOf', 'Level {level}/{max}', '{level} / {max} 级'],
   ['maxLevel', 'Max level', '已满级'],
+  ['levelCap', 'Max level', '等级上限'],
   ['insufficientCurrency', 'Not enough currency', '货币不足'],
   ['locked', 'Locked', '未解锁'],
   ['weapon', 'Weapon', '武器'],
@@ -375,6 +378,11 @@ const ROWS = [
   ['resultSummary', '{result} · {difficulty}', '{result} · {difficulty}'],
   ['victoryBody', 'The fence held. The reward is saved once.', '栅栏守住了。报酬只保存一次。'],
   ['defeatBody', 'The fence fell. Progress can still pay once.', '栅栏倒下了。已有的进度仍会结算一次。'],
+  ['defeatNext', 'Easy lowers enemy health, speed, and damage. An Armory bonus applies on the next run.', '简单难度会降低敌人的生命、速度和伤害。军械库加成会在下一局生效。'],
+  ['defeatNextEasy', 'An Armory bonus applies on the next run. A hero upgrade from a draft applies immediately.', '军械库加成会在下一局生效。整备中的英雄升级会立刻生效。'],
+  ['defeatBuy', 'You can buy {name} for {cost}. It applies on the next run.', '可以购买{name}，价格 {cost}。下一局生效。'],
+  ['defeatEquip', 'Equip {name} before the next run.', '下一局开始前装备{name}。'],
+  ['defeatShort', 'You need {short} more for {name}, which costs {cost}.', '还差 {short} 才能购买{name}，价格 {cost}。'],
   ['abandonBody', 'You left this fight. That reward is saved once.', '你离开了这一局。这笔报酬只保存一次。'],
   ['earned', 'Earned', '获得'],
   ['earnedAmount', 'Earned {amount}', '获得 {amount}'],
@@ -441,12 +449,12 @@ const ROWS = [
   ['howto', 'How to play', '怎么玩'],
   ['howtoLead', 'You decide what is built. The fight plays itself.', '建造由你决定，战斗自动进行。'],
   ['helpOverview', 'Enemies enter from the top and move toward one shared fence. You plan, draft, and merge. The hero and towers attack on their own.', '敌人从上方进入，朝同一道栅栏前进。你负责布阵、整备和合成。英雄与防御塔会自动攻击。'],
-  ['helpPlacement', 'Drag a defender to an empty slot to move it, or onto a compatible tower to merge. This works while paused or while a draft is open. An illegal drop snaps back. Moving the hero only changes its place.', '把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。只有在暂停或整备期间才能这样做。非法放置会弹回。移动英雄只改变位置。'],
-  ['helpMerge', 'While planning, choose two different occupied slots and preview the result. The same type and rank rise by one rank, up to rank 4. Different base types of equal rank become that recipe\'s hybrid. A hybrid merges only with the same hybrid. The hero never merges. Cancel, or an invalid pair, keeps both units.', '布阵时选择两个不同的已占用格子，并先预览结果。同种同阶会升 1 阶，最高 4 阶。不同的基础塔在同阶时会变成配方对应的混合单位。混合单位只能与相同的混合单位合成。英雄永不合成。取消或组合无效时，双方都会保留。'],
+  ['helpPlacement', 'Drag a defender to an empty slot to move it, or onto a compatible tower to merge. The fight keeps running. Pause, a draft, and the menu still allow the same actions. An illegal drop snaps back. Moving the hero only changes its place.', '把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。战斗会继续进行。暂停、整备和菜单里也可以这样做。非法放置会弹回。移动英雄只改变位置。'],
+  ['helpMerge', 'Choose two different occupied slots and preview the result, including while the fight is running. The same type and rank rise by one rank, up to rank 4. Different base types of equal rank become that recipe\'s hybrid. A hybrid merges only with the same hybrid. The hero never merges. Cancel, or an invalid pair, keeps both units.', '选择两个不同的已占用格子并先预览结果，战斗进行中也可以。同种同阶会升 1 阶，最高 4 阶。不同的基础塔在同阶时会变成配方对应的混合单位。混合单位只能与相同的混合单位合成。英雄永不合成。取消或组合无效时，双方都会保留。'],
   ['helpDraft', 'Kills grant XP. At the threshold the fight pauses and three cards appear over the field. Tap a card to take it. There is no confirm button. A tower is placed with a second tap. On a full board you can still upgrade the hero or replace a tower. Canceling placement keeps those same three choices. Nothing is granted twice.', '击杀会获得经验。达到阈值时战斗暂停，三张卡叠在战场上。点一张卡即可选定，没有确认按钮。选塔之后，再点一个格子即可放置。格子占满时，仍可升级英雄或替换一座防御塔。取消放置会保留原来的三选一，不会因此多得一次。'],
   ['helpFence', 'Enemies attack only the shared fence. Defenders have no health. If fence HP reaches zero, the run is lost.', '敌人只攻击共用栅栏。防守者没有生命值。栅栏生命归零，本局失败。'],
-  ['helpRange', 'A defender fires at any enemy inside its circle, including enemies outside its column. Select a unit to see that circle. Rear-row ranges reach the field in front of the fence.', '防守者会攻击圆圈内的任意敌人，包括其他列的敌人。选中单位即可看到这个圆。后排的射程能够打到栅栏前方。'],
-  ['helpSpeed', 'Speeds are 1×, 1.5×, and 3×. They share one simulation clock, so attacks, status timers, and rewards are not sped past that clock or skipped. Pause stops the fight. Hiding the page stops it too. If you paused yourself, that pause remains when you return.', '速度有 1×、1.5× 和 3×。它们共用一个模拟时钟，攻击、状态时间和报酬不会超出这个时钟，也不会被跳过。暂停会停止战斗。隐藏页面也会停止。如果你亲手暂停，回到页面后暂停仍然保留。'],
+  ['helpRange', 'A defender fires at the enemy closest to the fence inside its circle, including enemies outside its column. Select a unit to see that circle. Rear-row ranges reach the field in front of the fence.', '防守者会攻击圆圈内最靠近栅栏的敌人，包括其他列的敌人。选中单位即可看到这个圆。后排的射程能够打到栅栏前方。'],
+  ['helpSpeed', 'Speeds are 1×, 1.5×, 3×, and 10×. They share one simulation clock, so attacks, status timers, and rewards are not sped past that clock or skipped. Pause stops the fight. Hiding the page stops it too. If you paused yourself, that pause remains when you return.', '速度有 1×、1.5×、3× 和 10×。它们共用一个模拟时钟，攻击、状态时间和报酬不会超出这个时钟，也不会被跳过。暂停会停止战斗。隐藏页面也会停止。如果你亲手暂停，回到页面后暂停仍然保留。'],
   ['helpHero', 'The run starts with one hero in the front center, and no other towers. The hero fights automatically, never merges, and cannot be sold or replaced.', '每局开始时，前排中央只有一名英雄，没有其他防御塔。英雄自动战斗，不能合成、出售或替换。'],
   ['helpRewards', 'Victory and defeat pay currency once. Abandoning a fresh run before 30 seconds and 3 kills pays nothing. Higher difficulties multiply the reward. Reloading does not pay again.', '胜利和失败都会发放一次货币。不足 30 秒且击杀少于 3 就放弃，没有报酬。难度越高，报酬倍率越高。重新加载不会再次发放。'],
   ['helpEquipment', 'Currency buys equipment and permanent hero upgrades. Bonuses are bounded and give a head start. Normal is playable without them. Purchases apply to later runs. This fight keeps the bonuses it started with.', '货币可以购买装备和英雄的永久升级。加成有上限，只提供开局优势。不买它们也能游玩标准难度。购买从之后的对局生效。这一局仍使用开局时的加成。'],
@@ -475,6 +483,7 @@ const ROWS = [
   ['ariaSpeed1', 'Set speed to 1×', '速度设为 1×'],
   ['ariaSpeed15', 'Set speed to 1.5×', '速度设为 1.5×'],
   ['ariaSpeed3', 'Set speed to 3×', '速度设为 3×'],
+  ['ariaSpeed10', 'Set speed to 10×', '速度设为 10×'],
   ['ariaLanguage', 'Language', '语言'],
   ['ariaDialog', 'Dialog', '对话框'],
 
@@ -497,6 +506,10 @@ const ROWS = [
   ['enemyFenceOnly', 'This enemy attacks the fence only.', '这种敌人只攻击栅栏。'],
   ['fenceDamage', 'Fence damage', '栅栏承受伤害'],
   ['health', 'Health', '生命'],
+  ['enemyHealth', 'Enemy health', '敌人生命'],
+  ['enemySpeed', 'Enemy speed', '敌人速度'],
+  ['enemyDamage', 'Enemy damage', '敌人伤害'],
+  ['pressureCount', 'Enemy count', '敌人数量'],
   ['saveHelp', 'Export creates a JSON save of the profile and run. Import replaces them only when the file is valid. An invalid file keeps the current save.', '导出会生成包含档案和对局的 JSON 存档。只有文件有效时，导入才会替换它们。无效文件会保留当前存档。'],
   ['copySave', 'Copy save', '复制存档'],
   ['copyUnavailable', 'Select the save text to copy it.', '请选中存档文本进行复制。'],
@@ -509,17 +522,17 @@ const ROWS = [
   ['invalidProfile', 'That profile is not valid', '这份档案无效'],
   ['error', 'Something went wrong', '出了点问题'],
   ['bad-phase', 'Not available right now', '现在不能这么做'],
-  ['bad-speed', 'Speed stays at 1×, 1.5×, or 3×', '速度只能是 1×、1.5× 或 3×'],
+  ['bad-speed', 'Speed stays at 1×, 1.5×, 3×, or 10×', '速度只能是 1×、1.5×、3× 或 10×'],
   ['bad-language', 'Language is English or Chinese', '语言只能是中文或英文'],
   ['bad-screen', 'Unknown screen', '未知界面'],
   ['unknown-action', 'Unknown action', '未知操作'],
   ['backRow', 'Rear row', '后排'],
   ['critDamage', 'Crit damage', '暴击伤害'],
   ['projectile', 'Projectile speed', '弹速'],
-  ['pauseToPlan', 'Pause to move defenders or merge towers.', '暂停后才能移动防守者或合成防御塔。'],
-  ['planningLocked', 'The fight is running. Pause to move or merge.', '战斗进行中。暂停后才能移动或合成。'],
+  ['pauseToPlan', 'Move defenders or merge towers while the fight is running.', '战斗进行中就可以移动防守者或合成防御塔。'],
+  ['planningLocked', 'The fight is running. You can still move or merge.', '战斗进行中，仍然可以移动或合成。'],
   ['noMergePartner', 'A merge needs two towers. The hero stays independent.', '合成需要两座防御塔。英雄保持独立。'],
-  ['heroNoMerge', 'The hero stays independent. Move the hero during planning. Merges and replacement leave the hero in place.', '英雄保持独立。布阵时可以移动英雄。合成和替换都不会动英雄。'],
+  ['heroNoMerge', 'The hero stays independent. You can move the hero while the fight is running. Moving it only changes its slot. Merges and replacement leave the hero in place.', '英雄保持独立。战斗进行中可以移动英雄，移动只改变格子。合成和替换都不会动英雄。'],
   ['placeHint', 'Choose an empty slot. Occupied towers stay unless this card is a replacement.', '选择一个空位。已有的防御塔会留下，除非这张卡是替换。'],
   ['replaceHeroSafe', 'Choose the tower to replace. The hero stays in place.', '选择要替换的防御塔。英雄会留在原位。'],
   ['confirmReplaceBody', 'The tower in this slot will be removed.', '这个格子上的防御塔会被移除。'],
@@ -713,6 +726,22 @@ export function resultLabel(language, outcome) {
   if (outcome === 'defeat') return t(lang, 'defeat');
   if (outcome === 'abandon') return t(lang, 'abandoned');
   return t(lang, 'noOutcome');
+}
+
+/** One next step after a loss. Easy already is the lower pressure, so it points at the Armory. */
+export function defeatAdvice(language, difficulty) {
+  const lang = normalizeLanguage(language);
+  return t(lang, difficulty === 'easy' ? 'defeatNextEasy' : 'defeatNext');
+}
+
+/** Names the next Armory action. An empty string means there is nothing left to buy or equip. */
+export function armoryNextLine(language, offer) {
+  const lang = normalizeLanguage(language);
+  const name = offer?.name?.[lang] || offer?.name?.en || '';
+  if (!name || !offer) return '';
+  if (offer.kind === 'equip') return t(lang, 'defeatEquip', {name});
+  if (offer.affordable) return t(lang, 'defeatBuy', {name, cost: offer.cost});
+  return t(lang, 'defeatShort', {name, cost: offer.cost, short: offer.short});
 }
 
 /**

@@ -4,10 +4,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun, step} from '../src/engine.js';
-import {ARENA, STEP, createUnit} from '../src/shared.js';
+import {ARENA, STEP, createUnit, slotGeometry} from '../src/shared.js';
 import {ENEMIES} from '../src/data/enemies.js';
 import {spawnEnemy, updateMovement} from '../src/systems/movement.js';
-import {updateCombat} from '../src/systems/combat.js';
+import {FENCE_REGEN_PER_SECOND, updateCombat} from '../src/systems/combat.js';
 
 const KINDS = Object.keys(ENEMIES);
 const SHORTFALL = 2;
@@ -15,8 +15,9 @@ const APPROACH = 24;
 const PROBE_HP = 80;
 const BITE = 12;
 const HEALTH_KEYS = ['hp', 'health', 'maxHp', 'durability', 'shield'];
+const COLUMN_X = Array.from({length: ARENA.cols}, (_, col) => slotGeometry(col).x);
 const POSITIONS = [
-  {x: 36, name: 'tower column'},
+  {x: COLUMN_X[0], name: 'tower column'},
   {x: 200, name: 'between columns'},
 ];
 
@@ -103,7 +104,7 @@ function play(state, steps, mode, enemy) {
 
 test('an enemy that has not reached the fence does not reduce fence HP', () => {
   assert.ok(POSITIONS.some(position => position.x === 200));
-  assert.ok([36, 108, 180, 252, 324].every(column => Math.abs(column - 200) >= 20));
+  assert.ok(COLUMN_X.every(column => Math.abs(column - 200) >= 20));
   for (const mode of ['combat', 'movement', 'engine']) {
     for (const position of POSITIONS) {
       for (const kind of KINDS) {
@@ -200,10 +201,15 @@ test('a contacting enemy bites the shared fence and defenders still have no HP',
 
     stampDefenders(state, PROBE_HP);
     const bitten = state.fence.hp;
-    play(state, Math.round(1.5 / STEP), 'engine', enemy);
+    const quietSteps = Math.round(1.5 / STEP);
+    play(state, quietSteps, 'engine', enemy);
     assert.ok(state.fence.hp < bitten, label);
     assert.ok(state.fence.hp > 0, label);
-    assert.equal(state.stats.fenceDamage, startHp - state.fence.hp, label);
+    const restored = state.stats.fenceDamage - (startHp - state.fence.hp);
+    assert.ok(
+      Math.abs(restored - FENCE_REGEN_PER_SECOND * quietSteps * STEP) < 1e-3,
+      `${label} restored ${restored}`
+    );
     assertProbe(state, PROBE_HP, label);
     assert.ok(enemy.y <= stopY(enemy) + 1e-4, label);
   }
@@ -247,9 +253,10 @@ test('an enemy bolt reduces fence HP only after it reaches the fence', () => {
   assert.equal(state.stats.fenceDamage, damage);
   assert.equal(state.projectiles.some(projectile => projectile.id === 'enemy-bolt'), false);
   assertProbe(state, PROBE_HP, 'bolt impact');
+  const hitHp = state.fence.hp;
   step(state);
-  assert.equal(state.fence.hp, startHp - damage);
   assert.equal(state.stats.fenceDamage, damage);
+  assert.ok(Math.abs(state.fence.hp - (hitHp + FENCE_REGEN_PER_SECOND * STEP)) < 1e-8);
   assertProbe(state, PROBE_HP, 'bolt settled');
   assert.equal(state.phase, 'playing');
 });

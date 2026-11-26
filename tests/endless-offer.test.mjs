@@ -102,6 +102,14 @@ test('a victory result offers endless in the active language', () => {
   assert.equal(findByTestId(render('zh', 'defeat'), 'btn-results-endless'), null);
 });
 
+test('a defeat result names the cheapest Armory buy still out of reach', () => {
+  const zh = findByTestId(render('zh', 'defeat'), 'result-next')?.textContent || '';
+  const en = findByTestId(render('en', 'defeat'), 'result-next')?.textContent || '';
+  assert.match(zh, /还差 35 才能购买深根，价格 35/);
+  assert.match(en, /You need 35 more for Deep Roots, which costs 35/);
+  assert.equal(findByTestId(render('en', 'victory'), 'result-next'), null);
+});
+
 test('not now hides endless and leaves the saved reward', () => {
   const doc = documentStub();
   const container = element(doc, 'div');

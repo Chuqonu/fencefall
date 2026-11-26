@@ -5,7 +5,9 @@
  *
  * Each kind keeps one opaque box on every frame:
  * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
- * spitter 22×26, swarm 12×14, boss 48×52.
+ * spitter 22×26, swarm 12×14, boss 48×52,
+ * leaper 20×28, splitter 24×22, mender 22×28, shade 16×30,
+ * banner 26×32, warden 22×30, charge 18×26, hush 20×26.
  * A light rim (palette k) is the outer pixel so the shape reads on #122128.
  * enemy.enraged on a boss repaints the crown and core hotter inside that box.
  */
@@ -16,7 +18,15 @@ const PALETTES = {
   armored: {k: '#f4f7fb', '#': '#1c2430', o: '#8a96a4', h: '#ffffff', e: '#9fd0ea', s: '#10141a'},
   spitter: {k: '#d8f0b0', '#': '#142818', o: '#3f7a48', h: '#c6ee78', e: '#e8f58a', s: '#0c140c'},
   swarm: {k: '#f4e2b4', '#': '#3a2810', o: '#c4a05a', h: '#fff0c0', e: '#fff6d0', s: '#1a1208'},
-  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'}
+  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'},
+  leaper: {k: '#ffe6b4', '#': '#24180c', o: '#d4842c', h: '#f6c56e', e: '#fff3c4', s: '#140e08'},
+  splitter: {k: '#f3e6e0', '#': '#2c1a24', o: '#6d5560', h: '#c4a8a4', e: '#e4d0d4', s: '#160e12'},
+  mender: {k: '#fbf8e4', '#': '#1c2816', o: '#7d9a58', h: '#e8d78a', e: '#f7f0bc', s: '#121a0e'},
+  shade: {k: '#e7f1f6', '#': '#1a242e', o: '#607888', h: '#b7c9d4', e: '#b7e4ea', s: '#101820'},
+  banner: {k: '#fbf1e2', '#': '#3a1218', o: '#8a2c34', h: '#f4e2c4', e: '#fff6ea', s: '#1a080c'},
+  warden: {k: '#e4eef6', '#': '#1a222c', o: '#5e7388', h: '#d6a84a', e: '#f4e0a4', s: '#141c24'},
+  charge: {k: '#f8e2c8', '#': '#2a120c', o: '#a84828', h: '#f0c56a', e: '#fff0c8', s: '#1a0c08'},
+  hush: {k: '#d5e4ea', '#': '#142028', o: '#4a6874', h: '#9fd0c8', e: '#e7f4f2', s: '#10181c'}
 };
 
 function makeGrid(width, height) {
@@ -505,6 +515,473 @@ function boss(step, attack, enraged = false) {
   });
 }
 
+function leaper(step, attack) {
+  return sprite(20, 28, (grid) => {
+    fillPoly(grid, [
+      [6, 24], [11, 24], [12, 26], [9, 27], [0, 27], [0, 25], [3, 24]
+    ], 'o');
+    over(grid, 2, 26, '#');
+    over(grid, 5, 26, '#');
+    over(grid, 8, 26, '#');
+    glaze(grid, 5, 25, 3, 0, 'h');
+
+    const coils = attack ? [17, 19, 21] : (step ? [16, 19, 22] : [14, 18, 22]);
+    for (let i = 0; i < coils.length; i += 1) {
+      const y = coils[i];
+      const x0 = i % 2 === 0 ? 3 : 6;
+      limb(grid, x0, y, x0 + 5, y, 1, 1, i % 2 ? '#' : 'o');
+      if (i + 1 < coils.length) {
+        const joint = i % 2 === 0 ? x0 + 5 : x0;
+        limb(grid, joint, y, joint, coils[i + 1], 0, 0, 'h');
+      }
+    }
+    limb(grid, 6, 14, 5, coils[0], 1, 0, 'o');
+    limb(grid, 8, coils[coils.length - 1], 8, 25, 0, 0, 'o');
+
+    fillPoly(grid, [
+      [3, 11], [9, 10], [10, 13], [6, 15], [2, 13]
+    ], 'o');
+    fillPoly(grid, [
+      [7, 9], [13, 10], [12, 14], [6, 14], [4, 11]
+    ], 'o');
+    glaze(grid, 8, 11, 2, 1, 'h');
+    seam(grid, 6, 12, 4);
+    over(grid, 7, 13, 's');
+
+    fillEllipse(grid, 11, 6, 3, 3, 'o');
+    fillPoly(grid, [
+      [12, 4], [19, 6], [19, 8], [13, 9], [12, 7]
+    ], 'o');
+    fillPoly(grid, [[10, 0], [8, 3], [12, 3]], '#');
+    glaze(grid, 10, 4, 2, 1, 'h');
+    glaze(grid, 16, 5, 2, 0, 'h');
+    over(grid, 9, 5, '#');
+    over(grid, 10, 5, '#');
+    eye(grid, 10, 6);
+    if (attack) {
+      eraseEllipse(grid, 16, 7, 2, 0);
+      over(grid, 15, 6, '#');
+      over(grid, 16, 6, '#');
+      over(grid, 17, 6, '#');
+      over(grid, 15, 8, '#');
+      over(grid, 16, 8, '#');
+      over(grid, 17, 8, '#');
+      limb(grid, 12, 11, 16, 12, 1, 0, 'o');
+      limb(grid, 16, 12, 18, 11, 0, 0, '#');
+      fillEllipse(grid, 18, 11, 1, 1, '#');
+    } else if (step) {
+      over(grid, 16, 7, '#');
+      limb(grid, 12, 11, 15, 16, 1, 0, 'o');
+      limb(grid, 15, 16, 17, 18, 0, 0, '#');
+      fillEllipse(grid, 17, 18, 1, 1, '#');
+    } else {
+      over(grid, 15, 7, '#');
+      limb(grid, 12, 11, 14, 14, 1, 0, 'o');
+      limb(grid, 14, 14, 16, 13, 0, 0, '#');
+      fillEllipse(grid, 16, 13, 1, 1, '#');
+    }
+
+    grid.put(10, 0, '#');
+    grid.put(19, 6, 'o');
+    grid.put(19, 8, 'o');
+    grid.put(0, 27, 'o');
+    grid.put(4, 27, 'o');
+  });
+}
+
+function splitter(step, attack) {
+  return sprite(24, 22, (grid) => {
+    fillPoly(grid, [
+      [0, 12], [2, 9], [6, 8], [9, 9], [11, 7], [13, 7],
+      [15, 9], [18, 8], [22, 9], [23, 12], [23, 17],
+      [20, 19], [16, 18], [12, 20], [8, 18], [4, 19], [0, 17]
+    ], 'o');
+    glaze(grid, 6, 11, 3, 2, 'h');
+    glaze(grid, 17, 11, 3, 2, 'h');
+    over(grid, 5, 15, 's');
+    over(grid, 7, 16, 's');
+    over(grid, 16, 16, 's');
+    over(grid, 18, 15, 's');
+    over(grid, 5, 13, '#');
+    over(grid, 8, 14, '#');
+    over(grid, 18, 13, '#');
+    over(grid, 16, 12, '#');
+
+    fillPoly(grid, [[12, 0], [10, 6], [14, 6]], '#');
+    if (attack) {
+      limb(grid, 12, 3, 11, 10, 1, 0, '#');
+      limb(grid, 11, 10, 13, 16, 1, 0, '#');
+      limb(grid, 13, 16, 12, 19, 0, 0, '#');
+      over(grid, 12, 8, 'e');
+      over(grid, 12, 11, 'e');
+      over(grid, 12, 14, 'e');
+      over(grid, 11, 12, 'e');
+    } else {
+      limb(grid, 12, 2, 11, 8, 0, 0, '#');
+      limb(grid, 11, 8, 13, 13, 0, 0, '#');
+      limb(grid, 13, 13, 11, 19, 0, 0, '#');
+      if (step) {
+        over(grid, 10, 11, '#');
+        over(grid, 14, 15, '#');
+      } else {
+        over(grid, 14, 10, '#');
+        over(grid, 10, 16, '#');
+      }
+    }
+
+    const ly = attack ? 5 : (step ? 6 : 7);
+    const ry = attack ? 5 : (step ? 8 : 7);
+    const lx = attack ? 3 : 4;
+    const rx = attack ? 20 : 19;
+    fillEllipse(grid, lx, ly, 2, 2, 'o');
+    fillEllipse(grid, rx, ry, 2, 2, 'o');
+    glaze(grid, lx, ly - 1, 1, 1, 'h');
+    glaze(grid, rx, ry - 1, 1, 1, 'h');
+    over(grid, lx, ly, '#');
+    over(grid, rx, ry, '#');
+    limb(grid, lx, ly + 2, lx + 1, 11, 1, 0, 'o');
+    limb(grid, rx, ry + 2, rx - 1, 11, 1, 0, 'o');
+
+    eye(grid, 6, 13);
+    eye(grid, 16, 13);
+    if (attack) {
+      over(grid, 7, 14, '#');
+      over(grid, 17, 14, '#');
+    }
+
+    const shift = attack ? 0 : (step ? 2 : -1);
+    limb(grid, 7, 18, 7 + shift, 21, 1, 1, 'o');
+    limb(grid, 16, 18, 16 - shift, 21, 1, 1, 'o');
+
+    grid.put(12, 0, '#');
+    grid.put(0, 12, 'o');
+    grid.put(23, 12, 'o');
+    grid.put(8, 21, 'o');
+    grid.put(15, 21, 'o');
+  });
+}
+
+function mender(step, attack) {
+  return sprite(22, 28, (grid) => {
+    fillPoly(grid, [
+      [9, 10], [13, 10], [15, 18], [14, 25], [8, 25], [7, 18]
+    ], 'o');
+    glaze(grid, 10, 13, 2, 2, 'h');
+    for (let y = 12; y <= 23; y += 2) over(grid, 11, y, 'h');
+    over(grid, 13, 18, 's');
+    over(grid, 13, 20, 's');
+    over(grid, 12, 22, 's');
+    seam(grid, 8, 24, 6);
+
+    fillEllipse(grid, 11, 8, 3, 3, 'o');
+    fillPoly(grid, [[11, 0], [7, 6], [15, 6]], 'o');
+    glaze(grid, 10, 2, 1, 1, 'h');
+    eye(grid, 9, 8);
+    eye(grid, 12, 8);
+    if (attack) {
+      over(grid, 10, 10, '#');
+      over(grid, 11, 10, '#');
+      over(grid, 12, 10, '#');
+    } else {
+      over(grid, 11, 10, '#');
+    }
+
+    fillPoly(grid, [[0, 16], [5, 15], [5, 21], [0, 22]], 'h');
+    seam(grid, 1, 17, 4);
+    over(grid, 2, 19, '#');
+    over(grid, 1, 20, 's');
+    limb(grid, 5, 15, 10, 11, 0, 0, '#');
+
+    if (attack) {
+      limb(grid, 14, 16, 18, 14, 1, 0, '#');
+      limb(grid, 18, 14, 21, 12, 1, 0, '#');
+      limb(grid, 21, 12, 19, 10, 0, 0, 'h');
+      limb(grid, 19, 10, 18, 12, 0, 0, 'h');
+      over(grid, 20, 12, 'e');
+    } else if (step) {
+      limb(grid, 14, 17, 17, 16, 1, 1, '#');
+      limb(grid, 17, 16, 21, 15, 1, 0, '#');
+      limb(grid, 21, 15, 20, 13, 0, 0, 'h');
+      limb(grid, 20, 13, 18, 14, 0, 0, 'h');
+    } else {
+      limb(grid, 14, 16, 18, 13, 1, 1, '#');
+      limb(grid, 18, 13, 21, 11, 1, 0, '#');
+      limb(grid, 21, 11, 19, 9, 0, 0, 'h');
+      limb(grid, 19, 9, 17, 11, 0, 0, 'h');
+    }
+
+    const left = attack ? 8 : (step ? 6 : 8);
+    const right = attack ? 14 : (step ? 15 : 13);
+    limb(grid, 9, 24, left, 27, 1, 0, 'o');
+    limb(grid, 13, 24, right, 27, 1, 0, 'o');
+    fillEllipse(grid, left, 27, 1, 0, '#');
+    fillEllipse(grid, right, 27, 1, 0, '#');
+    eraseEllipse(grid, 11, 26, 0, 1);
+
+    grid.put(11, 0, 'o');
+    grid.put(0, 18, 'h');
+    grid.put(left, 27, '#');
+    grid.put(right, 27, '#');
+  });
+}
+
+function shade(step, attack) {
+  return sprite(16, 30, (grid) => {
+    const lean = attack ? 0 : (step ? 1 : -1);
+    fillPoly(grid, [
+      [7, 0], [8, 0], [8, 4],
+      [10, 6], [10, 11], [8, 13],
+      [8 + lean, 18], [7, 24],
+      [8, 29], [7, 29], [6, 24],
+      [5 + lean, 18], [5, 13],
+      [4, 11], [4, 6], [6, 4]
+    ], 'o');
+    glaze(grid, 7, 4, 1, 2, 'h');
+    over(grid, 7, 16, 's');
+    over(grid, 6, 20, 's');
+    const vein = 7 + (attack ? 0 : lean);
+    for (let y = 15; y <= 22; y += 2) over(grid, vein, y, 'e');
+
+    const eyeY = step && !attack ? 9 : 8;
+    over(grid, 6, eyeY - 1, 'e');
+    over(grid, 8, eyeY - 1, 'e');
+    over(grid, 6, eyeY, 's');
+    over(grid, 8, eyeY, 's');
+    over(grid, 6, eyeY + 1, 's');
+    over(grid, 8, eyeY + 1, 's');
+    if (attack) {
+      over(grid, 6, 10, '#');
+      over(grid, 7, 10, '#');
+      over(grid, 8, 10, '#');
+    }
+
+    if (attack) {
+      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
+      limb(grid, 0, 15, 1, 22, 0, 0, 'e');
+      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
+      limb(grid, 15, 16, 13, 24, 0, 0, 'e');
+      limb(grid, 8, 14, 15, 13, 0, 0, 'e');
+    } else if (step) {
+      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
+      limb(grid, 0, 15, 3, 23, 0, 0, 'e');
+      limb(grid, 8, 13, 15, 16, 0, 0, 'e');
+      limb(grid, 15, 16, 11, 22, 0, 0, 'e');
+    } else {
+      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
+      limb(grid, 0, 15, 2, 21, 0, 0, 'e');
+      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
+      limb(grid, 15, 16, 12, 23, 0, 0, 'e');
+    }
+
+    grid.put(7, 0, 'o');
+    grid.put(8, 0, 'o');
+    grid.put(0, 15, 'e');
+    grid.put(15, 16, 'e');
+    grid.put(7, 29, 'o');
+    grid.put(8, 29, 'o');
+  });
+}
+
+function banner(step, attack) {
+  return sprite(26, 32, (grid) => {
+    limb(grid, 9, 0, 9, 31, 1, 1, '#');
+    fillEllipse(grid, 9, 1, 1, 1, 'h');
+    over(grid, 9, 11, 'h');
+    over(grid, 9, 12, 'h');
+
+    fillPoly(grid, [[11, 3], [18, 3], [18, 8], [11, 8]], 'h');
+    const tuck = attack ? 1 : 0;
+    fillPoly(grid, [[18, 3], [25, 4], [25, 5], [18, 4 + tuck]], 'h');
+    fillPoly(grid, [[18, 7], [25, 8], [25, 9], [18, 8]], 'h');
+    if (step && !attack) eraseEllipse(grid, 15, 8, 1, 0);
+    const markX = attack ? 14 : (step ? 13 : 12);
+    for (let x = markX; x < markX + 3; x += 1) {
+      over(grid, x, 5, 'o');
+      over(grid, x, 6, 'o');
+    }
+    grid.put(25, 4, 'h');
+    grid.put(25, 5, 'h');
+    grid.put(25, 8, 'h');
+    grid.put(25, 9, 'h');
+
+    fillPoly(grid, [[0, 17], [4, 15], [5, 22], [0, 24]], 'o');
+    over(grid, 1, 19, '#');
+    over(grid, 1, 21, '#');
+    fillEllipse(grid, 6, 16, 3, 3, 'o');
+    glaze(grid, 5, 14, 2, 1, 'h');
+    eye(grid, 4, 16);
+    eye(grid, 7, 16);
+    if (attack) {
+      over(grid, 5, 18, '#');
+      over(grid, 6, 18, '#');
+      over(grid, 7, 18, '#');
+    } else {
+      over(grid, 6, 18, '#');
+    }
+    fillPoly(grid, [[4, 19], [10, 19], [11, 26], [3, 26]], 'o');
+    over(grid, 5, 20, 'h');
+    over(grid, 6, 20, 'h');
+    over(grid, 7, 20, 'h');
+    over(grid, 9, 23, 's');
+    over(grid, 9, 25, 's');
+    seam(grid, 4, 23, 5);
+
+    if (attack) limb(grid, 8, 20, 10, 14, 1, 0, 'o');
+    else if (step) limb(grid, 8, 21, 10, 17, 1, 0, 'o');
+    else limb(grid, 7, 20, 10, 15, 1, 0, 'o');
+
+    const reach = attack ? 16 : (step ? 14 : 11);
+    limb(grid, 8, 22, reach, 24, 1, 0, 'o');
+
+    const lift = attack ? 0 : (step ? 2 : 0);
+    const other = attack ? 0 : (step ? 0 : 2);
+    limb(grid, 5, 26, 4, 31 - lift, 1, 0, 'o');
+    limb(grid, 8, 26, 9, 31 - other, 1, 0, 'o');
+    fillEllipse(grid, 4, 31 - lift, 1, 0, '#');
+    fillEllipse(grid, 9, 31 - other, 1, 0, '#');
+
+    grid.put(0, 20, 'o');
+    grid.put(25, 4, 'h');
+    grid.put(25, 9, 'h');
+    grid.put(9, 0, '#');
+    grid.put(9, 31, '#');
+  });
+}
+
+function warden(step, attack) {
+  return sprite(22, 30, (grid) => {
+    const dy = attack ? -3 : (step ? 1 : 0);
+    const spread = attack ? 0 : (step ? 2 : -1);
+
+    // Thin ash tatters own the side edges. The shield stays the front silhouette.
+    fillPoly(grid, [
+      [8, 14],
+      [2, 16],
+      [0, 17],
+      [0, 19],
+      [3, 18],
+      [7, 16]
+    ], 's');
+    fillPoly(grid, [
+      [13, 14],
+      [19, 16],
+      [21, 17],
+      [21, 19],
+      [18, 18],
+      [14, 16]
+    ], 's');
+
+    fillPoly(grid, [
+      [9, 12],
+      [13, 12],
+      [13, 19],
+      [12, 21],
+      [10, 21],
+      [9, 19]
+    ], 'o');
+    fillPoly(grid, [
+      [8, 5],
+      [14, 5],
+      [15, 8],
+      [13, 11],
+      [9, 11],
+      [7, 8]
+    ], 'o');
+    fillPoly(grid, [
+      [10, 0],
+      [12, 0],
+      [12, 5],
+      [10, 5]
+    ], '#');
+    over(grid, 10, 5, 'h');
+    over(grid, 11, 5, 'h');
+    over(grid, 12, 5, 'h');
+    over(grid, 9, 7, 'e');
+    over(grid, 10, 7, 'e');
+    over(grid, 12, 7, 'e');
+    over(grid, 13, 7, 'e');
+    over(grid, 10, 8, '#');
+    over(grid, 11, 8, '#');
+    over(grid, 12, 8, '#');
+
+    const lx = 8 - spread;
+    const rx = 14 + spread;
+    limb(grid, 10, 21, lx, 29, 1, 0, 'o');
+    limb(grid, 12, 21, rx, 29, 1, 0, 'o');
+    fillEllipse(grid, lx, 29, 1, 0, '#');
+    fillEllipse(grid, rx, 29, 1, 0, '#');
+
+    // Small heater in front of the torso. Attack lifts it; the box does not grow.
+    fillPoly(grid, [
+      [5, 12 + dy],
+      [16, 12 + dy],
+      [16, 16 + dy],
+      [11, 23 + dy],
+      [10, 23 + dy],
+      [5, 16 + dy]
+    ], 'h');
+    over(grid, 7, 13 + dy, 'e');
+    over(grid, 8, 13 + dy, 'e');
+    over(grid, 7, 15 + dy, '#');
+    over(grid, 14, 15 + dy, '#');
+    for (let i = 0; i < 6; i += 1) over(grid, 11, 14 + dy + i, '#');
+    over(grid, 10, 16 + dy, 'e');
+    over(grid, 11, 16 + dy, 'e');
+    over(grid, 10, 17 + dy, 'e');
+    over(grid, 11, 17 + dy, 'e');
+
+    grid.put(10, 0, '#');
+    grid.put(11, 0, '#');
+    grid.put(12, 0, '#');
+    grid.put(0, 17, 's');
+    grid.put(0, 18, 's');
+    grid.put(0, 19, 's');
+    grid.put(21, 17, 's');
+    grid.put(21, 18, 's');
+    grid.put(21, 19, 's');
+    grid.put(lx, 29, '#');
+    grid.put(rx, 29, '#');
+  });
+}
+
+function cinder(step, attack) {
+  return sprite(18, 26, (grid) => {
+    const bob = attack ? -1 : (step ? 1 : 0);
+    fillEllipse(grid, 9, 14 + bob, 5, 6, 'o');
+    fillEllipse(grid, 9, 8 + bob, 3, 3, 'o');
+    eye(grid, 8, 7 + bob);
+    limb(grid, 9, 6 + bob, 9, 1, 0, 0, 'h');
+    fillEllipse(grid, 9, 1, 1, 1, 'e');
+    const left = attack ? 6 : (step ? 5 : 7);
+    const right = attack ? 12 : (step ? 13 : 11);
+    limb(grid, 7, 19, left, 25, 1, 0, '#');
+    limb(grid, 11, 19, right, 25, 1, 0, '#');
+    grid.put(0, 14, 'o');
+    grid.put(17, 14, 'o');
+    grid.put(9, 0, 'e');
+    grid.put(9, 25, '#');
+  });
+}
+
+function hush(step, attack) {
+  return sprite(20, 26, (grid) => {
+    const bob = attack ? 0 : (step ? 1 : -1);
+    fillEllipse(grid, 10, 12 + bob, 5, 6, 'o');
+    fillEllipse(grid, 10, 6, 4, 3, 'h');
+    over(grid, 8, 6, '#');
+    over(grid, 11, 6, '#');
+    eye(grid, 8, 11 + bob);
+    const left = attack ? 7 : (step ? 6 : 8);
+    const right = attack ? 13 : (step ? 14 : 12);
+    limb(grid, 8, 18, left, 25, 1, 0, '#');
+    limb(grid, 12, 18, right, 25, 1, 0, '#');
+    grid.put(0, 12, 'h');
+    grid.put(19, 12, 'h');
+    grid.put(10, 0, 'h');
+    grid.put(10, 25, '#');
+  });
+}
+
 const SPRITES = {
   shambler: [shambler(0, false), shambler(1, false), shambler(0, true)],
   runner: [runner(0, false), runner(1, false), runner(0, true)],
@@ -512,7 +989,15 @@ const SPRITES = {
   armored: [armored(0, false), armored(1, false), armored(0, true)],
   spitter: [spitter(0, false), spitter(1, false), spitter(0, true)],
   swarm: [swarm(0, false), swarm(1, false), swarm(0, true)],
-  boss: [boss(0, false), boss(1, false), boss(0, true)]
+  boss: [boss(0, false), boss(1, false), boss(0, true)],
+  leaper: [leaper(0, false), leaper(1, false), leaper(0, true)],
+  splitter: [splitter(0, false), splitter(1, false), splitter(0, true)],
+  mender: [mender(0, false), mender(1, false), mender(0, true)],
+  shade: [shade(0, false), shade(1, false), shade(0, true)],
+  banner: [banner(0, false), banner(1, false), banner(0, true)],
+  warden: [warden(0, false), warden(1, false), warden(0, true)],
+  charge: [cinder(0, false), cinder(1, false), cinder(0, true)],
+  hush: [hush(0, false), hush(1, false), hush(0, true)]
 };
 
 const BOSS_ENRAGED = [boss(0, false, true), boss(1, false, true), boss(0, true, true)];

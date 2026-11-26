@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRun} from '../src/state.js';
+import {createRun, simulate} from '../src/engine.js';
 import {ARENA, createUnit} from '../src/shared.js';
 import {createController} from '../src/boot.js';
 import {exportSave, importSave} from '../src/storage.js';
@@ -47,17 +47,28 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   assert.equal(api.act('start', {seed: 4, difficulty: 'normal', runId: 'drag-play'}).ok, true);
   const state = api.getState();
   const hero = state.slots[2].unit;
-  const before = ids(state);
-  const blocked = api.act('dragDrop', {from: 2, to: 0});
-  assert.equal(blocked.ok, false);
-  assert.equal(blocked.reason, 'not-planning');
-  assert.deepEqual(ids(state), before);
-
-  assert.equal(api.act('pause').paused, true);
+  state.nextDraftXp = 1e9;
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  const time = state.time;
+  const tick = state.tick;
   const moved = api.act('dragDrop', {from: 2, to: 0});
-  assert.equal(moved.ok, true);
+  assert.equal(moved.ok, true, moved.reason || '');
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
   assert.equal(state.slots[0].unit, hero);
   assert.equal(state.slots[2].unit, null);
+  simulate(state, 0.5);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
+  assert.ok(state.time > time);
+  assert.ok(state.tick > tick);
+
+  assert.equal(api.act('pause').paused, true);
+  assert.equal(api.act('dragDrop', {from: 0, to: 2}).ok, true);
+  assert.equal(state.paused, true);
+  assert.equal(state.slots[2].unit, hero);
+  assert.equal(api.act('resume').paused, false);
 
   state.slots[3].unit = createUnit(state, 'bolt', 1, 'tower');
   state.slots[4].unit = createUnit(state, 'bolt', 1, 'tower');
@@ -66,15 +77,20 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   const illegal = api.act('dragDrop', {from: 4, to: 5});
   assert.equal(illegal.ok, false);
   assert.equal(illegal.snapped, true);
+  assert.equal(state.paused, false);
   assert.deepEqual(ids(state), board);
-  const heroDrop = api.act('dragDrop', {from: 0, to: 3});
+  const heroDrop = api.act('dragDrop', {from: 2, to: 3});
   assert.equal(heroDrop.ok, false);
   assert.equal(heroDrop.reason, 'heroProtected');
-  assert.equal(state.slots[0].unit, hero);
+  assert.equal(heroDrop.snapped, true);
+  assert.equal(state.slots[2].unit, hero);
   assert.equal(state.slots[3].unit.type, 'bolt');
 
+  const beforeMerge = state.time;
   const merged = api.act('dragDrop', {from: 3, to: 4});
   assert.equal(merged.ok, true, merged.reason);
+  assert.equal(state.paused, false);
+  assert.equal(state.phase, 'playing');
   assert.equal(state.slots[3].unit, null);
   assert.equal(state.slots[4].unit.kind, 'tower');
   assert.equal(state.slots[4].unit.type, 'bolt');
@@ -82,4 +98,8 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   assert.equal(state.slots.filter(slot => slot.unit && slot.unit.kind === 'hero').length, 1);
   assert.match(api.getUI().message, /rank 2/);
   assert.match(api.getUI().message, /become one/);
+  simulate(state, 0.5);
+  assert.equal(state.paused, false);
+  assert.ok(state.time > beforeMerge);
+  assert.equal(state.slots[4].unit.rank, 2);
 });

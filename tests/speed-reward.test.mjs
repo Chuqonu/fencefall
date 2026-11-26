@@ -9,7 +9,7 @@ import {chooseDraft, updateDrafts} from '../src/systems/drafts.js';
 
 const FRAME = 1 / 60;
 const SEEDS = [11, 42, 16016, 123456];
-const PLAYING_SIM = 18;
+const PLAYING_SIM = 16;
 const DRAFT_BUDGET = 30;
 const HELD_WALL = 45;
 
@@ -21,7 +21,7 @@ function begin(seed, runId, speed) {
 }
 
 function advanceSim(state, simSeconds) {
-  const speed = state.speed === 1.5 || state.speed === 3 ? state.speed : 1;
+  const speed = state.speed === 1.5 || state.speed === 3 || state.speed === 10 ? state.speed : 1;
   const frames = Math.round(simSeconds / speed / FRAME);
   for (let index = 0; index < frames; index += 1) advance(state, FRAME);
 }
@@ -59,36 +59,63 @@ test('the same simulation time at 3x does not pay more currency, xp, or kills th
   for (const seed of SEEDS) {
     const one = begin(seed, `equal-${seed}-1`, 1);
     const triple = begin(seed, `equal-${seed}-3`, 3);
+    const ten = begin(seed, `equal-${seed}-10`, 10);
     advanceSim(one.state, PLAYING_SIM);
     advanceSim(triple.state, PLAYING_SIM);
+    advanceSim(ten.state, PLAYING_SIM);
     assert.equal(one.state.phase, 'playing', seed);
     assert.equal(triple.state.phase, 'playing', seed);
+    assert.equal(ten.state.phase, 'playing', seed);
     assert.equal(one.state.speed, 1);
     assert.equal(triple.state.speed, 3);
+    assert.equal(ten.state.speed, 10);
     assert.ok(Math.abs(one.state.time - PLAYING_SIM) < 1e-6, seed);
+    assert.equal(ten.state.tick, one.state.tick, `seed ${seed} 10x tick`);
+    assert.equal(ten.state.time, one.state.time, `seed ${seed} 10x time`);
+    assert.ok(ten.state.xp <= one.state.xp, `seed ${seed} 10x xp`);
+    assert.ok(ten.state.kills <= one.state.kills, `seed ${seed} 10x kills`);
+    assert.equal(ten.profile.currency, 0, `seed ${seed} 10x paid before settlement`);
     assertNotHigher(triple, one, `seed ${seed}`);
+    const tenPay = settleRun(ten.profile, ten.state);
+    assert.equal(tenPay.result, 'abandon', `seed ${seed} 10x`);
+    assert.ok(tenPay.currency <= one.profile.currency, `seed ${seed} 10x settlement rose with speed`);
+    assert.equal(tenPay.time, one.state.settlement.time, `seed ${seed} 10x settled time`);
+    assert.ok(tenPay.kills <= one.state.settlement.kills, `seed ${seed} 10x settled kills`);
   }
 
   const one = begin(16016, 'draft-budget-1', 1);
   const triple = begin(16016, 'draft-budget-3', 3);
+  const ten = begin(16016, 'draft-budget-10', 10);
   advanceSim(one.state, DRAFT_BUDGET);
   advanceSim(triple.state, DRAFT_BUDGET);
+  advanceSim(ten.state, DRAFT_BUDGET);
   assert.equal(one.state.phase, 'draft');
   assert.equal(triple.state.phase, 'draft');
+  assert.equal(ten.state.phase, 'draft');
   assert.ok(one.state.time < DRAFT_BUDGET, 'draft budget was counted as fight time');
   assert.equal(triple.state.time, one.state.time);
   assert.equal(triple.state.tick, one.state.tick);
+  assert.equal(ten.state.time, one.state.time);
+  assert.equal(ten.state.tick, one.state.tick);
   assert.ok(triple.state.kills <= one.state.kills);
   assert.ok(triple.state.xp <= one.state.xp);
+  assert.ok(ten.state.kills <= one.state.kills);
+  assert.ok(ten.state.xp <= one.state.xp);
   assert.equal(one.profile.currency, 0);
   assert.equal(triple.profile.currency, 0);
+  assert.equal(ten.profile.currency, 0);
   const onePay = settleRun(one.profile, one.state);
   const triplePay = settleRun(triple.profile, triple.state);
+  const tenPay = settleRun(ten.profile, ten.state);
   assert.ok(onePay.currency > 0);
   assert.ok(triplePay.currency <= onePay.currency, 'draft-budget settlement rose with speed');
+  assert.ok(tenPay.currency <= onePay.currency, 'draft-budget settlement rose at 10x');
   assert.equal(triplePay.time, onePay.time);
+  assert.equal(tenPay.time, onePay.time);
   assert.ok(triplePay.kills <= onePay.kills);
+  assert.ok(tenPay.kills <= onePay.kills);
   assert.ok(triple.profile.currency <= one.profile.currency);
+  assert.ok(ten.profile.currency <= one.profile.currency);
 });
 
 test('pause and draft wall time are not fight time and do not raise the settlement', () => {
@@ -105,7 +132,7 @@ test('pause and draft wall time are not fight time and do not raise the settleme
   assert.ok(controlPay.currency > 0);
   assert.equal(controlPay.time, fightTime);
 
-  for (const speed of [1, 3]) {
+  for (const speed of [1, 3, 10]) {
     const held = begin(16016, `hold-${speed}`, speed);
     advanceSim(held.state, PLAYING_SIM);
     assert.equal(held.state.time, fightTime, speed);

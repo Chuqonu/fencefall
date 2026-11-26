@@ -6,7 +6,8 @@
  * Call ingest, then update(seconds), then draw. Do not ingest during draw.
  * This module never reads or advances gameplay RNG.
  *
- * Event names: shot, hit, kill, fence_hit, merge, draft, victory, defeat, ui.
+ * Event names: shot, hit, kill, fence_hit, merge, draft, victory, defeat, ui,
+ * leap, split, mend, phase.
  * Optional fields: x, y, targetX, targetY, damage, crit, towerType, rank, splash,
  * chain, pierce, attack, points, stacks, slot/slotIndex/fromIndex/toIndex, time.
  * Missing fields are skipped. emit() copies payload after `type`, so a payload
@@ -19,6 +20,9 @@
  * A splash burst is a hollow ring. A chain jump is a kinked bolt. Other impacts
  * stay starbursts with a damage number. A critical hit adds one gold diamond
  * flash and a thicker ring; a normal hit does not. A fence hit is a red bite in the rail.
+ * Leap, split, mend, and phase draw only when x and y are finite. Leap is a
+ * short downward streak, split is a few chips, mend is one upward mote, and
+ * phase is a faint ring. Other fields on those events are ignored.
  */
 import { ARENA, slotGeometry } from '../shared.js';
 
@@ -39,6 +43,10 @@ const LIMITS = Object.freeze({
   ui: 4,
   status: 6,
   boss: 1,
+  leap: 6,
+  split: 6,
+  mend: 6,
+  phase: 6,
 });
 
 const PALETTES = Object.freeze({
@@ -92,7 +100,14 @@ const ELEMENT_BEHAVIOR = Object.freeze({
 const FEEDBACK = new Set([
   'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
   'victory', 'defeat', 'ui', 'status', 'boss',
+  'leap', 'split', 'mend', 'phase',
 ]);
+
+// These need a finite x and y on the event. Slot fallback and extra fields are ignored.
+const TELLS = new Set(['leap', 'split', 'mend', 'phase']);
+
+const LEAP_INK = Object.freeze({ core: '#fff1d0', hot: '#e2a23a', mid: '#e2a23a', dim: '#6e5424' });
+const SPLIT_CHIPS = Object.freeze(['#efe6d2', '#d7c4a4', '#8c8374']);
 
 // Full-motion shapes. Reduced motion does not draw these; a short impact stands in
 // when the particle was the hit or shot itself.
@@ -115,6 +130,7 @@ const ALIAS = Object.freeze({
   button: 'ui',
   boss_spawn: 'boss',
   boss_enter: 'boss',
+  boss_approach: 'boss',
   boss_enrage: 'boss',
 });
 
@@ -210,6 +226,12 @@ function readDamage(event) {
   const direct = finite(event.damage);
   if (direct != null) return direct;
   return finite(event.amount);
+}
+
+function readRatio(event) {
+  const value = finite(event.ratio);
+  if (value == null) return null;
+  return Math.min(1, Math.max(0, value));
 }
 
 function readHeal(event, hint) {
@@ -415,6 +437,36 @@ function slotPoint(event, type) {
   return { x: slot.x, y: slot.y, fromSlot: true };
 }
 
+function tellFeedback(type, event) {
+  const x = finite(event.x);
+  const y = finite(event.y);
+  if (x == null || y == null) return null;
+  return {
+    type,
+    element: '',
+    behavior: 'neutral',
+    crit: false,
+    damage: null,
+    heal: null,
+    position: { x, y, fromSlot: false },
+    x,
+    y,
+    target: null,
+    rank: null,
+    splash: 0,
+    chain: 0,
+    pierce: 0,
+    delivery: '',
+    stacks: 0,
+    points: [],
+    time: finite(event.time) ?? 0,
+    cue: '',
+    approach: false,
+    execute: false,
+    ratio: null,
+  };
+}
+
 /**
  * Pure description of one feedback event. Returns null when the event is not visual/audio feedback.
  * @param {object} event
@@ -423,6 +475,7 @@ export function describeFeedback(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
   const resolved = resolveKind(event);
   if (!resolved) return null;
+  if (TELLS.has(resolved.type)) return tellFeedback(resolved.type, event);
   const element = readElement(event, resolved.hint, resolved.type);
   const behavior = behaviorFrom(element);
   let type = resolved.type;
@@ -465,6 +518,7 @@ export function describeFeedback(event) {
     cue,
     approach: type === 'boss' && event.warning === true,
     execute: event.execute === true,
+    ratio: readRatio(event),
   };
 }
 
@@ -587,7 +641,7 @@ export function createEffects() {
     particles.push(particle);
   }
 
-  function pushRing(x, y, radius, grow, color, life, weight) {
+  function pushRing(x, y, radius, grow, color, life, weight, veil) {
     if (!Number.isFinite(x) || !Number.isFinite(y) || !(radius > 0)) return;
     rings.push({
       x: Math.round(x),
@@ -599,6 +653,7 @@ export function createEffects() {
       life,
       maxLife: life,
       weight: weight > 1 ? 2 : 1,
+      veil: Number.isFinite(veil) ? veil : 0.95,
     });
   }
 
@@ -1089,6 +1144,61 @@ export function createEffects() {
     if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 6, Math.min(4, desc.stacks), palette.mid, 0.32);
   }
 
+  function tellPoint(desc) {
+    const x = finite(desc.x);
+    const y = finite(desc.y);
+    if (x == null || y == null) return null;
+    return { x, y };
+  }
+
+  // Short shaft pointing down. Reduced motion keeps the usual short impact.
+  function spawnLeap(desc) {
+    const point = tellPoint(desc);
+    if (!point) return;
+    pushStreak(point.x, point.y, 0, 1, 6, LEAP_INK, false, 0.16);
+  }
+
+  // One still chip, plus two scraps that reduced motion drops.
+  function spawnSplit(desc, seed) {
+    const point = tellPoint(desc);
+    if (!point) return;
+    pushBlock(point.x, point.y, 2, 2, SPLIT_CHIPS[1], 0.2);
+    for (let i = 0; i < 2; i++) {
+      const angle = -2.4 + rand01(seed + i * 23) * 1.6;
+      pushSpark(point.x + (i === 0 ? -2 : 2), point.y, angle, 24, SPLIT_CHIPS[i === 0 ? 0 : 2], 0.16, 2, 36);
+    }
+  }
+
+  // One mote rising a short way. Reduced motion keeps a still mark at the origin.
+  function spawnMend(desc) {
+    const point = tellPoint(desc);
+    if (!point) return;
+    pushParticle({
+      kind: 'mote',
+      x: point.x,
+      y: point.y,
+      vx: 0,
+      vy: -18,
+      size: 2,
+      color: PALETTES.heal.hot,
+      life: 0.26,
+      maxLife: 0.26,
+      motionOnly: true,
+      markWhenReduced: true,
+      markX: point.x,
+      markY: point.y,
+      shaft: PALETTES.heal.hot,
+      core: PALETTES.heal.core,
+    });
+  }
+
+  // Thin ring, held faint so it does not read as a kill or a hit.
+  function spawnPhase(desc) {
+    const point = tellPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 6, 4, '#c5d0c8', 0.28, 1, 0.34);
+  }
+
   function spawnBoss(desc, seed) {
     if (desc.approach) return;
     const point = visualPoint(desc);
@@ -1112,6 +1222,10 @@ export function createEffects() {
       case 'ui': spawnUi(desc); break;
       case 'status': spawnStatus(desc, seed); break;
       case 'boss': spawnBoss(desc, seed); break;
+      case 'leap': spawnLeap(desc); break;
+      case 'split': spawnSplit(desc, seed); break;
+      case 'mend': spawnMend(desc); break;
+      case 'phase': spawnPhase(desc); break;
       default: break;
     }
   }
@@ -1613,7 +1727,8 @@ export function createEffects() {
       try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
       for (let i = 0; i < rings.length; i++) {
         const ring = rings[i];
-        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * 0.95, ring.weight);
+        const veil = Number.isFinite(ring.veil) ? ring.veil : 0.95;
+        drawPixelRing(ctx, ring.x, ring.y, reduced ? ring.r0 : ring.r, ring.color, fade(ring) * veil, ring.weight);
       }
       for (let i = 0; i < particles.length; i++) drawParticle(ctx, particles[i], reduced);
       for (let i = 0; i < floaters.length; i++) drawFloater(ctx, floaters[i], reduced);

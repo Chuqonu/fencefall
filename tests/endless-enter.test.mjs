@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun, enterEndless, step} from '../src/engine.js';
+import {STEP} from '../src/shared.js';
+import {FENCE_REGEN_PER_SECOND} from '../src/systems/combat.js';
 import {ACTIONS, createController} from '../src/boot.js';
 
 function memoryStorage() {
@@ -54,7 +56,7 @@ test('a settled victory enters endless, stays playing, and does not win again', 
   step(state);
   assert.equal(state.phase, 'playing');
   assert.equal(state.tick, tick + 1);
-  assert.equal(state.fence.hp, 400);
+  assert.ok(Math.abs(state.fence.hp - (400 + FENCE_REGEN_PER_SECOND * STEP)) < 1e-8);
   assert.equal(state.settlement, settlement);
   assert.equal(state.settlement.currency, 12);
   assert.equal(state.settlement.result, 'victory');

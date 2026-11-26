@@ -1,12 +1,14 @@
 // A rank-1 bolt on a rear slot must acquire an enemy stopped on the fence
 // when that center is inside the tower's range, and must ignore an enemy
 // whose center is outside it. Slot centers come from slotGeometry.
-// Acquisition is the combat step, which chooses targets by distance.
+// Acquisition is the combat step. A tower shoots an enemy inside its range,
+// preferring the one closest to the fence.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun} from '../src/state.js';
 import {ARENA, STEP, createUnit, distance, slotGeometry} from '../src/shared.js';
 import {getUnitStats} from '../src/data/towers.js';
+import {HERO_BASE} from '../src/systems/hero.js';
 import {spawnEnemy} from '../src/systems/movement.js';
 import {updateCombat} from '../src/systems/combat.js';
 
@@ -22,15 +24,61 @@ function fresh(label) {
   return state;
 }
 
+test('the defender block is a centered 2×5 grid under a lower fence', () => {
+  assert.equal(ARENA.rows, 2);
+  assert.equal(ARENA.cols, 5);
+  assert.equal(ARENA.fenceY, 512);
+  assert.equal(ARENA.frontY, 560);
+  assert.equal(ARENA.backY, 612);
+  assert.equal(ARENA.pitch, 48);
+  assert.equal(ARENA.sideMargin, 60);
+  assert.equal(ARENA.slotWidth, 48);
+  assert.equal(ARENA.slotHeight, 48);
+  assert.ok(ARENA.backY - ARENA.frontY < 84);
+  assert.ok(ARENA.frontY > ARENA.fenceY);
+  assert.equal(HERO_BASE.range, 430);
+  const reachY = ARENA.frontY - HERO_BASE.range;
+  assert.ok(reachY < 200, `front-row range ends at y=${reachY}`);
+  const front = [];
+  const back = [];
+  for (let index = 0; index < ARENA.rows * ARENA.cols; index += 1) {
+    const slot = slotGeometry(index);
+    assert.equal(slot.width, ARENA.slotWidth);
+    assert.equal(slot.height, ARENA.slotHeight);
+    assert.ok(slot.width >= 40 && slot.height >= 40, 'sprite body fits the slot');
+    assert.equal(hitIndex(slot.x, slot.y), index);
+    (slot.row === 0 ? front : back).push(slot);
+  }
+  assert.equal(front[2].x, ARENA.width / 2);
+  assert.equal(front[0].left, ARENA.sideMargin);
+  assert.equal(ARENA.width - (front[4].left + front[4].width), ARENA.sideMargin);
+  assert.equal(hitIndex(ARENA.sideMargin - 1, front[0].y), -1);
+  assert.equal(hitIndex(front[4].left + front[4].width, front[4].y), -1);
+  for (let col = 1; col < ARENA.cols; col += 1) {
+    assert.equal(front[col].x - front[col - 1].x, ARENA.pitch);
+    assert.ok(front[col].left >= front[col - 1].left + front[col - 1].width);
+  }
+  for (let col = 0; col < ARENA.cols; col += 1) {
+    assert.equal(back[col].x, front[col].x);
+    assert.ok(back[col].top >= front[col].top + front[col].height);
+    assert.ok(back[col].top + back[col].height <= ARENA.height);
+  }
+});
+
+function hitIndex(x, y) {
+  for (let index = 0; index < ARENA.rows * ARENA.cols; index += 1) {
+    const slot = slotGeometry(index);
+    if (x >= slot.left && x < slot.left + slot.width && y >= slot.top && y < slot.top + slot.height) return index;
+  }
+  return -1;
+}
+
 function documentedRear(index) {
   const geometry = slotGeometry(index);
   assert.equal(geometry.row, 1, `slot ${index} is not on the rear row`);
   assert.equal(geometry.col, index - 5);
-  assert.equal(ARENA.backY, 592);
-  assert.equal(ARENA.frontY, 508);
-  assert.equal(ARENA.fenceY, 450);
   assert.equal(geometry.y, ARENA.backY);
-  assert.equal(geometry.x, 36 + 72 * geometry.col);
+  assert.equal(geometry.x, ARENA.sideMargin + ARENA.slotWidth / 2 + ARENA.pitch * geometry.col);
   return geometry;
 }
 

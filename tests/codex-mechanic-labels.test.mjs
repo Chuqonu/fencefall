@@ -121,3 +121,36 @@ test('codex mechanic badges use the active language', () => {
   const rows = badgeRows(scald);
   assert.ok(rows.some(row => row.join(' ') === '溅射 燃烧 减速'), rows);
 });
+
+function lineTexts(node, rows = []) {
+  if (typeof node?.className === 'string' && node.className.split(/\s+/).includes('meta-line')) {
+    rows.push((node.children || []).map(child => child.textContent).join(' '));
+  }
+  for (const child of node?.children || []) lineTexts(child, rows);
+  return rows;
+}
+
+test('a bolt codex card shows projectile speed in px/s', () => {
+  function boltRows(language) {
+    const root = codexBadges(language);
+    const tab = findByTestId(root, 'codex-tab-towers');
+    for (const fn of tab?.listeners?.click || []) fn({preventDefault() {}, stopPropagation() {}});
+    return lineTexts(findByTestId(root, 'codex-tower-bolt'));
+  }
+  const zh = boltRows('zh');
+  const en = boltRows('en');
+  assert.ok(zh.includes('弹速 440 px/s'), zh.join(' | '));
+  assert.ok(en.includes('Projectile speed 440 px/s'), en.join(' | '));
+  assert.equal(zh.some(row => row.includes('11') && row.includes('px/s')), false);
+});
+
+test('the Cinder codex burn row marks 4 per second', () => {
+  function burnLine(language) {
+    const root = codexBadges(language);
+    const tab = findByTestId(root, 'codex-tab-towers');
+    for (const fn of tab?.listeners?.click || []) fn({preventDefault() {}, stopPropagation() {}});
+    return lineTexts(findByTestId(root, 'codex-tower-fire')).find(row => /burn|燃烧/i.test(row)) || '';
+  }
+  assert.equal(burnLine('en'), 'Burn 4/s · 2.6 s');
+  assert.equal(burnLine('zh'), '燃烧 4/秒 · 2.6 s');
+});

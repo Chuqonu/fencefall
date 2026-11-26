@@ -13,6 +13,15 @@
  * A plate walker keeps two steel shoulders, still visible when a tint covers the body.
  * A bilingual director or wave hint is drawn in the top margin.
  * The selected defender shows its rank just above the sprite.
+ * A phased enemy sprite is drawn at 42% opacity, then alpha is restored.
+ * While leapTimer is above zero, an amber bar sits just above that sprite. A pale bar marks a warded ally.
+ * A pale line joins an ash warden to the ally it is shielding.
+ * An amber dash points from a hurried enemy back toward its banner.
+ * A green line joins an ash mender to the most wounded ally in reach.
+ * A gold corner marks a tower that has a legal merge.
+ * While an ash hush is biting, each defender shows a short teal bar.
+ * While chargeTimer is above zero, a shrinking red bar shows the fuse.
+ * Inside chargeGap, and before the fuse lights, a short amber bar marks the approach.
  */
 
 import {drawWorld} from './world.js';
@@ -20,6 +29,7 @@ import {drawDefender, defenderSize} from './defenders.js';
 import {drawEnemy, enemySize} from './enemies.js';
 import {createEffects} from './effects.js';
 import {getUnitStats} from '../data/towers.js';
+import {mergeableSlotIndexes} from '../systems/merges.js';
 import {ARENA, clamp, hitSlot as hitSlotAt, slotGeometry} from '../shared.js';
 
 const LETTERBOX = '#0e171c';
@@ -660,6 +670,7 @@ function drawRange(ctx, state, slotIndex, strokeOnly, warned, cache) {
     return;
   }
   if (attack) drawPixelCircle(ctx, cx, cy, attack, '#f0cb72');
+  // Splash is measured around the enemy that was hit, not around this slot.
   if (aura && Math.abs(aura - attack) > 6) drawPixelCircle(ctx, cx, cy, aura, '#7dcec0');
   ctx.fillStyle = attack ? '#f0cb72' : '#7dcec0';
   ctx.fillRect(cx - 2, cy, 5, 1);
@@ -748,6 +759,199 @@ function statusTintColor(enemy) {
   if (statusLive(enemy, 'poison')) return STATUS_TINT.poison;
   if (statusLive(enemy, 'slow')) return STATUS_TINT.slow;
   return null;
+}
+
+// 8×3 amber bar, centered on the sprite and sitting in the gap just above it.
+function drawLeapMark(ctx, enemy, anchor) {
+  const sized = enemySize(enemy);
+  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
+  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  ctx.fillStyle = '#e2a23a';
+  ctx.fillRect(Math.round(anchor.x) - 4, markY, 8, 3);
+}
+
+function drawChargeMark(ctx, enemy, anchor) {
+  if (!enemy || enemy.dead) return;
+  const fusing = enemy.chargeTimer > 0 && enemy.chargeWindup > 0;
+  const radius = Number.isFinite(enemy.radius) && enemy.radius > 0 ? enemy.radius : 12;
+  const stopY = ARENA.fenceY - radius;
+  const approaching = !fusing && enemy.chargeLit !== true && enemy.chargeGap > 0
+    && enemy.y >= stopY - enemy.chargeGap && enemy.y < stopY - 0.75;
+  if (!fusing && !approaching) return;
+  const sized = enemySize(enemy);
+  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
+  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  if (approaching) {
+    ctx.fillStyle = '#f0b429';
+    ctx.fillRect(Math.round(anchor.x) - 4, markY - 8, 8, 3);
+    return;
+  }
+  const ratio = Math.max(0, Math.min(1, enemy.chargeTimer / enemy.chargeWindup));
+  const width = Math.max(2, Math.round(12 * ratio));
+  ctx.fillStyle = '#e24a3a';
+  ctx.fillRect(Math.round(anchor.x) - Math.floor(width / 2), markY - 8, width, 2);
+}
+
+function boardHushed(enemies) {
+  if (!Array.isArray(enemies)) return false;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!enemy || enemy.dead || !(enemy.hp > 0) || !(enemy.hushFactor > 0)) continue;
+    if (statusLive(enemy, 'stun')) continue;
+    const radius = Number.isFinite(enemy.radius) && enemy.radius > 0 ? enemy.radius : 12;
+    if (enemy.y >= ARENA.fenceY - radius - 0.75) return true;
+  }
+  return false;
+}
+
+function drawMergeCorner(ctx, slot, index, anchorX, spriteTop) {
+  const box = slotBox(slot, index);
+  const left = Number.isFinite(box.left) ? box.left : box.x;
+  const top = Number.isFinite(box.top) ? box.top : box.y;
+  ctx.fillStyle = '#f0c56a';
+  if (Number.isFinite(left) && Number.isFinite(top)) {
+    const x = Math.round(left) + 1;
+    const y = Math.round(top) + 1;
+    ctx.fillRect(x, y, 8, 2);
+    ctx.fillRect(x, y, 2, 8);
+  }
+  if (Number.isFinite(anchorX) && Number.isFinite(spriteTop)) {
+    ctx.fillRect(Math.round(anchorX) - 4, Math.round(spriteTop) - 7, 8, 3);
+  }
+}
+
+function drawHushBoardMark(ctx, x, top) {
+  ctx.fillStyle = '#9fd0c8';
+  ctx.fillRect(x - 4, top - 8, 8, 2);
+}
+
+function drawWardLinks(ctx, enemies, anchors) {
+  ctx.save();
+  ctx.strokeStyle = '#d5e4f2';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < enemies.length; i++) {
+    const source = enemies[i];
+    const from = anchors[i];
+    if (!source || source.dead || !(source.wardRange > 0) || !from) continue;
+    let best = -1;
+    let bestDist = Infinity;
+    for (let j = 0; j < enemies.length; j++) {
+      if (j === i) continue;
+      const ally = enemies[j];
+      if (!ally || ally.dead || !(ally.wardShield > 0)) continue;
+      const dist = Math.hypot(ally.x - source.x, ally.y - source.y);
+      if (dist <= source.wardRange && dist < bestDist) {
+        best = j;
+        bestDist = dist;
+      }
+    }
+    const to = best >= 0 ? anchors[best] : null;
+    if (!to) continue;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y - from.size.height / 2);
+    ctx.lineTo(to.x, to.y - to.size.height / 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawBannerHaste(ctx, enemies, anchors) {
+  ctx.save();
+  ctx.strokeStyle = '#e2a23a';
+  ctx.lineWidth = 1;
+  for (let j = 0; j < enemies.length; j++) {
+    const ally = enemies[j];
+    const to = anchors[j];
+    if (!ally || ally.dead || !(ally.hp > 0) || !to || ally.bannerRange > 0) continue;
+    const radius = Number.isFinite(ally.radius) && ally.radius > 0 ? ally.radius : 12;
+    if (!(ally.y < ARENA.fenceY - radius - 1e-6)) continue;
+    let from = null;
+    for (let i = 0; i < enemies.length; i++) {
+      if (i === j) continue;
+      const banner = enemies[i];
+      if (!banner || banner.dead || !(banner.hp > 0)) continue;
+      if (!(banner.bannerRange > 0) || !(banner.bannerHaste > 0) || !anchors[i]) continue;
+      const dx = ally.x - banner.x;
+      const dy = ally.y - banner.y;
+      if (dx * dx + dy * dy > banner.bannerRange * banner.bannerRange) continue;
+      from = anchors[i];
+      break;
+    }
+    if (!from) continue;
+    const x1 = to.x;
+    const y1 = to.y - to.size.height / 2;
+    const bx = from.x;
+    const by = from.y - from.size.height / 2;
+    const len = Math.hypot(bx - x1, by - y1) || 1;
+    const dash = Math.min(10, len);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 + ((bx - x1) / len) * dash, y1 + ((by - y1) / len) * dash);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawMendLinks(ctx, enemies, anchors) {
+  ctx.save();
+  ctx.strokeStyle = '#9dce6a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < enemies.length; i++) {
+    const source = enemies[i];
+    const from = anchors[i];
+    if (!source || source.dead || !(source.hp > 0) || !(source.mendRange > 0) || !from) continue;
+    if (statusLive(source, 'stun')) continue;
+    let best = -1;
+    let bestRatio = Infinity;
+    for (let j = 0; j < enemies.length; j++) {
+      if (j === i) continue;
+      const ally = enemies[j];
+      if (!ally || ally.dead || !(ally.hp > 0) || !anchors[j]) continue;
+      if (!Number.isFinite(ally.maxHp) || !(ally.maxHp > 0) || !(ally.hp < ally.maxHp)) continue;
+      const dist = Math.hypot(ally.x - source.x, ally.y - source.y);
+      if (dist > source.mendRange) continue;
+      const ratio = ally.hp / ally.maxHp;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        best = j;
+      }
+    }
+    if (best < 0) continue;
+    const to = anchors[best];
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y - from.size.height / 2);
+    ctx.lineTo(to.x, to.y - to.size.height / 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHushMark(ctx, enemy, anchor) {
+  if (!enemy || enemy.dead) return;
+  const sized = enemySize(enemy);
+  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
+  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  ctx.fillStyle = '#9fd0c8';
+  ctx.fillRect(Math.round(anchor.x) - 4, markY - 8, 8, 2);
+}
+
+function drawPriorityMark(ctx, enemy, anchor) {
+  if (!enemy || enemy.dead) return;
+  if (!(enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0)) return;
+  const sized = enemySize(enemy);
+  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
+  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  const x = Math.round(anchor.x);
+  ctx.fillStyle = '#f0c56a';
+  ctx.fillRect(x - 1, markY - 7, 3, 3);
+}
+function drawWardMark(ctx, enemy, anchor) {
+  if (enemy.dead) return;
+  const sized = enemySize(enemy);
+  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
+  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  ctx.fillStyle = '#d5e4f2';
+  ctx.fillRect(Math.round(anchor.x) - 5, markY - 5, 10, 2);
 }
 
 function drawPlateShoulders(ctx, anchor) {
@@ -1306,7 +1510,16 @@ export function createRenderer(canvas) {
       const anchor = enemyAnchor(enemy);
       anchors[i] = anchor;
       const flash = enemyFlash(enemy, hits, now, flashSpan);
-      isolate(ctx, () => drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash}));
+      isolate(ctx, () => {
+        if (enemy.phased === true) ctx.globalAlpha = 0.42;
+        drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash});
+        if (enemy.phased === true) ctx.globalAlpha = 1;
+      });
+      if (enemy.leapTimer > 0) drawLeapMark(ctx, enemy, anchor);
+      if (enemy.wardShield > 0) drawWardMark(ctx, enemy, anchor);
+      if (enemy.chargeGap > 0 || enemy.chargeTimer > 0) drawChargeMark(ctx, enemy, anchor);
+      if (enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0) drawPriorityMark(ctx, enemy, anchor);
+      if (enemy.hushFactor > 0) drawHushMark(ctx, enemy, anchor);
       if (!enemy.dead && flash <= 0.4) {
         const tint = statusTintColor(enemy);
         if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
@@ -1314,6 +1527,14 @@ export function createRenderer(canvas) {
       }
       if (!enemy.dead && Number(enemy.armor) >= 0.5) isolate(ctx, () => drawPlateShoulders(ctx, anchor));
     }
+
+    isolate(ctx, () => {
+      drawWardLinks(ctx, enemies, anchors);
+      drawBannerHaste(ctx, enemies, anchors);
+      drawMendLinks(ctx, enemies, anchors);
+    });
+    const hushed = boardHushed(enemies);
+    const mergeable = mergeableSlotIndexes(state);
 
     for (let index = 0; index < 10; index++) {
       const slot = slots[index];
@@ -1325,6 +1546,8 @@ export function createRenderer(canvas) {
       const anchorY = Math.round(origin.y + size.height / 2);
       const flash = unitFlash(unit.id, shots, now, flashSpan);
       isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
+      if (hushed) drawHushBoardMark(ctx, anchorX, anchorY - size.height);
+      if (mergeable.includes(index)) drawMergeCorner(ctx, slot, index, anchorX, anchorY - size.height);
       if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
     }
 

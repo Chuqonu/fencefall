@@ -69,7 +69,7 @@ const MAX_UNIT_KILLS = 1e7;
 const UINT32 = 4294967295;
 
 const BASE_TYPE_SET = new Set(BASE_TYPES);
-const ENEMY_KINDS = new Set(['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss']);
+const ENEMY_KINDS = new Set(['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush']);
 const STATUS_TYPES = new Set(['burn', 'poison', 'slow', 'stun', 'brittle']);
 const PHASES = new Set(['playing', 'draft', 'placing', 'victory', 'defeat']);
 const RESULTS = new Set(['victory', 'defeat', 'abandon']);
@@ -84,7 +84,7 @@ const RUN_KEYS = new Set([
   'version', 'runId', 'seed', 'rng', 'nextId', 'time', 'tick', 'accumulator', 'phase', 'paused', 'hiddenPaused',
   'speed', 'difficulty', 'wave', 'waveTime', 'director', 'kills', 'xp', 'nextDraftXp', 'draftLevel', 'fence',
   'slots', 'enemies', 'projectiles', 'clouds', 'events', 'draft', 'pendingUnit', 'profileSnapshot', 'settlement',
-  'stats', 'initialized', 'endless', 'systems'
+  'stats', 'initialized', 'endless', 'systems', 'expedition'
 ]);
 const DIRECTOR_KEYS = new Set(['nextWave', 'queue', 'done']);
 const FENCE_KEYS = new Set(['hp', 'maxHp']);
@@ -149,7 +149,7 @@ function isDifficulty(value) {
 }
 
 function canonicalSpeed(value) {
-  if (value === 1 || value === 3) return value;
+  if (value === 1 || value === 3 || value === 10) return value;
   if (typeof value === 'number' && Math.abs(value - 1.5) < 1e-9) return 1.5;
   return null;
 }
@@ -763,6 +763,12 @@ function validateRun(state) {
     const systemsExtra = copyExtensions(state.systems, systems, new Set());
     if (!systemsExtra.ok) return systemsExtra;
     value.systems = systems;
+  }
+  if (state.expedition !== undefined) {
+    if (typeof state.expedition !== 'string' || state.expedition.length < 1 || state.expedition.length > 32 || !/^[a-z]+$/.test(state.expedition)) {
+      return fail('invalid_run');
+    }
+    value.expedition = state.expedition;
   }
   const extra = copyExtensions(state, value, RUN_KEYS);
   if (!extra.ok) return extra;

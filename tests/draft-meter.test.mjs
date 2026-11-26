@@ -1,6 +1,7 @@
 // Draft cards carry a mark and a meter so the three choices read apart at a glance.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {createRun} from '../src/state.js';
 import {draftPower} from '../src/ui/build-panel.js';
 
@@ -70,4 +71,11 @@ test('hero meters emphasize the stat that upgrade changes', () => {
     assert.equal(power.label.includes('strike'), false);
     assert.equal(power.label.includes('cadence'), false);
   }
+});
+
+test('meter tracks grow across the 64px column', () => {
+  const source = readFileSync(new URL('../src/ui/build-panel.js', import.meta.url), 'utf8');
+  assert.match(source, /\.ff-meter-row>span:first-child\{[^}]*flex:\s*none/);
+  assert.match(source, /\.ff-meter-track\{[^}]*flex:\s*1\s+1\s+auto/);
+  assert.doesNotMatch(source, /\.ff-meter-row>span\{[^}]*flex:\s*none/);
 });

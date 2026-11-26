@@ -35,7 +35,7 @@ test('simulate does not increase time while phase is draft', () => {
   const time = state.time;
   const tick = state.tick;
   for (const seconds of [STEP, 0.5, 1, 8, 45]) {
-    for (const speed of [1, 1.5, 3]) {
+    for (const speed of [1, 1.5, 3, 10]) {
       state.speed = speed;
       state.paused = false;
       state.hiddenPaused = false;

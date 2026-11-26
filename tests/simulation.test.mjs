@@ -2,11 +2,11 @@
 // Domain modules are imported from their documented paths. The scaffold
 // engine.step only advances the clock, so domain checks call the systems in
 // the lead integration order at the fixed STEP. Speed must not rescale those
-// steps, and equal step counts must match across 1x / 1.5x / 3x.
+// steps, and equal step counts must match across 1x / 1.5x / 3x / 10x.
 import test, {describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun, advance, setSpeed} from '../src/engine.js';
-import {ARENA, DIFFICULTIES, STEP, BASE_TYPES, createUnit, distance} from '../src/shared.js';
+import {ARENA, DIFFICULTIES, STEP, BASE_TYPES, createUnit, distance, slotGeometry} from '../src/shared.js';
 import {sampleSpawnX, spawnEnemy, updateMovement} from '../src/systems/movement.js';
 import {updateCombat, damageEnemy, killEnemy} from '../src/systems/combat.js';
 import {applyStatus, updateStatuses, getSpeedFactor} from '../src/systems/status.js';
@@ -16,7 +16,7 @@ import {HERO_UPGRADES, getHeroStats, applyHeroUpgrade} from '../src/systems/hero
 import {TOWERS, getUnitStats} from '../src/data/towers.js';
 
 const KINDS = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss'];
-const SLOT_X = [36, 108, 180, 252, 324];
+const SLOT_X = Array.from({length: ARENA.cols}, (_, col) => slotGeometry(col).x);
 const STATUS_TYPES = ['burn', 'poison', 'slow', 'stun', 'brittle'];
 
 function nearly(actual, expected, tol, label) {
@@ -66,7 +66,7 @@ function advanceLike(state, realDt) {
   }
   state.accumulator += Math.min(realDt, 0.25) * state.speed;
   let count = 0;
-  while (state.accumulator + 1e-10 >= STEP && count++ < 90) {
+  while (state.accumulator + 1e-10 >= STEP && count++ < 150) {
     domainStep(state, STEP);
     state.accumulator -= STEP;
     if (state.phase !== 'playing') {
@@ -775,7 +775,8 @@ describe('simulation', {concurrency: 1}, () => {
     const reach = distance({x: slot.x, y: slot.y}, {x, y});
     assert.ok(reach < stats.range - 1, `fixture distance ${reach} range ${stats.range}`);
     assert.ok(Math.abs(x - slot.x) > 70);
-    assert.notEqual(Math.round((x - 36) / 72), slot.col);
+    const pitch = state.slots[1].x - state.slots[0].x;
+    assert.notEqual(Math.round((x - state.slots[0].x) / pitch), slot.col);
     const inside = spawnEnemy(state, 'brute', {x, y, hp: 1e7, maxHp: 1e7});
     inside.speed = 0;
     inside.armor = 0;
@@ -1000,6 +1001,10 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(state.speed, 1.5);
     setSpeed(state, 3);
     assert.equal(state.speed, 3);
+    setSpeed(state, 10);
+    assert.equal(state.speed, 10);
+    setSpeed(state, 2);
+    assert.equal(state.speed, 10);
     setSpeed(state, 1);
     assert.equal(state.speed, 1);
     const tick = state.tick;
@@ -1010,7 +1015,7 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(state.tick, tick);
   });
 
-  test('1x, 1.5x, and 3x spend the same fixed steps for the same simulation time', () => {
+  test('1x, 1.5x, 3x, and 10x spend the same fixed steps for the same simulation time', () => {
     function ticksFor(speed, wallSeconds) {
       const state = fresh(92, {runId: `clock-${speed}`});
       setSpeed(state, speed);
@@ -1020,19 +1025,24 @@ describe('simulation', {concurrency: 1}, () => {
     const one = ticksFor(1, 1);
     const mid = ticksFor(1.5, 1);
     const triple = ticksFor(3, 1);
+    const ten = ticksFor(10, 1);
     nearly(one.tick, 60, 1, '1x ticks per wall second');
     nearly(mid.tick, 90, 2, '1.5x ticks per wall second');
     nearly(triple.tick, 180, 2, '3x ticks per wall second');
+    nearly(ten.tick, 600, 2, '10x ticks per wall second');
     nearly(one.time, 1, 0.03, '1x sim time');
     nearly(mid.time, 1.5, 0.04, '1.5x sim time');
     nearly(triple.time, 3, 0.05, '3x sim time');
+    nearly(ten.time, 10, 0.05, '10x sim time');
 
-    const same = [1, 1.5, 3].map(speed => ticksFor(speed, 3 / speed));
+    const same = [1, 1.5, 3, 10].map(speed => ticksFor(speed, 3 / speed));
     nearly(same[1].tick, same[0].tick, 1, '1.5x equal-sim ticks');
     nearly(same[2].tick, same[0].tick, 1, '3x equal-sim ticks');
+    nearly(same[3].tick, same[0].tick, 1, '10x equal-sim ticks');
     nearly(same[0].time, 3, 0.04, 'equal sim time');
     nearly(same[1].time, same[0].time, STEP, '1.5x time match');
     nearly(same[2].time, same[0].time, STEP, '3x time match');
+    nearly(same[3].time, same[0].time, STEP, '10x time match');
 
     const capped = fresh(93, {runId: 'cap'});
     setSpeed(capped, 3);
@@ -1047,10 +1057,22 @@ describe('simulation', {concurrency: 1}, () => {
     setSpeed(tripleStep, 3);
     advance(tripleStep, STEP);
     assert.equal(tripleStep.tick, 3);
+
+    const tenSlice = fresh(195, {runId: 'ten-slice'});
+    setSpeed(tenSlice, 10);
+    advance(tenSlice, 10);
+    assert.equal(tenSlice.tick, 150);
+    assert.ok(Math.abs(tenSlice.time - 2.5) < 1e-8, `10x wall cap produced ${tenSlice.time}s`);
+    assert.equal(tenSlice.accumulator, 0);
+    const tenFrame = fresh(196, {runId: 'ten-frame'});
+    setSpeed(tenFrame, 10);
+    advance(tenFrame, STEP);
+    assert.equal(tenFrame.tick, 10);
+    assert.ok(Math.abs(tenFrame.time - 10 * STEP) < 1e-9);
   });
 
   test('domain steps match the engine clock and do not rescale with the speed control', () => {
-    for (const speed of [1, 1.5, 3]) {
+    for (const speed of [1, 1.5, 3, 10]) {
       const clock = fresh(100, {runId: `parity-clock-${speed}`});
       const domain = fresh(100, {runId: `parity-domain-${speed}`});
       setSpeed(clock, speed);
@@ -1063,7 +1085,7 @@ describe('simulation', {concurrency: 1}, () => {
     }
 
     const steps = 240;
-    const runs = [1, 1.5, 3].map(speed => {
+    const runs = [1, 1.5, 3, 10].map(speed => {
       const state = fresh(101, {runId: `inv-${speed}`});
       state.speed = speed;
       repeat(steps, () => domainStep(state, STEP));
@@ -1071,6 +1093,7 @@ describe('simulation', {concurrency: 1}, () => {
     });
     assert.equal(digest(runs[1]), digest(runs[0]));
     assert.equal(digest(runs[2]), digest(runs[0]));
+    assert.equal(digest(runs[3]), digest(runs[0]));
     assert.equal(runs[0].tick, steps);
     assert.ok(runs[0].time > 3 && runs[0].time < 5);
 

@@ -35,20 +35,54 @@
 // state.projectiles. An enemy bolt is allowed only when team:'enemy' (or
 // friendly:false); it flies in its dir and damages the fence when it crosses
 // y = fenceY. It never hits defenders or other enemies.
+// fence_hit.ratio is remaining fence hp / max hp after that damage, clamped
+// to [0, 1]. The applied damage, execute numbers, and stun are unchanged.
 //
 // killEnemy awards kills, source unit.kills, and enemy.xp exactly once. It does
 // not remove the body. updateCombat drops dead enemies at the end of the step.
 // Engine cleanup may filter `dead` again but must not award kills or XP again.
+//
+// Phased enemies (phased === true) are not targetable, so shots, pierce, chain,
+// and splash miss them. They still bite the fence for enemy.damage on their
+// normal attackInterval. Mend may heal a phased ally.
+//
+// Split: updateCombat copies ENEMIES[kind].split onto a living enemy that does
+// not already have a numeric splitCount (splitKind, splitCount max 4,
+// splitHealthScale). The once-only kill then spawns up to 4 children of that
+// kind, about 14px apart around the body and clamped to the arena, and stops
+// at 90 enemies. healthScale is splitHealthScale when finite and > 0, else
+// 0.55. splitSpawned is set before the spawn so it cannot recurse. Children
+// do not inherit the parent's split fields. The 'split' event is
+// {x, y, count, kind} and is not a fence_hit.
+//
+// Mend: after shots and before fence bites, a living enemy with mendEvery > 0
+// heals the other living ally inside mendRange with the lowest hp/maxHp that
+// is missing health. Never itself. One heal per clock even when dt is large.
+// Stun holds the clock. Catalog mend.amount is scaled once by difficulty
+// health into mendAmount. The 'mend' event is not a fence_hit.
+//
+// Ward: after splits are attached and dead bodies are removed, and before
+// defenders fire, every enemy.wardShield is cleared. Each living unstunned
+// enemy with wardRange > 0 and wardReduction > 0 then shields the nearest
+// other living enemy inside that range (smaller distance, then smaller id).
+// The shield is the greater reduction on that ally, capped at WARD_CAP. A
+// warden does not shield itself, and a stun grants nothing that tick.
+// damageEnemy multiplies after armor and brittle. Fence bites still use
+// enemy.damage. The hit event is unchanged.
 
-import {ARENA, clamp, distance, emit, random, uid} from '../shared.js';
+import {ARENA, DIFFICULTIES, clamp, distance, emit, random, uid} from '../shared.js';
+import {ENEMIES} from '../data/enemies.js';
 import {getUnitStats} from '../data/towers.js';
 import {applyStatus} from './status.js';
+import {spawnEnemy} from './movement.js';
 
 export const AURA_DAMAGE_CAP = 0.6;
 export const AURA_HASTE_CAP = 0.45;
 export const BRITTLE_CAP = 1;
 export const MIN_ATTACK_INTERVAL = 0.05;
 export const ARMOR_CAP = 0.8;
+export const WARD_CAP = 0.4;
+export const FENCE_REGEN_PER_SECOND = 2;
 
 const HIT_SLOP = 2;
 const CONTACT_SLOP = 0.75;
@@ -61,6 +95,10 @@ const DEFAULT_CRIT_MULTIPLIER = 1.75;
 const DEFAULT_PROJECTILE_SPEED = 300;
 const BRITTLE_FALLBACK = {power: 0.2, duration: 3};
 const STUN_FALLBACK = 0.45;
+const SPLIT_CHILD_CAP = 4;
+const SPLIT_ENEMY_CAP = 90;
+const SPLIT_SPREAD = 14;
+const DEFAULT_SPLIT_HEALTH_SCALE = 0.55;
 
 function finite(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
@@ -73,8 +111,23 @@ function simulationFrozen(state) {
   return false;
 }
 
+function crouchOnly(enemy) {
+  // Ash leapers can be shot during the crouch, and again once they are biting.
+  return !!(enemy && enemy.leapEvery > 0 && enemy.attacking !== true && !(enemy.leapTimer > 0));
+}
+
 function isTargetable(enemy) {
+  return !!(enemy && !enemy.dead && enemy.hp > 0 && enemy.phased !== true && !crouchOnly(enemy) && Number.isFinite(enemy.x) && Number.isFinite(enemy.y));
+}
+
+function isLiving(enemy) {
   return !!(enemy && !enemy.dead && enemy.hp > 0 && Number.isFinite(enemy.x) && Number.isFinite(enemy.y));
+}
+
+function difficultyHealth(state) {
+  const row = state && DIFFICULTIES[state.difficulty];
+  const health = row && row.health;
+  return Number.isFinite(health) ? health : 1;
 }
 
 function isStunned(enemy) {
@@ -121,10 +174,12 @@ function findUnit(state, id) {
 
 function preferTarget(candidate, best, candidateDistance, bestDistance) {
   if (!best) return true;
+  const yDiff = (candidate.y || 0) - (best.y || 0);
+  if (yDiff > 1e-4) return true;
+  if (yDiff < -1e-4) return false;
   const diff = candidateDistance - bestDistance;
   if (diff < -1e-4) return true;
   if (diff > 1e-4) return false;
-  if ((candidate.y || 0) !== (best.y || 0)) return candidate.y > best.y;
   return String(candidate.id) < String(best.id);
 }
 
@@ -161,8 +216,9 @@ function enemyById(state, id) {
 
 /**
  * Apply pre-armor damage. `amount` is the final outgoing damage (crit already
- * included when options.crit is set). Armor and brittle are applied here.
- * Returns HP actually removed. Usable as the status damage callback.
+ * included when options.crit is set). Armor and brittle are applied here,
+ * then ward shield. Returns HP actually removed. Usable as the status
+ * damage callback.
  */
 export function damageEnemy(state, enemy, amount, options = {}) {
   if (!state || !enemy || enemy.dead) return 0;
@@ -176,8 +232,10 @@ export function damageEnemy(state, enemy, amount, options = {}) {
 
   const armor = clamp(finite(enemy.armor, 0), 0, ARMOR_CAP);
   const reduced = amount * (1 - armor) * (1 + brittleBonus(enemy));
-  if (!Number.isFinite(reduced) || reduced <= 0) return 0;
-  const dealt = Math.min(enemy.hp, reduced);
+  const shield = clamp(finite(enemy.wardShield, 0), 0, WARD_CAP);
+  const shielded = reduced * (1 - shield);
+  if (!Number.isFinite(shielded) || shielded <= 0) return 0;
+  const dealt = Math.min(enemy.hp, shielded);
   enemy.hp -= dealt;
   const stats = ensureStats(state);
   stats.damage = finite(stats.damage, 0) + dealt;
@@ -200,9 +258,57 @@ export function damageEnemy(state, enemy, amount, options = {}) {
   return dealt;
 }
 
+function attachSplit(enemy) {
+  if (!enemy || typeof enemy.splitCount === 'number') return;
+  const split = ENEMIES[enemy.kind] && ENEMIES[enemy.kind].split;
+  if (!split || typeof split !== 'object') return;
+  if (typeof split.kind === 'string') enemy.splitKind = split.kind;
+  if (Number.isFinite(split.count)) {
+    enemy.splitCount = Math.max(0, Math.min(SPLIT_CHILD_CAP, Math.floor(split.count)));
+  }
+  if (Number.isFinite(split.healthScale)) enemy.splitHealthScale = split.healthScale;
+}
+
+function attachLivingSplits(state) {
+  const enemies = state.enemies;
+  if (!Array.isArray(enemies)) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy)) continue;
+    attachSplit(enemy);
+  }
+}
+
+function releaseSplit(state, enemy) {
+  if (!(enemy.splitCount > 0)) return;
+  if (typeof enemy.splitKind !== 'string' || enemy.splitKind.length === 0) return;
+  if (enemy.splitSpawned === true) return;
+  enemy.splitSpawned = true;
+  const healthScale = Number.isFinite(enemy.splitHealthScale) && enemy.splitHealthScale > 0
+    ? enemy.splitHealthScale
+    : DEFAULT_SPLIT_HEALTH_SCALE;
+  const count = Math.min(SPLIT_CHILD_CAP, Math.floor(enemy.splitCount));
+  if (!Array.isArray(state.enemies)) state.enemies = [];
+  let spawned = 0;
+  for (let i = 0; i < count; i++) {
+    if (state.enemies.length >= SPLIT_ENEMY_CAP) break;
+    const offset = (i - (count - 1) / 2) * SPLIT_SPREAD;
+    const x = clamp((Number.isFinite(enemy.x) ? enemy.x : 0) + offset, ARENA.enemyMinX, ARENA.enemyMaxX);
+    spawnEnemy(state, enemy.splitKind, {x, y: enemy.y, healthScale});
+    spawned += 1;
+  }
+  emitEvent(state, 'split', {
+    x: enemy.x,
+    y: enemy.y,
+    count: spawned,
+    kind: enemy.splitKind
+  });
+}
+
 /** Award kill credit, XP from enemy.xp, and a kill event. Repeat calls are no-ops. */
 export function killEnemy(state, enemy, sourceId) {
   if (!state || !enemy || enemy.dead) return false;
+  attachSplit(enemy);
   enemy.dead = true;
   enemy.hp = 0;
   enemy.attacking = false;
@@ -220,6 +326,7 @@ export function killEnemy(state, enemy, sourceId) {
     xp,
     towerType: unit?.type || null
   });
+  releaseSplit(state, enemy);
   return true;
 }
 
@@ -704,11 +811,24 @@ function computeAura(roster) {
   return bonus;
 }
 
+function defenderRecharge(state) {
+  const enemies = state.enemies;
+  if (!Array.isArray(enemies)) return 1;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy) || !(enemy.hushFactor > 0) || isStunned(enemy)) continue;
+    if (!chargeContact(enemy)) continue;
+    return Math.max(0.5, Math.min(1, enemy.hushFactor));
+  }
+  return 1;
+}
+
 function updateDefenders(state, dt, roster, aura) {
   const shotCap = Math.max(1, Math.min(30, Math.ceil(dt / MIN_ATTACK_INTERVAL) + 1));
+  const recharge = defenderRecharge(state);
   for (const entry of roster) {
     const {unit, slot, stats} = entry;
-    unit.cooldown = finite(unit.cooldown, 0) - dt;
+    unit.cooldown = finite(unit.cooldown, 0) - dt * recharge;
     if (!(finite(stats.damage, 0) > 0) || !(finite(stats.range, 0) > 0)) {
       if (unit.cooldown < 0) unit.cooldown = 0;
       continue;
@@ -742,12 +862,15 @@ function biteFence(state, amount, x, sourceId, enemyKind) {
   fence.hp = clamp(fence.hp - amount, 0, Math.max(0, maxHp));
   const stats = ensureStats(state);
   stats.fenceDamage = finite(stats.fenceDamage, 0) + applied;
+  const maxAfter = Number.isFinite(fence.maxHp) && fence.maxHp > 0 ? fence.maxHp : Math.max(0, maxHp);
+  const ratio = maxAfter > 0 ? clamp(fence.hp / maxAfter, 0, 1) : 0;
   emitEvent(state, 'fence_hit', {
     sourceId: sourceId || null,
     x,
     y: ARENA.fenceY,
     damage: applied,
-    enemyKind: enemyKind || null
+    enemyKind: enemyKind || null,
+    ratio
   });
   return applied;
 }
@@ -774,11 +897,116 @@ function advanceEnemyShot(state, projectile, dt) {
   return true;
 }
 
+// One fixed STEP of fence repair. The engine calls this while the fight is
+// playing. Speed only changes how many steps run. Pause, a hidden page,
+// draft, victory, and defeat do not heal, and HP never rises past max.
+export function regenerateFence(state, dt) {
+  if (!state || state.phase !== 'playing' || state.paused === true || state.hiddenPaused === true) return state;
+  const fence = state.fence;
+  if (!fence || typeof fence.hp !== 'number' || typeof fence.maxHp !== 'number') return state;
+  if (!Number.isFinite(fence.hp) || !Number.isFinite(fence.maxHp)) return state;
+  if (!(fence.hp > 0) || !(fence.maxHp > 0)) return state;
+  if (!Number.isFinite(dt) || !(dt > 0)) return state;
+  fence.hp = Math.min(fence.maxHp, fence.hp + FENCE_REGEN_PER_SECOND * dt);
+  return state;
+}
+
+function ensureMendFields(state, enemy) {
+  if (Number.isFinite(enemy.mendAmount)) return;
+  const mend = ENEMIES[enemy.kind] && ENEMIES[enemy.kind].mend;
+  if (!mend || typeof mend !== 'object') return;
+  if (Number.isFinite(mend.every)) enemy.mendEvery = mend.every;
+  if (Number.isFinite(mend.amount)) enemy.mendAmount = mend.amount * difficultyHealth(state);
+  if (Number.isFinite(mend.range)) enemy.mendRange = mend.range;
+}
+
+function mendTarget(state, source) {
+  const range = source.mendRange;
+  if (!Number.isFinite(range) || !(range > 0)) return null;
+  let best = null;
+  let bestRatio = Infinity;
+  const enemies = state.enemies;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy) || enemy === source) continue;
+    if (enemy.id != null && source.id != null && enemy.id === source.id) continue;
+    if (!Number.isFinite(enemy.maxHp) || !(enemy.maxHp > 0)) continue;
+    if (!(enemy.hp < enemy.maxHp)) continue;
+    if (distance(source, enemy) > range) continue;
+    const ratio = enemy.hp / enemy.maxHp;
+    if (ratio < bestRatio) {
+      bestRatio = ratio;
+      best = enemy;
+    }
+  }
+  return best;
+}
+
+function updateMenders(state, dt) {
+  const enemies = state.enemies;
+  if (!Array.isArray(enemies)) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy)) continue;
+    ensureMendFields(state, enemy);
+    if (!(enemy.mendEvery > 0)) continue;
+    if (!Number.isFinite(enemy.mendClock)) enemy.mendClock = enemy.mendEvery;
+    if (isStunned(enemy)) continue;
+    enemy.mendClock -= dt;
+    if (enemy.mendClock > 0) continue;
+    enemy.mendClock = enemy.mendEvery;
+    const target = mendTarget(state, enemy);
+    if (!target) continue;
+    const missing = target.maxHp - target.hp;
+    const amount = Math.min(missing, enemy.mendAmount);
+    if (!Number.isFinite(amount) || !(amount > 0)) continue;
+    target.hp += amount;
+    if (target.hp > target.maxHp) target.hp = target.maxHp;
+    emitEvent(state, 'mend', {
+      x: target.x,
+      y: target.y,
+      targetId: target.id,
+      amount
+    });
+  }
+}
+
+function chargeContact(enemy) {
+  const radius = Number.isFinite(enemy.radius) && enemy.radius > 0 ? enemy.radius : 12;
+  return enemy.y >= ARENA.fenceY - radius - CONTACT_SLOP;
+}
+
+function updateCharges(state, dt) {
+  const enemies = state.enemies;
+  if (!Array.isArray(enemies)) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy) || enemy.chargeSpent === true) continue;
+    if (!(enemy.chargeWindup > 0) || !(enemy.chargeDamage > 0)) continue;
+    if (!chargeContact(enemy) || isStunned(enemy)) continue;
+    if (enemy.chargeLit !== true) {
+      enemy.chargeLit = true;
+      enemy.chargeTimer = enemy.chargeWindup;
+      continue;
+    }
+    enemy.chargeTimer = finite(enemy.chargeTimer, enemy.chargeWindup) - dt;
+    if (enemy.chargeTimer > 0) continue;
+    enemy.chargeTimer = 0;
+    enemy.chargeSpent = true;
+    biteFence(state, enemy.chargeDamage, enemy.x, enemy.id, enemy.kind || null);
+    killEnemy(state, enemy, null);
+  }
+}
+
 function updateFenceAttacks(state, dt) {
   const fence = state.fence;
   if (!fence || !Number.isFinite(fence.hp)) return;
   for (const enemy of state.enemies) {
     if (!enemy || enemy.dead) continue;
+    if (enemy.chargeLit === true) {
+      enemy.attacking = true;
+      continue;
+    }
     const inRange = enemy.y >= ARENA.fenceY - fenceReach(enemy) - CONTACT_SLOP;
     if (!inRange || isStunned(enemy)) {
       enemy.attacking = false;
@@ -803,9 +1031,48 @@ function removeDead(state) {
   }
 }
 
+function wardTarget(state, source) {
+  const range = source.wardRange;
+  if (!(range > 0)) return null;
+  const enemies = state.enemies;
+  let best = null;
+  let bestDistance = Infinity;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!isLiving(enemy) || enemy === source) continue;
+    if (enemy.id != null && source.id != null && enemy.id === source.id) continue;
+    const dist = distance(source, enemy);
+    if (!(dist <= range)) continue;
+    if (!best || dist < bestDistance - 1e-4 || (Math.abs(dist - bestDistance) <= 1e-4 && String(enemy.id) < String(best.id))) {
+      best = enemy;
+      bestDistance = dist;
+    }
+  }
+  return best;
+}
+
+function updateWards(state) {
+  const enemies = state.enemies;
+  if (!Array.isArray(enemies)) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (enemy) enemy.wardShield = 0;
+  }
+  for (let i = 0; i < enemies.length; i++) {
+    const source = enemies[i];
+    if (!isLiving(source) || isStunned(source)) continue;
+    if (!(source.wardRange > 0) || !(source.wardReduction > 0)) continue;
+    const target = wardTarget(state, source);
+    if (!target) continue;
+    target.wardShield = Math.min(WARD_CAP, Math.max(target.wardShield, Math.min(WARD_CAP, source.wardReduction)));
+  }
+}
+
 /**
  * Acquire targets by true distance from each defender's slot center, step
- * projectiles without tunneling, then let living enemies bite the shared fence.
+ * projectiles without tunneling, let menders heal, then let living enemies
+ * bite the shared fence. Phased enemies are not shot, but they still bite.
+ * A warden's shield is applied before shots. It never covers the warden.
  * Does not modify state.time, state.tick, or state.speed.
  */
 export function updateCombat(state, dt) {
@@ -816,7 +1083,9 @@ export function updateCombat(state, dt) {
   if (!Array.isArray(state.projectiles)) state.projectiles = [];
   if (!Array.isArray(state.events)) state.events = [];
 
+  attachLivingSplits(state);
   removeDead(state);
+  updateWards(state);
 
   const roster = [];
   for (const slot of state.slots) {
@@ -828,7 +1097,9 @@ export function updateCombat(state, dt) {
   const aura = computeAura(roster);
   updateDefenders(state, dt, roster, aura);
   updateProjectiles(state, dt);
+  updateMenders(state, dt);
   updateFenceAttacks(state, dt);
+  updateCharges(state, dt);
   removeDead(state);
   return state;
 }

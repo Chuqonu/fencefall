@@ -218,20 +218,24 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .shell {
   --topbar-height: 52px;
+  --board-left: 0px;
+  --board-width: 100%;
   position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(1120px, 100%);
+  display: block;
+  width: 100%;
   height: 100%;
-  margin-inline: auto;
+  margin: 0;
   min-width: 0;
   overflow: hidden;
 }
 
 .topbar {
-  position: relative;
+  position: absolute;
   z-index: 50;
-  display: flex;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
@@ -241,6 +245,8 @@ img, svg, video { max-width: 100%; height: auto; }
   background: rgba(14, 23, 28, 0.96);
   border-bottom: 1px solid var(--line);
 }
+
+.shell.is-menu .topbar { display: flex; }
 
 .brand { flex: 1 1 8rem; min-width: 0; }
 .brand-title { margin: 0; font-size: 1.05rem; }
@@ -266,7 +272,14 @@ img, svg, video { max-width: 100%; height: auto; }
 .nav-scroll { flex: 1 1 12rem; }
 
 .top-tools { flex: 0 1 auto; }
-.hud-controls { flex-wrap: wrap; order: 3; }
+.hud-controls {
+  flex: 1 1 100%;
+  flex-wrap: nowrap;
+  order: 3;
+  margin-left: 0;
+  max-width: 100%;
+  pointer-events: auto;
+}
 
 /* Flattened on wide screens so the status line stays under the controls.
    On a phone the box is real and the message overlays it. */
@@ -274,28 +287,32 @@ img, svg, video { max-width: 100%; height: auto; }
 .hud-message { order: 4; }
 
 .shell-body {
+  position: absolute;
+  inset: 0;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: block;
   overflow: hidden;
 }
 
+/* The board keeps its 360×640 ratio and stays centered sideways.
+   It starts at the top, so the fight HUD overlays the field instead of
+   sitting in the letterbox above a vertically centered board. */
 .field-slot {
   container-type: size;
+  position: absolute;
+  inset: 0;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   display: grid;
-  place-items: center;
+  place-items: start center;
   overflow: hidden;
 }
 
 .field-frame {
   position: relative;
   aspect-ratio: 360 / 640;
-  width: min(100%, calc((100dvh - 230px) * 360 / 640));
+  width: min(100%, calc(100dvh * 360 / 640));
   max-width: 100%;
   max-height: 100%;
 }
@@ -325,15 +342,49 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 
 .panel-wrap {
+  display: none;
+  position: absolute;
+  z-index: 28;
+  left: 50%;
+  top: calc(var(--topbar-height, 52px) + 8px);
+  bottom: auto;
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 24px));
+  max-height: min(46vh, 420px);
   min-width: 0;
-  min-height: 0;
-  max-height: 34vh;
   overflow: auto;
   padding: 8px;
   overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(14, 23, 28, 0.94);
+  box-shadow: var(--shadow);
 }
 
+.shell.is-unit-open .panel-wrap:not(:has([data-ui="panel"]:empty)) { display: block; }
 .panel-wrap:has([data-ui="panel"]:empty) { display: none; }
+
+/* Dock the stats card in the empty margin beside the board. The phone overlay
+   stays centered above the slots when there is no margin. */
+.shell.has-side-card.is-unit-open .panel-wrap:not(:has([data-ui="panel"]:empty)) {
+  --side-card-width: min(360px, calc(var(--board-left) - 24px));
+  left: calc(var(--board-left) - var(--side-card-width) - 12px);
+  right: auto;
+  transform: none;
+  width: var(--side-card-width);
+  max-height: calc(100dvh - var(--topbar-height, 52px) - 16px);
+}
+
+/* Phone card sits on the fence. The range arc stays in the field above it. */
+@media (max-width: 899px) {
+  .shell.is-unit-open:not(.has-side-card) .panel-wrap:not(:has([data-ui="panel"]:empty)) {
+    top: auto;
+    bottom: calc(100% - (var(--board-top) + var(--board-height) * 512 / 640) + 8px);
+    max-height: 160px;
+    width: min(440px, calc(var(--board-width, 100%) - 12px));
+    padding: 6px;
+  }
+}
 
 @media (max-width: 899px) {
   .brand-sub { display: none; }
@@ -343,49 +394,48 @@ img, svg, video { max-width: 100%; height: auto; }
     max-height: none;
     padding-block: 4px;
   }
-  .shell-body {
-    position: relative;
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .panel-wrap {
-    display: none;
-    position: absolute;
-    z-index: 2;
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    max-height: min(42vh, 280px);
-    padding: 8px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgba(14, 23, 28, 0.97);
-    box-shadow: var(--shadow);
-  }
-  .shell.is-details-open .panel-wrap:not(:has([data-ui="panel"]:empty)) {
-    display: block;
-  }
-  .hud { gap: 4px; padding-block: 6px; max-height: none; }
-  .hud-meters { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .hud { gap: 4px; padding-block: 6px; }
   .meter-track { height: 8px; }
-  .field-frame { width: min(100%, 340px, calc(100cqh * 360 / 640)); }
 }
 
+/* Fight chrome uses the board box. The side margins stay empty. */
 .hud {
+  container-type: inline-size;
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: var(--board-left, 0px);
+  width: var(--board-width, 100%);
+  right: auto;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 46vh;
-  overflow: auto;
-  padding: 8px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
-  background: var(--hud);
-  border-top: 1px solid var(--line);
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+  padding: max(8px, env(safe-area-inset-top)) 8px 8px;
+  background: linear-gradient(180deg, rgba(8, 14, 18, 0.82) 0%, rgba(8, 14, 18, 0.28) 72%, transparent 100%);
+  border: none;
+  pointer-events: none;
 }
+
+.shell.is-menu .hud { display: none; }
+.hud .btn, .hud .speed-row { pointer-events: auto; }
+.hud-quiet { display: none !important; }
 
 .hud-meters {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
   gap: 8px;
+  min-width: 7rem;
+  pointer-events: none;
+}
+
+.hud-meters > .meter {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .meter-head {
@@ -420,9 +470,11 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .hud-stats {
   display: flex;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 6px 12px;
   align-items: center;
+  pointer-events: none;
 }
 
 .stat {
@@ -446,36 +498,42 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .hud-message:empty { display: none; }
 
-/* One battle-HUD line. A long wave note ellipsizes instead of covering the meters. */
+/* Two battle-HUD lines. A long wave note clamps there instead of covering the meters. */
 .hud-hint {
   order: 4;
+  flex: 1 0 100%;
   margin: 0;
   min-width: 0;
   max-width: 100%;
   padding: 0 8px;
   border-radius: 6px;
-  background: #24362a;
+  background: rgba(36, 54, 42, 0.88);
   color: var(--ink);
   font-size: 0.78rem;
   line-height: 1.35;
-  max-height: 1.35em;
-  white-space: nowrap;
+  max-height: 2.7em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .hud-hint:empty { display: none; }
+.hud-hint.has-icon { position: relative; padding-left: 30px; }
+.hud-hint .catalog-icon[data-hint-icon] {
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+}
 
-/* Long merge copy scrolls inside the meter block. It must not lengthen the
-   phone footer: that height comes straight out of the field, and at 390px
-   the frame needs to stay near 340px wide. */
+/* The fight HUD is an overlay. It must not become a column that covers the field. */
 @media (max-width: 899px) {
-  .hud-main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 4px;
-  }
+  .hud-main { display: contents; }
 
   .hud-message:not(:empty) {
     max-height: 2.8em;
@@ -485,13 +543,14 @@ img, svg, video { max-width: 100%; height: auto; }
   }
 
   .hud-hint:not(:empty) {
-    display: block;
-    flex: 0 0 auto;
-    height: 1.35em;
-    max-height: 1.35em;
-    white-space: nowrap;
+    display: -webkit-box;
+    flex: 1 0 100%;
+    height: auto;
+    max-height: 2.7em;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 }
 
@@ -524,6 +583,10 @@ img, svg, video { max-width: 100%; height: auto; }
 [data-ui="menu"].is-open { display: block; }
 
 .shell.is-draft [data-ui="overlay"] {
+  left: var(--board-left);
+  right: auto;
+  width: var(--board-width);
+  max-width: 100%;
   padding: 8px;
   background: transparent;
   pointer-events: none;
@@ -559,6 +622,10 @@ img, svg, video { max-width: 100%; height: auto; }
 /* Placing stays a top banner so the defender slots (bottom of the field) still receive taps.
    Direct children keep clicks; empty overlay space does not block the canvas. */
 .shell.is-placing [data-ui="overlay"] {
+  left: var(--board-left);
+  right: auto;
+  width: var(--board-width);
+  max-width: 100%;
   background: transparent;
   pointer-events: none;
   bottom: auto;
@@ -572,23 +639,6 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 
 @media (min-width: 900px) {
-  .shell-body {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
-    grid-template-rows: minmax(0, 1fr);
-    gap: 12px;
-    padding-inline: 12px;
-  }
-
-  .shell-body:has(.panel-wrap:has([data-ui="panel"]:empty)) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .panel-wrap {
-    max-height: none;
-    height: 100%;
-    padding-block: 12px;
-  }
-
   .nav-scroll { flex: 1 1 auto; }
 }
 
@@ -606,8 +656,46 @@ img, svg, video { max-width: 100%; height: auto; }
   .brand-sub { display: none; }
 }
 
+/* A short or narrow board still keeps Pause, the speeds, and Menu on one 44px row. */
+@container (max-width: 640px) {
+  .hud-controls {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-left: 0;
+    max-width: 100%;
+  }
+  .hud .speed-row {
+    flex: 0 0 auto;
+    gap: 4px;
+    min-width: 0;
+    overflow: visible;
+  }
+  .hud .speed-row > .btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 6px;
+    font-size: 15px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .hud-controls > .btn {
+    flex: 0 0 auto;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 899px) {
-  .brand { flex: 1 1 0; }
+  .brand { flex: 1 1 auto; min-width: 6.5rem; }
   .brand-title {
     font-size: 0.95rem;
     white-space: nowrap;
@@ -616,10 +704,6 @@ img, svg, video { max-width: 100%; height: auto; }
   }
   .topbar { gap: 4px; padding-block: 4px; }
   .top-tools { gap: 4px; }
-  .field-frame {
-    width: min(100cqw, 340px, calc(100cqh * 360 / 640));
-    max-width: min(100cqw, 340px);
-  }
   .hud { gap: 2px; padding-block: 2px; }
   .hud-stats {
     flex-wrap: nowrap;
@@ -637,6 +721,53 @@ img, svg, video { max-width: 100%; height: auto; }
     text-overflow: ellipsis;
   }
   .meter-track { height: 8px; }
+
+  /* Pause, 1× 1.5× 3× 10×, and Menu stay on one row. 1.5× and 10× are 44px, same as the others. */
+  .hud-controls {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-left: 0;
+    max-width: 100%;
+  }
+  .hud .speed-row {
+    flex: 1 1 auto;
+    gap: 4px;
+    min-width: 0;
+    overflow: visible;
+  }
+  .hud .speed-row > .btn {
+    flex: 1 1 0;
+    width: 44px;
+    min-width: 44px;
+    max-width: 64px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    font-size: 15px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .hud-controls > .btn {
+    flex: 0 0 auto;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  /* Menu screens wrap onto full rows. The fight speed row stays a single nowrap line. */
+  .nav-scroll {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow: visible;
+    max-width: 100%;
+    min-width: 0;
+  }
 }
 
 @media (max-height: 520px) {

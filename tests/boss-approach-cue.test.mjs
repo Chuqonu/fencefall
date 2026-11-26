@@ -21,10 +21,20 @@ test('the boss window uses the status chip and does not emit a field-top enter f
   updateWaves(early, STEP);
   assert.equal(bossApproaching(early), false);
   assert.equal(early.events.filter(event => event.type === 'boss_enter').length, 0);
+  assert.equal(early.events.filter(event => event.type === 'boss_approach').length, 0);
 
   const state = parked(first.start - 8);
   updateWaves(state, STEP);
   updateWaves(state, STEP);
   assert.equal(bossApproaching(state), true);
   assert.equal(state.events.filter(event => event.type === 'boss_enter').length, 0);
+  const approach = state.events.filter(event => event.type === 'boss_approach');
+  assert.equal(approach.length, 1);
+  assert.equal(approach[0].warning, true);
+
+  state.time = first.start;
+  updateWaves(state, STEP);
+  assert.equal(bossApproaching(state), true);
+  assert.equal(state.events.filter(event => event.type === 'boss_enter').length, 0);
+  assert.equal(state.events.filter(event => event.type === 'boss_approach').length, 1);
 });

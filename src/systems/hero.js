@@ -1,10 +1,9 @@
 // Passive run upgrades for the single hero. Does not spend draft XP, change phase,
 // roll RNG, or modify any other unit. Drafts call applyHeroUpgrade, then return to playing.
 //
-// Front-center slot 2 is (180, 508); the fence is y=450. Baseline range 340 reaches
-// enemies stopped on that fence from the front row and still covers the rear row,
-// so the opener can fight unaided. New runs start on slot 2. A saved run keeps
-// whatever slot the hero already occupies.
+// The hero starts on front-center slot 2, just behind the fence. Baseline range 430
+// still reaches enemies in the upper field from that row.
+// New runs start on slot 2. A saved run keeps whatever slot the hero already occupies.
 //
 // getProfileBonuses(profileSnapshot): damage and haste are fractions, range is pixels,
 // critChance is an absolute fraction. Fence HP and reward are not applied here.
@@ -18,9 +17,9 @@ import {clamp} from '../shared.js';
 import {getProfileBonuses} from './progression.js';
 
 export const HERO_BASE = Object.freeze({
-  damage: 20,
+  damage: 26,
   interval: 0.6,
-  range: 340,
+  range: 430,
   critChance: 0.08,
   critMultiplier: 1.75,
   projectileSpeed: 540,
@@ -41,7 +40,7 @@ const BONUS_LIMITS = Object.freeze({
 const STAT_LIMITS = Object.freeze({
   damage: [1, 250],
   interval: [0.25, 3],
-  range: [280, 480],
+  range: [280, 640],
   critChance: [0, 0.75],
   critMultiplier: [1.25, 3.5],
   projectileSpeed: [240, 720],
@@ -110,14 +109,14 @@ function defineUpgrade(id, cap, name, effect) {
 
 // Numeric effect fields are per rank. poison.dps is per rank; duration and maxStacks are not.
 export const HERO_UPGRADES = deepFreeze({
-  strike: defineUpgrade('strike', 4, {en: 'Sharpened Quarrels', zh: '锋矢'}, {damageAdd: 4}),
-  cadence: defineUpgrade('cadence', 4, {en: 'Repeater Cadence', zh: '连射'}, {haste: 0.08}),
-  reach: defineUpgrade('reach', 3, {en: 'Long Watch', zh: '远望'}, {range: 20}),
-  focus: defineUpgrade('focus', 4, {en: 'Keen Eye', zh: '锐目'}, {critChance: 0.05}),
-  lethality: defineUpgrade('lethality', 3, {en: 'Heavy Draw', zh: '满弦'}, {critMultiplier: 0.25}),
+  strike: defineUpgrade('strike', 4, {en: 'Sharpened Quarrels', zh: '锋矢'}, {damageAdd: 7}),
+  cadence: defineUpgrade('cadence', 4, {en: 'Repeater Cadence', zh: '连射'}, {haste: 0.14}),
+  reach: defineUpgrade('reach', 3, {en: 'Long Watch', zh: '远望'}, {range: 40}),
+  focus: defineUpgrade('focus', 4, {en: 'Keen Eye', zh: '锐目'}, {critChance: 0.08}),
+  lethality: defineUpgrade('lethality', 3, {en: 'Heavy Draw', zh: '满弦'}, {critMultiplier: 0.4}),
   pierce: defineUpgrade('pierce', 2, {en: 'Piercing Bolt', zh: '贯矢'}, {pierce: 1}),
   barbed: defineUpgrade('barbed', 3, {en: 'Barbed Quills', zh: '倒刺'}, {
-    poison: {dps: 3, duration: 3, maxStacks: 1},
+    poison: {dps: 6, duration: 3, maxStacks: 1},
   }),
 });
 

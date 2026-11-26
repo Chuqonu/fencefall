@@ -115,8 +115,10 @@ test('speed 1 and speed 3 pay the same currency after the same simulation time',
   for (const seed of SEEDS) {
     const one = play(seed, 1, false);
     const triple = play(seed, 3, false);
+    const ten = play(seed, 10, false);
     assert.equal(one.state.speed, 1);
     assert.equal(triple.state.speed, 3);
+    assert.equal(ten.state.speed, 10);
     assert.equal(one.state.phase, 'playing');
     assert.equal(triple.state.phase, 'playing');
     assert.equal(one.state.tick, TARGET_TICK);
@@ -124,13 +126,14 @@ test('speed 1 and speed 3 pay the same currency after the same simulation time',
     assert.ok(one.settlement.currency > 0, `seed ${seed} paid nothing`);
     assert.ok(Math.abs(one.settlement.time - one.state.time) < 1e-9);
     sameFight(one, triple);
+    sameFight(one, ten);
   }
 });
 
 test('pause time and draft time leave the payout unchanged', () => {
   for (const seed of SEEDS) {
     const plain = play(seed, 1, false);
-    const waited = [play(seed, 1, true), play(seed, 3, true)];
+    const waited = [play(seed, 1, true), play(seed, 3, true), play(seed, 10, true)];
     for (const run of waited) {
       assert.equal(run.wait.pausedAt, PAUSE_AT, `seed ${seed} paused at tick ${run.wait.pausedAt}`);
       assert.ok(run.wait.pauseSeconds >= PAUSE_SECONDS + HIDDEN_SECONDS - 1e-6);
