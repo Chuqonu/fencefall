@@ -32,6 +32,29 @@
  * quotaExceeded, storageUnavailable, importEmpty.
  */
 const ROWS = [
+  ['harvest','Sun Gleaner','辉穗'],
+  ['energy','Energy','辉光'],
+  ['surge','Fence surge','防线冲击波'],
+  ['bulwark','Iron Bulwark','铁棘壁'],
+  ['spikes','Thorn Strip','碎骨地刺'],
+  ['flare','Reveal Brazier','耀光灯塔'],
+  ['targeting','Targeting','索敌'],
+  ['reroll','Reroll','重随'],
+  ['free','Free','免费'],
+  ['foremost','Foremost','最近'],
+  ['priority','Priority','高危'],
+  ['strongest','Strongest','最强'],
+  ['weakest','Weakest','残血'],
+  ['removeField','Dismantle','拆除'],
+  ['selectMission','Change mission','切换关卡'],
+  ['corpseExplode','Corpse explosion','尸爆'],
+  ['thermalShock','Thermal shock','蒸汽爆破'],
+  ['armorPen','Armor penetration','护甲穿透'],
+  ['knockback','Knockback','击退'],
+  ['poisonDetonate','Poison reaction','触媒反应'],
+  ['cloud','Cloud','云雾'],
+  ['legacyRunReset','Profile recovered. Start a new v2 battle.','已恢复旧版档案，请开始新的 v2 战斗。'],
+
   // Brand and navigation
   ['title', 'Fencefall', '最后一道防线'],
   ['titleLockup', 'Fencefall · 最后一道防线', 'Fencefall · 最后一道防线'],

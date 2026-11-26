@@ -1779,3 +1779,35 @@ export function drawIcon(ctx, id, x, y, size = 16) {
     if (canStack) ctx.restore();
   }
 }
+
+// Baseline field occupancy and health are derived directly from the simulation snapshot.
+export function drawFrontline(ctx,state,selectedKind) {
+  ctx.save();
+  for (const pad of state.fieldSlots || []) {
+    const u=pad.unit;
+    ctx.strokeStyle=selectedKind && !u ? '#ebcd71' : '#6b7868';
+    ctx.setLineDash?.([3,4]);
+    ctx.strokeRect(pad.left,pad.top,pad.width,pad.height);
+    if (!u) continue;
+    ctx.setLineDash?.([]);
+    if (u.kind==='flare') {
+      ctx.strokeStyle='rgba(247,206,107,0.30)';
+      ctx.beginPath(); ctx.arc(pad.x,pad.y,115,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='#dcb75a'; ctx.fillRect(pad.x-4,pad.y-12,8,22);
+      ctx.fillStyle='#fff6a2'; ctx.fillRect(pad.x-7,pad.y-14,14,8);
+    } else if (u.kind==='bulwark') {
+      ctx.fillStyle='#71818a'; ctx.fillRect(pad.x-22,pad.y-8,44,16);
+      ctx.fillStyle='#b3c9c8';
+      for (let dx=-20;dx<=20;dx+=10) ctx.fillRect(pad.x+dx,pad.y-12,4,8);
+    } else {
+      ctx.fillStyle='#bcaaa1';
+      for (let dx=-20;dx<=16;dx+=8) {
+        ctx.beginPath(); ctx.moveTo(pad.x+dx,pad.y+8); ctx.lineTo(pad.x+dx+4,pad.y-8);
+        ctx.lineTo(pad.x+dx+8,pad.y+8); ctx.fill();
+      }
+    }
+    ctx.fillStyle='#272e30'; ctx.fillRect(pad.x-18,pad.y+13,36,3);
+    ctx.fillStyle='#9bd787'; ctx.fillRect(pad.x-18,pad.y+13,36*u.hp/u.maxHp,3);
+  }
+  ctx.restore();
+}

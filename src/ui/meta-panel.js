@@ -169,7 +169,7 @@ function renderMenu(ctx, root) {
   else if (run?.phase === 'placing') body.append(note(ctx, t(api, 'chooseSlot'), 'meta-note'));
   if (live && run.paused) body.append(note(ctx, tx(api, lang, 'paused', 'Paused', '已暂停'), 'meta-note'));
 
-  if (run) body.append(runCard(ctx));
+
 
   const actions = h(doc, 'div', {className: 'meta-actions'});
   const continueBtn = button(ctx, {
@@ -218,6 +218,8 @@ function renderMenu(ctx, root) {
   }
   body.append(actions);
   body.append(newRunForm(ctx, !live));
+  if (run) body.append(runCard(ctx));
+  if (api.getUI?.().message==='legacyRunReset') body.append(note(ctx,t(api,'legacyRunReset'),'meta-note'));
 
   const nav = h(doc, 'nav', {className: 'grid meta-nav', 'data-testid': 'meta-nav', 'aria-label': t(api, 'title')});
   nav.append(
@@ -542,7 +544,18 @@ function newRunForm(ctx, primary) {
   const {doc, api, lang} = ctx;
   const form = h(doc, 'form', {className: 'card', 'data-testid': 'new-run-form'});
   form.append(h(doc, 'h3', {text: t(api, 'newRun')}));
-  form.append(expeditionPicker(ctx));
+  const play = button(ctx, {
+    action: 'start',
+    testid: 'btn-play',
+    label: local.confirmStart && runIsLive(ctx.run) ? t(api, 'confirm') : t(api, 'play'),
+    primary
+  });
+  play.type = 'submit';
+  play.addEventListener('click', event => event.stopPropagation());
+  form.append(play);
+  const picker=h(doc,'details');
+  picker.append(h(doc,'summary',{text:t(api,'selectMission')+' · '+localize(EXPEDITIONS[selectedExpedition(ctx.rawProfile || ctx.profile)].name,lang)}),expeditionPicker(ctx));
+  form.append(picker);
   form.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'difficultyRewards',
     'Higher difficulties increase enemy pressure and the reward multiplier.',
     '更高的难度会提高敌人压力和奖励倍率。')}));
@@ -573,15 +586,6 @@ function newRunForm(ctx, primary) {
         '开始新的一局会离开当前战斗。请再选一次开始以确认。')
     }));
   }
-  const play = button(ctx, {
-    action: 'start',
-    testid: 'btn-play',
-    label: local.confirmStart && runIsLive(ctx.run) ? t(api, 'confirm') : t(api, 'play'),
-    primary
-  });
-  play.type = 'submit';
-  play.addEventListener('click', event => event.stopPropagation());
-  form.append(play);
   form.addEventListener('submit', event => {
     event.preventDefault();
     event.stopPropagation();

@@ -1,5 +1,7 @@
 import {ARENA, DIFFICULTIES, canPlan, clone, hitSlot, slotGeometry} from './shared.js';
 import {advance, createProfile, createRun, enterEndless, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
+import {deployFieldUnit, removeFieldUnit} from './systems/field.js';
+import {setTargeting} from './systems/combat.js';
 import * as hero from './systems/hero.js';
 import * as merges from './systems/merges.js';
 import * as drafts from './systems/drafts.js';
@@ -16,7 +18,7 @@ import * as audioMod from './audio.js';
 import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless']);
+export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
 
 const TEXT = {
   en:{
@@ -80,7 +82,7 @@ export async function createController(options = {}) {
   let storedRun = null;
   let audio = null;
   const settledIds = new Set();
-  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
+  const ui = {screen:'menu', fieldKind:null, selectedField:-1, replaceIndex:-1, selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
 
   function storageCall(name, args) {
     const fn = modules.storage && modules.storage[name];
@@ -110,6 +112,7 @@ export async function createController(options = {}) {
 
   if (!profile) profile = loadProfile() || createProfile(detectLanguage());
   storedRun = loadStoredRun();
+  if (!storedRun) ui.message=storageCall('legacyRunNotice',[]) || '';
   if (storedRun && storedRun.phase === 'playing') storedRun.paused = true;
 
   function saveProfile() {
@@ -178,7 +181,7 @@ export async function createController(options = {}) {
       if (typeof run.expedition === 'string') profile.settings.expedition = run.expedition;
       prepare(run);
       ui.screen = 'battle';
-      ui.selectedSlot = -1;
+      ui.selectedSlot = -1; ui.fieldKind=null; ui.selectedField=-1; ui.replaceIndex=-1;
       ui.mergeFrom = -1;
       ui.mergePreview = null;
       ui.exportText = '';
@@ -276,6 +279,25 @@ export async function createController(options = {}) {
       ui.hoverIntent = ui.hoverSlot >= 0 && (intent === 'empty' || intent === 'merge' || intent === 'illegal') ? intent : '';
       return {ok:true};
     }
+    if (action==='fieldKind') {
+      ui.fieldKind=ui.fieldKind===payload.kind ? null : payload.kind;
+      ui.selectedSlot=-1;
+      ui.selectedField=-1;
+      return {ok:true};
+    }
+    if (action==='inspectField') {
+      ui.selectedField=payload.index;
+      ui.selectedSlot=-1;
+      return {ok:true};
+    }
+    if (['deployField','removeField','setTargeting','rerollDraft'].includes(action)) {
+      if (!run) return {ok:false,reason:'no-run'};
+      const result=action==='deployField' ? deployFieldUnit(run,payload.kind,payload.index) :
+        action==='removeField' ? removeFieldUnit(run,payload.index) :
+        action==='setTargeting' ? setTargeting(run,payload.index,payload.mode) : drafts.rerollDraft(run);
+      if (result.ok) { ui.fieldKind=null; saveRun(); }
+      return result;
+    }
     if (action === 'selectSlot') {
       if (!run) return {ok:false, reason:'no-run'};
       const index = payload.index;
@@ -284,14 +306,16 @@ export async function createController(options = {}) {
         return {ok:true, index:-1};
       }
       if (!integerSlot(index)) return {ok:false, reason:'bad-slot'};
-      if (run.phase === 'placing') return perform('place', {index, replace:payload.replace === true});
-      const previous = ui.selectedSlot;
-      if (previous >= 0 && previous !== index && canRearrange(run)) {
-        const origin = run.slots[previous]?.unit;
-        const target = run.slots[index]?.unit;
-        if (origin && target) return perform('mergePreview', {from:previous, to:index});
-        if (origin || target) return perform('move', {from:previous, to:index});
+      if (run.phase==='placing') {
+        if (run.slots[index].unit && run.pendingUnit?.replace && run.slots[index].unit.kind!=='hero') {
+          ui.replaceIndex=index;
+          return {ok:true};
+        }
+        return perform('place',{index,replace:false});
       }
+      ui.selectedField=-1;
+      ui.fieldKind=null;
+      const previous = ui.selectedSlot;
       ui.selectedSlot = previous === index ? -1 : index;
       return {ok:true, index:ui.selectedSlot};
     }
@@ -352,13 +376,7 @@ export async function createController(options = {}) {
     }
     const preview = resultOf(modules.merges.previewMerge(run, from, to));
     if (!preview.ok) return {...preview, snapped:true};
-    const merged = resultOf(modules.merges.mergeUnits(run, from, to));
-    if (!merged.ok) return {...merged, snapped:true};
-    ui.mergePreview = null;
-    ui.mergeFrom = -1;
-    ui.selectedSlot = to;
-    saveRun();
-    return {...merged, description: preview.description};
+    return previewMerge(from,to);
   }
 
   function chooseDraft(index) {
@@ -381,7 +399,7 @@ export async function createController(options = {}) {
     if (typeof modules.drafts?.placePending !== 'function') return {ok:false, reason:'unavailable'};
     const placed = resultOf(modules.drafts.placePending(run, index, {replace}));
     if (placed.ok) {
-      ui.selectedSlot = index;
+      ui.selectedSlot = -1; ui.replaceIndex=-1;
       saveRun();
     }
     return placed;
@@ -489,7 +507,8 @@ export async function createController(options = {}) {
       ui.screen = run.phase === 'victory' || run.phase === 'defeat' ? 'results' : 'battle';
     }
     ui.mergePreview = null;
-    return {ok:true};
+    if (imported.notice) {run=null; storedRun=null; ui.screen='menu';}
+    return {ok:true,notice:imported.notice};
   }
 
   function act(action, payload = {}) {
@@ -511,7 +530,7 @@ export async function createController(options = {}) {
       const described = ui.mergePreview?.description;
       ui.message = (described && (described[lang] || described.en)) || '';
     }
-    else ui.message = '';
+    else ui.message = outcome.notice || '';
     return outcome;
   }
 
@@ -521,7 +540,7 @@ export async function createController(options = {}) {
     t:translate,
     act,
     getUI:() => ({
-      screen:ui.screen,
+      screen:ui.screen,fieldKind:ui.fieldKind,selectedField:ui.selectedField,replaceIndex:ui.replaceIndex,
       selectedSlot:ui.selectedSlot,
       hoverSlot:ui.hoverSlot,
       hoverIntent:ui.hoverIntent || '',
@@ -883,13 +902,13 @@ async function mount() {
     const state = api.getState();
     const view = api.getUI();
     if (renderer && state) {
-      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
+      renderer.draw(state, {fieldKind:view.fieldKind,selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
     } else if (activeCanvas) drawPlaceholder(activeCanvas, state, view);
   };
   const refresh = () => {
     const view = api.getUI();
     const state = api.getState();
-    const mark = [view.screen, view.selectedSlot, view.mergeFrom, view.message, view.exportText.length, state?.phase, state?.paused, state?.hiddenPaused, state?.speed, state?.draftLevel, state?.draft?.options?.map(option => option.id).join(',') || '', state?.pendingUnit ? 1 : 0, api.getProfile().settings.language, api.getProfile().settings.sound, api.getProfile().settings.reducedMotion, api.getProfile().currency].join('|');
+    const mark = [view.screen, view.fieldKind,view.selectedField,view.replaceIndex,state?.slots?.[view.selectedSlot]?.unit?.targeting,Math.ceil(state?.fieldSlots?.[view.selectedField]?.unit?.hp||0),state?.draftRerollsUsed,view.selectedSlot, view.mergeFrom, view.message, view.exportText.length, state?.phase, state?.paused, state?.hiddenPaused, state?.speed, state?.draftLevel, state?.draft?.options?.map(option => option.id).join(',') || '', state?.pendingUnit ? 1 : 0, api.getProfile().settings.language, api.getProfile().settings.sound, api.getProfile().settings.reducedMotion, api.getProfile().currency].join('|');
     if (mark === seen) return;
     seen = mark;
     try {

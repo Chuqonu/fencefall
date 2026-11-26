@@ -1,3 +1,5 @@
+import {rerollCost} from '../systems/drafts.js';
+import {fieldCost} from '../systems/field.js';
 /**
  * Placement, draft, and merge UI.
  *
@@ -556,7 +558,7 @@ function readUI(api) {
     if (!ui || typeof ui !== 'object') return empty;
     return {
       screen: typeof ui.screen === 'string' ? ui.screen : '',
-      selectedSlot: pickIndex(ui.selectedSlot),
+      selectedSlot: pickIndex(ui.selectedSlot),selectedField:pickIndex(ui.selectedField),replaceIndex:pickIndex(ui.replaceIndex),
       mergeFrom: pickIndex(ui.mergeFrom),
       mergePreview: ui.mergePreview ?? null,
       message: ui.message ?? '',
@@ -2076,6 +2078,9 @@ function renderDraft(state, lang, tr, idSuffix) {
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
   section.append(title);
+  const fee=rerollCost(state);
+  section.append(button({'data-action':'rerollDraft','data-testid':'reroll-draft',disabled:state.draftRerollsUsed>=3 || state.energy<fee,
+    text:tr('reroll')+' · '+(fee || tr('free'))+' / '+Math.floor(state.energy)+' '+tr('energy')}));
   section.setAttribute('aria-labelledby', titleId);
   section.append(el('p', { class: 'muted ff-draft-hint', 'data-testid': 'draft-hint', text: draftIntro(lang) }));
   const threat = bilingualHint(state?.director?.playerHint, lang);
@@ -2161,7 +2166,7 @@ function placingTitle(state, unit, lang, tr) {
   return title;
 }
 
-function renderPlacing(state, lang, tr) {
+function renderPlacing(state, lang, tr,activeReplaceIndex=-1) {
   const section = el('section', { 'data-testid': 'build-placing' });
   const pending = state.pendingUnit;
   const unit = pending?.unit;
@@ -2175,95 +2180,10 @@ function renderPlacing(state, lang, tr) {
     }));
     return section;
   }
-  const allowReplace = pending.replace === true || emptySlots(state).length === 0;
-  // Slot buttons and cancel stay above the long description.
-  if (ephemeral.replaceIndex >= 0) {
-    const actions = el('div', { class: 'ff-actions' });
-    actions.append(button({
-      primary: true,
-      'data-action': 'place',
-      'data-index': String(ephemeral.replaceIndex),
-      'data-replace': 'true',
-      'data-testid': 'replace-confirm',
-      text: tr('replaceConfirm'),
-    }));
-    actions.append(button({
-      'data-intent': 'cancel-replace',
-      'data-testid': 'replace-cancel',
-      text: tr('cancel'),
-    }));
-    section.append(actions);
-  } else {
-    const list = el('div', { class: 'grid ff-slots ff-place-row', 'data-testid': 'place-grid' });
-    for (let index = 0; index < 10; index += 1) {
-      const slot = slotAt(state, index) || { index, unit: null };
-      const occupant = slot.unit;
-      if (!occupant) {
-        list.append(button({
-          class: 'slot-btn empty-slot',
-          primary: true,
-          'data-action': 'place',
-          'data-index': String(index),
-          'data-replace': 'false',
-          'data-testid': `place-slot-${index}`,
-          'aria-label': `${tr('place')} ${slotCaption(slot, tr)}`,
-          'data-row': slotRow(slot) ? 'rear' : 'front',
-        }, el('small', { text: String(index + 1) }), el('small', { text: tr('place') }), el('small', { text: slotRowName(slot, tr) })));
-        continue;
-      }
-      if (isHero(occupant) || !allowReplace) {
-        const blockedName = unitLabel(occupant, lang, tr);
-        const blockedKey = isHero(occupant) ? 'heroProtected' : 'slotOccupied';
-        const blockedReason = tr(blockedKey);
-        const shortReason = (EXTRA[lang] || EXTRA.en)[blockedKey] || blockedReason;
-        list.append(el('div', {
-          class: isHero(occupant) ? 'ff-note is-hero' : 'ff-note',
-          'data-testid': `place-blocked-${index}`,
-          role: 'note',
-          title: `${blockedName}. ${blockedReason}`,
-        }, el('small', { text: blockedName }), el('small', { text: shortReason })));
-        continue;
-      }
-      list.append(button({
-        class: 'slot-btn occupied-slot',
-        'data-intent': 'arm-replace',
-        'data-index': String(index),
-        'data-testid': `replace-slot-${index}`,
-        'data-focus': 'replace-confirm',
-        'aria-label': `${tr('replace')} ${unitLabel(occupant, lang, tr)}`,
-      }, el('small', { text: tr('replace') }), el('small', { text: unitLabel(occupant, lang, tr) })));
-    }
-    section.append(list);
-  }
-  section.append(button({
-    'data-action': 'cancelPlacement',
-    'data-testid': 'cancel-placement',
-    text: tr('cancelPlacement'),
-  }));
-  const body = el('div', { class: 'ff-place-body' });
-  body.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
-    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
-    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
-    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
-    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
-    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
-  ));
-  if (ephemeral.replaceIndex >= 0) {
-    const target = slotUnit(state, ephemeral.replaceIndex);
-    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
-    box.append(el('h3', { text: tr('replaceConfirm') }));
-    box.append(el('p', { text: tr('confirmReplaceBody') }));
-    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
-    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
-    body.append(box);
-  } else if (allowReplace && emptySlots(state).length === 0) {
-    body.append(el('p', { text: tr('fullBoard') }));
-    body.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
-  } else {
-    body.append(el('p', { class: 'muted', text: tr('placeHint') }));
-  }
-  body.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
-  section.append(body);
+  const index=state.pendingUnit.replace ? activeReplaceIndex : -1;
+  if (index>=0) section.append(button({'data-action':'place','data-index':String(index),'data-replace':'true',
+    'data-testid':'replace-confirm',text:tr('replaceConfirm')+' · '+unitLabel(state.slots[index].unit,lang,tr)}));
+  section.append(el('span',{text:tr('chooseSlot')}),button({'data-action':'cancelPlacement','data-testid':'cancel-placement',text:tr('cancelPlacement')}));
   return section;
 }
 
@@ -2502,6 +2422,10 @@ function handlePress(container, api, action, intent, control) {
       return;
     }
     payload = { from, to };
+  } else if (action==='setTargeting' || action==='removeField') {
+    payload={index};
+  } else if (action==='rerollDraft') {
+    payload={};
   } else if (action === 'selectSlot') {
     if (!validSlot(index)) return;
     payload = { index };
@@ -2609,7 +2533,17 @@ export function renderBuildPanel(container, state, api) {
   }
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
   if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main', ui));
-  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr));
+  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr,ui.replaceIndex));
+  const selected=state.slots[ui.selectedSlot]?.unit;
+  if (includeDetails && !modalHere && selected && selected.type!=='harvest') {
+    root.append(button({'data-action':'setTargeting','data-index':String(ui.selectedSlot),text:tr('targeting')+' · '+tr(selected.targeting)}));
+  }
+  const field=state.fieldSlots[ui.selectedField]?.unit;
+  if (includeDetails && !modalHere && field) {
+    const refund=Math.floor(fieldCost(state,field.kind)*0.5*field.hp/field.maxHp);
+    root.append(el('strong',{text:tr(field.kind)+' '+Math.ceil(field.hp)+' / '+Math.ceil(field.maxHp)}),
+      button({'data-action':'removeField','data-index':String(ui.selectedField),text:tr('removeField')+' +'+refund}));
+  }
   if (includeDetails) {
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;
     root.append(renderDetails(state, ui, lang, tr, {

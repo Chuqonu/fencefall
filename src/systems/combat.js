@@ -1125,7 +1125,7 @@ function updateFenceAttacks(state, dt) {
       if (enemy.projectileSpeed && enemy.attackRange) {
         state.projectiles.push({id:uid(state,'p'),team:'enemy',sourceId:enemy.id,targetId:null,enemyKind:enemy.kind,
           x:enemy.x,y:enemy.y,speed:enemy.projectileSpeed,damage:enemy.damage,crit:false,tags:['acid'],
-          dirx:0,diry:1,life:3,visited:[],pierce:0,chain:0,splash:0});
+          dirx:0,diry:1,chainRange:70,life:3,visited:[],pierce:0,chain:0,splash:0});
       } else biteFence(state, enemy.damage, enemy.x, enemy.id, enemy.kind || null);
       enemy.attackCooldown += interval;
     }

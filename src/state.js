@@ -1,6 +1,6 @@
 import {CONTRACT_VERSION,DIFFICULTIES,clone,fieldSlotGeometry,slotGeometry,createUnit} from './shared.js';
 import {isExpedition} from './data/expeditions.js';
-export function createProfile(language='en'){return {version:CONTRACT_VERSION,currency:0,equipmentOwned:[],equipped:{weapon:null,charm:null,armor:null},permanent:{damage:0,haste:0,vitality:0},settledRuns:[],best:{},settings:{language:language==='zh'?'zh':'en',sound:false,reducedMotion:false,difficulty:'normal'}};}
+export function createProfile(language='en'){return {version:CONTRACT_VERSION,currency:0,equipmentOwned:[],equipped:{weapon:null,charm:null,armor:null},permanent:{damage:0,haste:0,vitality:0,economy:0},settledRuns:[],best:{},settings:{language:language==='zh'?'zh':'en',sound:false,reducedMotion:false,difficulty:'normal'}};}
 export function createRun({seed=123456,difficulty='normal',profile=createProfile(),runId,expedition}={}){
  if(!DIFFICULTIES[difficulty])difficulty='normal';
  const id=runId||`run-${Date.now()}-${globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)}`;

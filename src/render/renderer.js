@@ -24,7 +24,7 @@
  * Inside chargeGap, and before the fuse lights, a short amber bar marks the approach.
  */
 
-import {drawWorld} from './world.js';
+import {drawWorld,drawFrontline} from './world.js';
 import {drawDefender, defenderSize} from './defenders.js';
 import {drawEnemy, enemySize} from './enemies.js';
 import {createEffects} from './effects.js';
@@ -491,6 +491,9 @@ function drawStatuses(ctx, enemy, anchorX, y) {
 function drawProjectile(ctx, projectile, target, reduced) {
   const x = Math.round(projectile.x);
   const y = Math.round(projectile.y);
+  if (projectile.team==='enemy') {
+    ctx.fillStyle='#baee6a'; ctx.fillRect(x-2,y-4,5,8); return;
+  }
   const ink = projectileInk(projectile);
   const kind = ink.kind;
   const color = ink.color;
@@ -1486,6 +1489,10 @@ export function createRenderer(canvas) {
 
     isolate(ctx, () => drawWorld(ctx, state, {time: visualTime, reducedMotion: reduced}));
 
+    isolate(ctx,()=>drawFrontline(ctx,state,ui.fieldKind));
+    if (state.phase==='placing') for (const slot of state.slots) {
+      if (!slot.unit || (state.pendingUnit?.replace && slot.unit.kind!=='hero')) fillSlot(ctx,slotBox(slot,slot.index),'rgba(240,203,114,0.24)');
+    }
     const clouds = Array.isArray(state.clouds) ? state.clouds : [];
     const cloudCount = Math.min(clouds.length, MAX_CLOUDS);
     const cloudStart = clouds.length - cloudCount;
@@ -1586,6 +1593,12 @@ export function createRenderer(canvas) {
       drawStatuses(ctx, enemy, anchor.x, cue.statusY);
     }
 
+    if (state.surge?.shieldTimer>0) {
+      ctx.fillStyle='rgba(121,225,255,0.8)';
+      ctx.fillRect(0,ARENA.fenceY-7,ARENA.width,3);
+      const elapsed=3-state.surge.shieldTimer;
+      if (elapsed<0.5) ctx.fillRect(0,ARENA.fenceY-elapsed*480,ARENA.width,6);
+    }
     drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
 
     for (let index = 0; index < 10; index++) {
