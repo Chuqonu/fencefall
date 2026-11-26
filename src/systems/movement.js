@@ -362,6 +362,8 @@ export function spawnEnemy(state, kind, overrides = {}) {
   const enemy = {
     id: uid(state, 'e'),
     kind: key,
+    ...(entry.attackRange ? {attackRange:entry.attackRange,projectileSpeed:entry.projectileSpeed} : {}),
+    ...(entry.statusResist ? {statusResist:{...entry.statusResist}} : {}),
     x,
     y,
     hp,
@@ -470,7 +472,7 @@ export function updateMovement(state, dt) {
     if (!Array.isArray(enemy.statuses)) enemy.statuses = [];
 
     const radius = bodyRadius(enemy);
-    const stopY = ARENA.fenceY - radius;
+    const stopY = ARENA.fenceY - (enemy.attackRange || radius);
     if (!Number.isFinite(enemy.y)) enemy.y = ARENA.spawnY;
     if (!Number.isFinite(enemy.x)) enemy.x = clamp(finite(enemy.driftAnchor, 180), ARENA.enemyMinX, ARENA.enemyMaxX);
     if (enemy.y > stopY) enemy.y = stopY;

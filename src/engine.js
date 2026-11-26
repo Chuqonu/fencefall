@@ -2,7 +2,7 @@
 // second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit} from './shared.js';
 import {updateMovement} from './systems/movement.js';
-import {damageEnemy, killEnemy, regenerateFence, updateCombat} from './systems/combat.js';
+import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
 import {updateStatuses} from './systems/status.js';
 import {updateWaves} from './systems/waves.js';
 import {updateDrafts} from './systems/drafts.js';
@@ -57,7 +57,7 @@ export function prepare(state) {
 
 export function integrationInfo() {
   return {
-    contract:1,
+    contract:2,
     present:{movement:true, combat:true, status:true, waves:true, drafts:true, progression:true},
     missing:[],
     failed:{},
@@ -110,7 +110,6 @@ function stepBody(state) {
   state.tick += 1;
   updateWaves(state, STEP);
   if (halted(state)) return;
-  regenerateFence(state, STEP);
   updateMovement(state, STEP);
   if (halted(state)) return;
   updateStatuses(state, STEP, damageEnemy);

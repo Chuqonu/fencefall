@@ -1,7 +1,3 @@
-// Fence HP restores at FENCE_REGEN_PER_SECOND for each second of simulation
-// time. The fixed STEP is the only clock, so 1×, 1.5×, 3×, and 10× match
-// per simulation second. Pause, a hidden page, draft, victory, and defeat
-// do not heal. A full fence stays at max.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {advance, createRun, prepare, setSpeed, simulate, step} from '../src/engine.js';
@@ -30,15 +26,15 @@ function near(actual, expected, tol, label) {
   assert.ok(Math.abs(actual - expected) <= tol, `${label}: got ${actual}, expected ${expected} ± ${tol}`);
 }
 
-test('an injured fence heals over simulation time and never passes max', () => {
-  assert.equal(FENCE_REGEN_PER_SECOND, 2);
+test('an injured fence never heals invisibly', () => {
+  assert.equal(FENCE_REGEN_PER_SECOND, 0);
   const state = injure('fence-regen-play', 40);
   const damaged = state.fence.hp;
   const max = state.fence.maxHp;
   simulate(state, 3);
   assert.equal(state.phase, 'playing');
   assert.ok(state.time > 2);
-  assert.ok(state.fence.hp > damaged);
+  assert.ok(state.fence.hp === damaged);
   assert.ok(state.fence.hp <= max);
   near(state.fence.hp, damaged + FENCE_REGEN_PER_SECOND * state.time, 1e-4, 'three simulation seconds');
   assert.equal(state.fence.maxHp, max);
@@ -55,7 +51,7 @@ test('pause, hidden pause, draft, victory, and defeat do not heal', () => {
   assert.equal(paused.time, pausedTime);
   paused.paused = false;
   simulate(paused, 1);
-  assert.ok(paused.fence.hp > pausedHp);
+  assert.ok(paused.fence.hp === pausedHp);
   assert.ok(paused.fence.hp <= paused.fence.maxHp);
 
   const hidden = injure('fence-regen-hidden', 25);
@@ -98,12 +94,12 @@ test('a full fence stays at max', () => {
   const nearly = injure('fence-regen-cap', 0.5);
   const cap = nearly.fence.maxHp;
   simulate(nearly, 1);
-  assert.equal(nearly.fence.hp, cap);
+  assert.equal(nearly.fence.hp, cap - 0.5);
   simulate(nearly, 2);
-  assert.equal(nearly.fence.hp, cap);
+  assert.equal(nearly.fence.hp, cap - 0.5);
 });
 
-test('1x, 1.5x, 3x, and 10x heal the same HP per simulation second', () => {
+test('1x, 1.5x, 3x, and 10x leave fence HP unchanged', () => {
   const wall = 0.2;
   const gained = [];
   for (const speed of SPEEDS) {
@@ -114,14 +110,12 @@ test('1x, 1.5x, 3x, and 10x heal the same HP per simulation second', () => {
     advance(state, wall);
     assert.equal(state.phase, 'playing');
     assert.ok(state.time > 0, `${speed}x did not advance`);
-    assert.ok(state.fence.hp > damaged, `${speed}x did not heal`);
+    assert.ok(state.fence.hp === damaged, `${speed}x did not heal`);
     assert.ok(state.fence.hp <= state.fence.maxHp, `${speed}x passed max`);
     const rate = (state.fence.hp - damaged) / state.time;
     near(rate, FENCE_REGEN_PER_SECOND, 1e-4, `${speed}x per simulation second`);
     gained.push(state.fence.hp - damaged);
     assert.ok(Math.abs(state.time - wall * speed) < STEP, `${speed}x sim time ${state.time}`);
   }
-  near(gained[1] / gained[0], 1.5, 1e-3, '1.5x versus 1x over the same wall time');
-  near(gained[2] / gained[0], 3, 1e-3, '3x versus 1x over the same wall time');
-  near(gained[3] / gained[0], 10, 1e-3, '10x versus 1x over the same wall time');
+  assert.deepEqual(gained,[0,0,0,0]);
 });

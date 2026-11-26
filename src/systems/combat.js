@@ -82,7 +82,7 @@ export const BRITTLE_CAP = 1;
 export const MIN_ATTACK_INTERVAL = 0.05;
 export const ARMOR_CAP = 0.8;
 export const WARD_CAP = 0.4;
-export const FENCE_REGEN_PER_SECOND = 2;
+export const FENCE_REGEN_PER_SECOND = 0;
 
 const HIT_SLOP = 2;
 const CONTACT_SLOP = 0.75;
@@ -225,12 +225,12 @@ export function damageEnemy(state, enemy, amount, options = {}) {
   const opts = options || {};
   if (!Number.isFinite(enemy.hp)) return 0;
   if (enemy.hp <= 0) {
-    killEnemy(state, enemy, opts.sourceId);
+    killEnemy(state, enemy, opts.sourceId, opts);
     return 0;
   }
   if (!Number.isFinite(amount) || amount <= 0) return 0;
 
-  const armor = clamp(finite(enemy.armor, 0), 0, ARMOR_CAP);
+  const armor = clamp(finite(enemy.armor, 0), 0, ARMOR_CAP) * (1 - clamp(opts.armorPen || 0, 0, 1));
   const reduced = amount * (1 - armor) * (1 + brittleBonus(enemy));
   const shield = clamp(finite(enemy.wardShield, 0), 0, WARD_CAP);
   const shielded = reduced * (1 - shield);
@@ -249,11 +249,12 @@ export function damageEnemy(state, enemy, amount, options = {}) {
     crit: !!opts.crit,
     execute: opts.execute === true,
     attack: opts.type || 'hit',
-    towerType: opts.towerType || null
+    towerType: opts.towerType || findUnit(state,opts.sourceId)?.type || null,
+    armorBlocked:amount*armor, ...(opts.reaction ? {reaction:opts.reaction} : {})
   });
   if (enemy.hp <= 1e-6) {
     enemy.hp = 0;
-    killEnemy(state, enemy, opts.sourceId);
+    killEnemy(state, enemy, opts.sourceId, opts);
   }
   return dealt;
 }
@@ -306,7 +307,7 @@ function releaseSplit(state, enemy) {
 }
 
 /** Award kill credit, XP from enemy.xp, and a kill event. Repeat calls are no-ops. */
-export function killEnemy(state, enemy, sourceId) {
+export function killEnemy(state, enemy, sourceId, options = {}) {
   if (!state || !enemy || enemy.dead) return false;
   attachSplit(enemy);
   enemy.dead = true;
@@ -326,6 +327,16 @@ export function killEnemy(state, enemy, sourceId) {
     xp,
     towerType: unit?.type || null
   });
+  const mark = enemy.corpseExplode;
+  if (mark && !options.fromExplode) {
+    const damage = Math.min(260,enemy.maxHp * mark.hpRatio);
+    emit(state,'corpse_explode',{x:enemy.x,y:enemy.y,radius:mark.radius,damage});
+    for (const other of state.enemies) {
+      if (!isLiving(other) || distance(other,enemy)>mark.radius) continue;
+      applyPayload(other,{sourceId:mark.sourceId,effects:{poison:mark.poison}});
+      damageEnemy(state,other,damage,{sourceId:mark.sourceId,type:'corpse_explode',towerType:'blight',fromExplode:true});
+    }
+  }
   releaseSplit(state, enemy);
   return true;
 }
@@ -471,20 +482,71 @@ function applyPayload(enemy, projectile) {
   }
 }
 
+function pushEnemy(state,enemy,requested) {
+  if (!isLiving(enemy) || !requested) return;
+  const y = enemy.y;
+  enemy.y = clamp(y-requested,8,ARENA.fenceY-enemy.radius);
+  enemy.attacking = false;
+  enemy.blockedByFieldId = null;
+  emit(state,'knockback',{targetId:enemy.id,x:enemy.x,y,distance:y-enemy.y});
+}
+
+function impact(state,projectile,enemy,type) {
+  const {effects,sourceId,towerType} = projectile;
+  let amount = impactDamage(projectile,enemy), reaction;
+  const active = (enemy.statuses || []).filter(s=>s.remaining>0);
+  if (effects?.thermalShock && active.some(s=>s.type==='burn' || s.type==='slow')) {
+    amount *= 1 + effects.thermalShock;
+    reaction = 'steam';
+  }
+  const stacks = active.find(s=>s.type==='poison')?.stacks || 0;
+  if (effects?.poisonDetonate && stacks) {
+    amount *= 1 + effects.poisonDetonate*stacks;
+    reaction = 'catalyst';
+  }
+  if (effects?.corpseExplode) enemy.corpseExplode = {...effects.corpseExplode,sourceId,poison:effects.poison};
+  damageEnemy(state,enemy,amount,{sourceId,towerType,type,armorPen:effects?.armorPen,reaction,
+    crit:type!=='splash' && !!projectile.crit,execute:executeApplies(projectile,enemy)});
+  applyPayload(enemy,projectile);
+  if (reaction==='steam' && isLiving(enemy)) applyStatus(enemy,{type:'brittle',power:0.2,remaining:2.6,sourceId});
+  const push = (effects?.knockback || 0) + (projectile.crit && enemy.kind!=='boss' ? effects?.critKnockback || 0 : 0);
+  pushEnemy(state,enemy,push*(enemy.kind==='boss'?0.2:1));
+}
+
+const MAX_CLOUDS = 24;
+function spawnCloud(state,projectile,enemy) {
+  const spec = projectile.effects?.cloud;
+  if (!spec) return;
+  const cloud = {...spec,id:uid(state,'c'),kind:projectile.towerType,sourceId:projectile.sourceId,
+    x:enemy.x,y:enemy.y,remaining:spec.duration,tickTimer:0};
+  if (state.clouds.length>=MAX_CLOUDS) state.clouds.shift();
+  state.clouds.push(cloud);
+  emit(state,'cloud_spawn',{id:cloud.id,kind:cloud.kind,x:cloud.x,y:cloud.y,radius:cloud.radius,duration:cloud.duration});
+}
+export function updateClouds(state,dt) {
+  if (!state.clouds?.length) return;
+  for (const cloud of state.clouds) {
+    cloud.tickTimer += Math.min(dt,cloud.remaining);
+    cloud.remaining -= dt;
+    while (cloud.tickTimer + 1e-9 >= cloud.tick) {
+      cloud.tickTimer -= cloud.tick;
+      for (const enemy of state.enemies) {
+        if (!isLiving(enemy) || distance(enemy,cloud)>cloud.radius) continue;
+        damageEnemy(state,enemy,cloud.dps*cloud.tick,{sourceId:cloud.sourceId,towerType:cloud.kind,type:'cloud'});
+        applyPayload(enemy,{sourceId:cloud.sourceId,effects:cloud});
+      }
+    }
+  }
+  state.clouds = state.clouds.filter(cloud=>cloud.remaining>1e-9);
+}
+
 function applySplash(state, projectile, primary) {
   const radius = projectile.splash;
   if (!(radius > 0)) return;
   for (const enemy of state.enemies) {
     if (!isTargetable(enemy) || enemy.id === primary.id) continue;
     if (distance(primary, enemy) > radius) continue;
-    damageEnemy(state, enemy, impactDamage(projectile, enemy), {
-      sourceId: projectile.sourceId,
-      type: 'splash',
-      crit: false,
-      execute: executeApplies(projectile, enemy),
-      towerType: projectile.towerType
-    });
-    applyPayload(enemy, projectile);
+    impact(state,projectile,enemy,'splash');
   }
 }
 
@@ -501,15 +563,17 @@ function resolveHit(state, projectile, enemy) {
   if (projectile.impactType === 'chain') rollChainCrit(state, projectile);
   if (!projectile.visited.includes(enemy.id)) projectile.visited.push(enemy.id);
   const attack = projectile.impactType || 'projectile';
-  damageEnemy(state, enemy, impactDamage(projectile, enemy), {
-    sourceId: projectile.sourceId,
-    type: attack,
-    crit: !!projectile.crit,
-    execute: executeApplies(projectile, enemy),
-    towerType: projectile.towerType
-  });
-  applyPayload(enemy, projectile);
-  applySplash(state, projectile, enemy);
+  // Secondary effects originate at the contact point even when it pushes its victim.
+  const point = {id:enemy.id,x:enemy.x,y:enemy.y};
+  impact(state,projectile,enemy,attack);
+  if (projectile.effects?.revealRadius) {
+    for (const other of state.enemies) if (distance(other,point)<=projectile.effects.revealRadius) {
+      other.revealed = true;
+      other.revealTimer = 1.2;
+    }
+  }
+  spawnCloud(state,projectile,point);
+  applySplash(state, projectile, point);
 
   if (Math.floor(finite(projectile.pierce, 0)) > 0) {
     projectile.pierce = Math.max(0, Math.floor(projectile.pierce) - 1);
@@ -657,6 +721,9 @@ function buildEffects(stats) {
   if (stats.stun && Number.isFinite(stats.stun.duration)) {
     effects.stun = {duration: Math.max(0, stats.stun.duration)};
   }
+  for (const key of ['armorPen','knockback','critKnockback','cloud','corpseExplode','thermalShock','poisonDetonate','revealRadius']) {
+    if (stats[key]) effects[key] = stats[key];
+  }
   return effects;
 }
 
@@ -750,40 +817,27 @@ function fireUnit(state, unit, slot, stats, bonus) {
   const range = finite(stats.range, 0);
   if (!(range > 0)) return false;
   const origin = {x: slot.x, y: slot.y};
-  const target = nearestEnemy(state, origin, range, null);
-  if (!target) return false;
-  const rolled = rollShot(state, stats, bonus);
-  if (!(rolled.damage > 0)) return false;
+  const selected = [];
   const mechanics = mechanicList(stats);
-  const projectile = makeProjectile(state, unit, slot, stats, target, rolled, mechanics);
-  state.projectiles.push(projectile);
-  emitEvent(state, 'shot', {
-    sourceId: unit.id,
-    targetId: target.id,
-    x: projectile.x,
-    y: projectile.y,
-    damage: rolled.crit ? rolled.damage * rolled.critMultiplier : rolled.damage,
-    crit: rolled.crit,
-    towerType: unit.type || null
-  });
-  if (mechanics.includes('multishot')) {
-    const second = nearestEnemy(state, origin, range, [target.id]);
-    if (second) {
-      const echoMechanics = mechanics.filter(name => name !== 'multishot');
-      const echo = makeProjectile(state, unit, slot, stats, second, rolled, echoMechanics);
-      echo.tags.push('echo');
-      state.projectiles.push(echo);
-      emitEvent(state, 'shot', {
-        sourceId: unit.id,
-        targetId: second.id,
-        x: echo.x,
-        y: echo.y,
-        damage: rolled.crit ? rolled.damage * rolled.critMultiplier : rolled.damage,
-        crit: rolled.crit,
-        towerType: unit.type || null
-      });
+  const extras = stats.multishot || (mechanics.includes('multishot') ? 1 : 0);
+  for (let i=0; i<=extras; i++) {
+    const target = nearestEnemy(state,origin,range,selected);
+    if (!target) break;
+    selected.push(target.id);
+    const rolled = rollShot(state,stats,bonus);
+    if (!rolled.damage) return false;
+    const shot = makeProjectile(state,unit,slot,stats,target,rolled,mechanics);
+    if (i) shot.tags.push('echo');
+    if (stats.stun?.chance && random(state)>=stats.stun.chance) {
+      delete shot.effects.stun;
+      shot.mechanics = shot.mechanics.filter(m=>m!=='stun');
     }
+    state.projectiles.push(shot);
+    emit(state,'shot',{sourceId:unit.id,targetId:target.id,x:slot.x,y:slot.y,targetX:target.x,targetY:target.y,
+      damage:rolled.damage*rolled.critMultiplier,crit:rolled.crit,towerType:unit.type,multishot:i>0,
+      pierce:shot.pierce,chain:shot.chain,splash:shot.splash});
   }
+  if (!selected.length) return false;
   unit.cooldown = finite(unit.cooldown, 0) + scaledInterval(stats, bonus?.haste);
   return true;
 }
@@ -897,20 +951,6 @@ function advanceEnemyShot(state, projectile, dt) {
   return true;
 }
 
-// One fixed STEP of fence repair. The engine calls this while the fight is
-// playing. Speed only changes how many steps run. Pause, a hidden page,
-// draft, victory, and defeat do not heal, and HP never rises past max.
-export function regenerateFence(state, dt) {
-  if (!state || state.phase !== 'playing' || state.paused === true || state.hiddenPaused === true) return state;
-  const fence = state.fence;
-  if (!fence || typeof fence.hp !== 'number' || typeof fence.maxHp !== 'number') return state;
-  if (!Number.isFinite(fence.hp) || !Number.isFinite(fence.maxHp)) return state;
-  if (!(fence.hp > 0) || !(fence.maxHp > 0)) return state;
-  if (!Number.isFinite(dt) || !(dt > 0)) return state;
-  fence.hp = Math.min(fence.maxHp, fence.hp + FENCE_REGEN_PER_SECOND * dt);
-  return state;
-}
-
 function ensureMendFields(state, enemy) {
   if (Number.isFinite(enemy.mendAmount)) return;
   const mend = ENEMIES[enemy.kind] && ENEMIES[enemy.kind].mend;
@@ -1019,7 +1059,11 @@ function updateFenceAttacks(state, dt) {
     const hitCap = Math.max(1, Math.min(40, Math.ceil(dt / interval) + 1));
     let hits = 0;
     while (enemy.attackCooldown <= 1e-9 && fence.hp > 0 && hits++ < hitCap) {
-      biteFence(state, enemy.damage, enemy.x, enemy.id, enemy.kind || null);
+      if (enemy.projectileSpeed && enemy.attackRange) {
+        state.projectiles.push({id:uid(state,'p'),team:'enemy',sourceId:enemy.id,targetId:null,enemyKind:enemy.kind,
+          x:enemy.x,y:enemy.y,speed:enemy.projectileSpeed,damage:enemy.damage,crit:false,tags:['acid'],
+          dirx:0,diry:1,life:3,visited:[],pierce:0,chain:0,splash:0});
+      } else biteFence(state, enemy.damage, enemy.x, enemy.id, enemy.kind || null);
       enemy.attackCooldown += interval;
     }
   }
@@ -1097,6 +1141,7 @@ export function updateCombat(state, dt) {
   const aura = computeAura(roster);
   updateDefenders(state, dt, roster, aura);
   updateProjectiles(state, dt);
+  updateClouds(state, dt);
   updateMenders(state, dt);
   updateFenceAttacks(state, dt);
   updateCharges(state, dt);

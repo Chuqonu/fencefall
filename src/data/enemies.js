@@ -87,6 +87,7 @@ export const ENEMIES = {
     armor: 0.55,
   },
   spitter: {
+    attackRange:135, projectileSpeed:190,
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
       en: 'Fragile, with the shortest pause between bites. Each bite on the shared fence is light, and the danger is how fast those bites stack once it arrives.',

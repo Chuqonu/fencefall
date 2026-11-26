@@ -36,7 +36,7 @@
  * hero_protected, occupied, replace_not_offered, draft_missing, plus any
  * reason returned by applyHeroUpgrade.
  */
-import {HERO_UPGRADES, applyHeroUpgrade} from './hero.js';
+import {HERO_UPGRADES, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
 import {TOWERS} from '../data/towers.js';
 import {BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
 
@@ -338,58 +338,9 @@ function readLevel(hero, id) {
   return null;
 }
 
-function trialUpgrade(state, id) {
-  if (typeof applyHeroUpgrade !== 'function') return false;
-  let copy;
-  try {
-    copy = clone(state);
-  } catch {
-    return false;
-  }
-  copy.phase = 'draft';
-  copy.paused = false;
-  copy.hiddenPaused = false;
-  copy.draft = {
-    options: [
-      {id: `hero_upgrade:${id}`, kind: 'hero_upgrade', upgradeId: id, replace: false},
-      {id: 'tower:bolt', kind: 'tower', type: 'bolt', replace: false, rank: 1},
-      {id: 'tower:fire', kind: 'tower', type: 'fire', replace: false, rank: 1}
-    ]
-  };
-  try {
-    return applyHeroUpgrade(copy, id)?.ok === true;
-  } catch {
-    return false;
-  }
-}
-
 function availableUpgradeIds(state) {
   const hero = findHero(state);
-  if (!hero) return [];
-  const snapshot = {
-    rng: state.rng,
-    nextId: state.nextId,
-    xp: state.xp,
-    phase: state.phase,
-    draftLevel: state.draftLevel,
-    nextDraftXp: state.nextDraftXp,
-    upgrades: clone(hero.upgrades || {})
-  };
-  const ids = [];
-  for (const id of upgradeIds()) {
-    const cap = readCap(upgradeSpec(id));
-    const level = readLevel(hero, id);
-    if (level != null && cap != null && level >= cap) continue;
-    if (trialUpgrade(state, id)) ids.push(id);
-  }
-  state.rng = snapshot.rng;
-  state.nextId = snapshot.nextId;
-  state.xp = snapshot.xp;
-  state.phase = snapshot.phase;
-  state.draftLevel = snapshot.draftLevel;
-  state.nextDraftXp = snapshot.nextDraftXp;
-  if (JSON.stringify(hero.upgrades) !== JSON.stringify(snapshot.upgrades)) hero.upgrades = snapshot.upgrades;
-  return ids;
+  return hero ? availableHeroUpgradeIds(hero) : [];
 }
 
 function towerCard(type, replace) {

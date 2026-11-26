@@ -1,25 +1,10 @@
-// Passive run upgrades for the single hero. Does not spend draft XP, change phase,
-// roll RNG, or modify any other unit. Drafts call applyHeroUpgrade, then return to playing.
-//
-// The hero starts on front-center slot 2, just behind the fence. Baseline range 430
-// still reaches enemies in the upper field from that row.
-// New runs start on slot 2. A saved run keeps whatever slot the hero already occupies.
-//
-// getProfileBonuses(profileSnapshot): damage and haste are fractions, range is pixels,
-// critChance is an absolute fraction. Fence HP and reward are not applied here.
-// Haste adds to attack speed: interval = base / (1 + upgrade haste + profile haste).
-// Profile damage multiplies hit damage and poison dps after flat upgrade adds.
-// Combat should fire ordinary projectiles from these UnitStats. Poison is one stack
-// {dps, duration, maxStacks:1}; later hits refresh it. Pierce is the numeric field.
-// mechanics stays empty: those two are first-class stats, not extra hooks.
-
 import {clamp} from '../shared.js';
 import {getProfileBonuses} from './progression.js';
 
 export const HERO_BASE = Object.freeze({
-  damage: 26,
-  interval: 0.6,
-  range: 430,
+  damage: 14,
+  interval: 0.65,
+  range: 320,
   critChance: 0.08,
   critMultiplier: 1.75,
   projectileSpeed: 540,
@@ -54,70 +39,18 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function describeEffect(effect) {
-  const en = [];
-  const zh = [];
-  if (effect.damageAdd) {
-    en.push(`Each rank adds ${effect.damageAdd} damage to the hero's shots.`);
-    zh.push(`每级使英雄的射击伤害 +${effect.damageAdd}。`);
-  }
-  if (effect.haste) {
-    const pct = Math.round(effect.haste * 100);
-    en.push(`Each rank increases the hero's attack speed by ${pct}%.`);
-    zh.push(`每级使英雄的攻击速度提高 ${pct}%。`);
-  }
-  if (effect.range) {
-    en.push(`Each rank extends the hero's range by ${effect.range}.`);
-    zh.push(`每级使英雄的射程 +${effect.range}。`);
-  }
-  if (effect.critChance) {
-    const pct = Math.round(effect.critChance * 100);
-    en.push(`Each rank adds ${pct}% to the hero's critical hit chance.`);
-    zh.push(`每级使英雄的暴击率 +${pct}%。`);
-  }
-  if (effect.critMultiplier) {
-    en.push(`Each rank adds ${effect.critMultiplier} to the hero's critical multiplier.`);
-    zh.push(`每级使英雄的暴击倍率 +${effect.critMultiplier}。`);
-  }
-  if (effect.pierce) {
-    const n = effect.pierce;
-    const noun = n === 1 ? 'enemy' : 'enemies';
-    en.push(`Each rank lets the hero's shot pierce ${n} extra ${noun}.`);
-    zh.push(`每级使英雄的射击额外穿透 ${n} 个敌人。`);
-  }
-  if (effect.poison) {
-    const p = effect.poison;
-    en.push(`Each rank adds ${p.dps} poison damage per second to the hero's hits for ${p.duration}s. Hits refresh; they do not stack.`);
-    zh.push(`每级使英雄的命中附加每秒 ${p.dps} 点毒素，持续 ${p.duration} 秒；命中刷新，不叠加。`);
-  }
-  if (!en.length) {
-    en.push('Passive improvement to the hero.');
-    zh.push('被动强化英雄。');
-  }
-  return {en: en.join(' '), zh: zh.join('')};
+function upgrade(id, cap, en, zh, info, detail, effect) {
+  return deepFreeze({id,cap,name:{en,zh},description:{en:info,zh:detail},effect});
 }
-
-function defineUpgrade(id, cap, name, effect) {
-  return deepFreeze({
-    id,
-    cap,
-    name: {en: name.en, zh: name.zh},
-    description: describeEffect(effect),
-    effect,
-  });
-}
-
-// Numeric effect fields are per rank. poison.dps is per rank; duration and maxStacks are not.
 export const HERO_UPGRADES = deepFreeze({
-  strike: defineUpgrade('strike', 4, {en: 'Sharpened Quarrels', zh: '锋矢'}, {damageAdd: 7}),
-  cadence: defineUpgrade('cadence', 4, {en: 'Repeater Cadence', zh: '连射'}, {haste: 0.14}),
-  reach: defineUpgrade('reach', 3, {en: 'Long Watch', zh: '远望'}, {range: 40}),
-  focus: defineUpgrade('focus', 4, {en: 'Keen Eye', zh: '锐目'}, {critChance: 0.08}),
-  lethality: defineUpgrade('lethality', 3, {en: 'Heavy Draw', zh: '满弦'}, {critMultiplier: 0.4}),
-  pierce: defineUpgrade('pierce', 2, {en: 'Piercing Bolt', zh: '贯矢'}, {pierce: 1}),
-  barbed: defineUpgrade('barbed', 3, {en: 'Barbed Quills', zh: '倒刺'}, {
-    poison: {dps: 6, duration: 3, maxStacks: 1},
-  }),
+  volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
+  strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
+  cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
+  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级多贯穿一名敌人，并忽略 25% 护甲。',{pierce:1}),
+  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds.','爆炸弹溅射并灼烧敌群 2.6 秒。',{}),
+  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take.','减速目标并使其受到更多伤害。',{}),
+  focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
+  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{})
 });
 
 function finiteOr(value, fallback = 0) {
@@ -186,64 +119,24 @@ export function availableHeroUpgradeIds(unit) {
  */
 export function getHeroStats(unit, state) {
   const levels = upgradeLevels(unit);
-  let damageAdd = 0;
-  let haste = 0;
-  let rangeAdd = 0;
-  let critAdd = 0;
-  let critMulAdd = 0;
-  let pierceAdd = 0;
-  let poisonDps = 0;
-  let poisonDuration = 0;
-  let poisonStacks = 0;
-
-  for (const id of Object.keys(HERO_UPGRADES)) {
-    const level = levels[id];
-    if (level <= 0) continue;
-    const effect = HERO_UPGRADES[id].effect;
-    if (effect.damageAdd) damageAdd += effect.damageAdd * level;
-    if (effect.haste) haste += effect.haste * level;
-    if (effect.range) rangeAdd += effect.range * level;
-    if (effect.critChance) critAdd += effect.critChance * level;
-    if (effect.critMultiplier) critMulAdd += effect.critMultiplier * level;
-    if (effect.pierce) pierceAdd += effect.pierce * level;
-    if (effect.poison && effect.poison.dps) {
-      poisonDps += effect.poison.dps * level;
-      poisonDuration = Math.max(poisonDuration, finiteOr(effect.poison.duration));
-      poisonStacks = Math.max(poisonStacks, finiteOr(effect.poison.maxStacks, 1));
-    }
-  }
-
+  const {strike,cadence,pierce,volley,shrapnel,frostbite,focus} = levels;
   const bonus = readBonuses(state);
-  const damageFactor = 1 + bonus.damage;
-  const attackSpeed = Math.max(0.25, 1 + haste + bonus.haste);
-  const damage = clamp(round4((HERO_BASE.damage + damageAdd) * damageFactor), STAT_LIMITS.damage[0], STAT_LIMITS.damage[1]);
-  const interval = clamp(round4(HERO_BASE.interval / attackSpeed), STAT_LIMITS.interval[0], STAT_LIMITS.interval[1]);
-  const range = clamp(round4(HERO_BASE.range + rangeAdd + bonus.range), STAT_LIMITS.range[0], STAT_LIMITS.range[1]);
-  const critChance = clamp(round4(HERO_BASE.critChance + critAdd + bonus.critChance), STAT_LIMITS.critChance[0], STAT_LIMITS.critChance[1]);
-  const critMultiplier = clamp(round4(HERO_BASE.critMultiplier + critMulAdd), STAT_LIMITS.critMultiplier[0], STAT_LIMITS.critMultiplier[1]);
-  const projectileSpeed = clamp(round4(HERO_BASE.projectileSpeed), STAT_LIMITS.projectileSpeed[0], STAT_LIMITS.projectileSpeed[1]);
-  const pierce = clamp(Math.round(HERO_BASE.pierce + pierceAdd), STAT_LIMITS.pierce[0], STAT_LIMITS.pierce[1]);
-
-  const stats = {
-    damage,
-    interval,
-    range,
-    critChance,
-    critMultiplier,
-    projectileSpeed,
-    splash: 0,
-    chain: 0,
-    chainRange: HERO_BASE.chainRange,
-    pierce,
-    mechanics: [],
-  };
-
-  if (poisonDps > 0 && poisonDuration > 0) {
-    stats.poison = {
-      dps: clamp(round4(poisonDps * damageFactor), STAT_LIMITS.poisonDps[0], STAT_LIMITS.poisonDps[1]),
-      duration: round4(poisonDuration),
-      maxStacks: clamp(Math.round(poisonStacks || 1), 1, 3),
-    };
+  const stats = {...HERO_BASE, mechanics:[],
+    damage:round4((HERO_BASE.damage+5*strike)*(1+bonus.damage)),
+    interval:round4(HERO_BASE.interval/(1+0.14*cadence+bonus.haste)),
+    range:HERO_BASE.range+bonus.range,
+    critChance:round4(HERO_BASE.critChance+0.1*focus+bonus.critChance),
+    critMultiplier:round4(HERO_BASE.critMultiplier+0.3*focus),
+    pierce, armorPen:pierce*0.25, critKnockback:strike ? 18 : 0, multishot:volley};
+  if (volley) stats.mechanics.push('multishot');
+  if (focus >= 2) stats.mechanics.push('execute');
+  if (shrapnel) {
+    stats.splash = 20+10*shrapnel;
+    stats.burn = {dps:4*shrapnel,duration:2.6};
+  }
+  if (frostbite) {
+    stats.slow = {factor:round4(0.82-0.06*frostbite),duration:2.2};
+    stats.brittle = {power:round4(0.1*frostbite),duration:2.6};
   }
   return stats;
 }
@@ -279,6 +172,16 @@ export function applyHeroUpgrade(state, id) {
   if (current >= def.cap) return {ok: false, reason: 'upgrade_capped'};
   try {
     upgrades[id] = current + 1;
+    if (id === 'bastion' && state.fence) {
+      state.fence.maxHp += 80;
+      state.fence.hp += 80;
+      for (const {unit} of state.fieldSlots || []) {
+        if (!unit) continue;
+        const gain = unit.maxHp * 0.2 / (1 + current*0.2);
+        unit.maxHp += gain;
+        unit.hp += gain;
+      }
+    }
   } catch {
     return {ok: false, reason: 'invalid_state'};
   }

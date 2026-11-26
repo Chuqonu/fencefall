@@ -163,7 +163,17 @@ function planMerge(state, fromIndex, toIndex) {
     const kind = fromClass === 'hybrid' ? 'hybrid' : 'tower';
     return { ok: true, unit: placeholder(from.type, from.rank + 1, kind), description: sameTypeDescription(from.type, from.rank), parents: null };
   }
-  if (fromClass === 'hybrid' || toClass === 'hybrid') return fail('hybrid_locked');
+  if (fromClass === 'hybrid' || toClass === 'hybrid') {
+    const hybrid = fromClass === 'hybrid' ? from : to;
+    const parent = hybrid === from ? to : from;
+    const recipe = getRecipe(hybrid.type);
+    if (!recipe.parents.includes(parent.type)) return fail('hybrid_locked');
+    if (from.rank !== to.rank) return fail('rank_mismatch');
+    if (hybrid.rank >= HYBRID_RANK_MAX) return fail('rank_cap');
+    const rank = hybrid.rank + 1;
+    return {ok:true, unit:placeholder(hybrid.type, rank, 'hybrid'),
+      description:hybridDescription(recipe, rank, from.type, to.type), parents:recipe.parents};
+  }
   if (from.rank !== to.rank) return fail('rank_mismatch');
   const entry = findRecipe(from.type, to.type);
   if (!entry) return fail('no_recipe');
