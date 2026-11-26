@@ -24,7 +24,7 @@
  * Inside chargeGap, and before the fuse lights, a short amber bar marks the approach.
  */
 
-import {drawWorld} from './world.js';
+import {drawWorld,drawFrontline} from './world.js';
 import {drawDefender, defenderSize} from './defenders.js';
 import {drawEnemy, enemySize} from './enemies.js';
 import {createEffects} from './effects.js';
@@ -491,6 +491,25 @@ function drawStatuses(ctx, enemy, anchorX, y) {
 function drawProjectile(ctx, projectile, target, reduced) {
   const x = Math.round(projectile.x);
   const y = Math.round(projectile.y);
+  if (projectile.team === 'enemy') {
+    // Glowing spitter acid glob with trailing droplets
+    ctx.save();
+    ctx.fillStyle = 'rgba(134, 224, 68, 0.28)';
+    ctx.fillRect(x - 4, y - 6, 9, 12);
+    ctx.fillStyle = '#3d7420';
+    ctx.fillRect(x - 3, y - 4, 7, 8);
+    ctx.fillStyle = '#baee6a';
+    ctx.fillRect(x - 2, y - 3, 5, 6);
+    ctx.fillStyle = '#f5ffd0';
+    ctx.fillRect(x - 1, y - 1, 2, 2);
+    if (!reduced) {
+      ctx.fillStyle = '#88cc44';
+      ctx.fillRect(x - 1, y - 7, 2, 2);
+      ctx.fillRect(x + 1, y - 10, 1, 2);
+    }
+    ctx.restore();
+    return;
+  }
   const ink = projectileInk(projectile);
   const kind = ink.kind;
   const color = ink.color;
@@ -508,14 +527,21 @@ function drawProjectile(ctx, projectile, target, reduced) {
   const px = -uy;
   const py = ux;
   const crit = !!projectile.crit || (Array.isArray(projectile.tags) && projectile.tags.includes('crit'));
-  const length = reduced ? 3 : kind === 'lightning' ? 8 : kind === 'fire' ? 6 : 5;
+  const length = reduced ? 4 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
   const life = finite(projectile.life);
   const faded = life != null && life < 0.35;
   const at = (along, across) => [x + ux * along + px * across, y + uy * along + py * across];
-  if (faded) {
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.3, life / 0.35);
-  }
+  ctx.save();
+  if (faded) ctx.globalAlpha = Math.max(0.3, life / 0.35);
+
+  // Subtle luminous elemental halo so projectiles read crisply over dense hordes
+  const baseAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = baseAlpha * (crit ? 0.34 : 0.22);
+  ctx.fillStyle = crit ? '#ffe56a' : color.main;
+  ctx.fillRect(x - 3, y - 3, 7, 7);
+  ctx.globalAlpha = baseAlpha;
+
+  // Tapered elemental energy trail
   for (let i = length; i >= 1; i--) {
     let across = 0;
     if (kind === 'lightning' && i % 2 === 1) {
@@ -523,51 +549,75 @@ function drawProjectile(ctx, projectile, target, reduced) {
       across = side;
     }
     const [tx, ty] = at(-i, across);
-    plot(ctx, tx, ty, i < 3 ? color.core : color.edge);
-    if (kind === 'fire' && i < 4) {
-      const [fx, fy] = at(-i, 1);
-      plot(ctx, fx, fy, color.main);
+    const trailInk = i <= 3 ? color.core : i <= 5 ? color.main : color.edge;
+    plot(ctx, tx, ty, trailInk);
+    if (i <= 3) {
+      const [s1x, s1y] = at(-i, 1);
+      const [s2x, s2y] = at(-i, -1);
+      if (kind === 'fire' || kind === 'hero' || crit) {
+        plot(ctx, s1x, s1y, color.main);
+        if (i <= 2) plot(ctx, s2x, s2y, color.main);
+      } else if (kind === 'frost' && i <= 2) {
+        plot(ctx, s1x, s1y, color.main);
+      }
     }
   }
+
+  // Distinct high-contrast elemental projectile heads
   if (kind === 'frost') {
-    plot(ctx, x, y, color.core);
-    for (const [dxp, dyp] of [[0, -2], [0, 2], [-2, 0], [2, 0], [0, -1], [0, 1], [-1, 0], [1, 0]]) {
-      plot(ctx, x + dxp, y + dyp, Math.abs(dxp) + Math.abs(dyp) > 1 ? color.core : color.edge);
+    for (const [dxp, dyp] of [[0, -2], [0, 2], [-2, 0], [2, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      plot(ctx, x + dxp, y + dyp, Math.abs(dxp) + Math.abs(dyp) > 1 ? color.main : color.core);
     }
+    ctx.fillStyle = color.core;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
   } else if (kind === 'poison') {
+    ctx.fillStyle = color.edge;
+    ctx.fillRect(x - 2, y - 2, 5, 5);
+    ctx.fillStyle = color.main;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
     plot(ctx, x, y, color.core);
-    plot(ctx, x - 1, y, color.main);
-    plot(ctx, x, y - 1, color.main);
-    plot(ctx, x + 1, y, color.edge);
-    plot(ctx, x, y + 1, color.edge);
+    plot(ctx, x - 1, y - 1, '#f4ffd8');
     plot(ctx, x + 1, y + 2, accent.core);
   } else if (kind === 'support') {
-    plot(ctx, x - 1, y - 1, color.edge);
-    plot(ctx, x + 1, y - 1, color.edge);
-    plot(ctx, x - 1, y + 1, color.edge);
-    plot(ctx, x + 1, y + 1, color.edge);
-    plot(ctx, x, y - 1, color.core);
-    plot(ctx, x - 1, y, color.core);
-    plot(ctx, x + 1, y, color.core);
-    plot(ctx, x, y + 1, color.core);
+    plot(ctx, x - 2, y, color.main);
+    plot(ctx, x + 2, y, color.main);
+    plot(ctx, x, y - 2, color.main);
+    plot(ctx, x, y + 2, color.main);
+    ctx.fillStyle = color.core;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
   } else if (kind === 'lightning') {
-    const [lx, ly] = at(0, 0);
-    plot(ctx, lx, ly, color.core);
-    for (const across of [-1, 1]) {
-      const [sx, sy] = at(0, across);
-      plot(ctx, sx, sy, color.edge);
-    }
-    const [tipX, tipY] = at(1, 0);
+    ctx.fillStyle = color.main;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
+    const [tipX, tipY] = at(2, 0);
     plot(ctx, tipX, tipY, color.core);
+    plot(ctx, x, y, '#ffffff');
+    for (const across of [-2, 2]) {
+      const [sx, sy] = at(0, across);
+      plot(ctx, sx, sy, color.main);
+    }
   } else if (kind === 'fire') {
+    ctx.fillStyle = color.edge;
+    ctx.fillRect(x - 2, y - 2, 5, 5);
+    ctx.fillStyle = color.main;
+    ctx.fillRect(x - 1, y - 1, 3, 3);
     plot(ctx, x, y, color.core);
-    const [wx, wy] = at(0, 1);
-    const [mx, my] = at(0, -1);
-    const [tx, ty] = at(1, 0);
-    plot(ctx, wx, wy, color.main);
-    plot(ctx, mx, my, color.main);
-    plot(ctx, tx, ty, color.edge);
+    const [tipX, tipY] = at(2, 0);
+    plot(ctx, tipX, tipY, color.main);
+  } else if (kind === 'hero') {
+    // Bold crimson-gold hero lance head
+    const [tipX, tipY] = at(2, 0);
+    const [midX, midY] = at(1, 0);
+    plot(ctx, tipX, tipY, color.core);
+    plot(ctx, midX, midY, color.core);
+    plot(ctx, x, y, '#ffffff');
+    for (const across of [-2, -1, 1, 2]) {
+      const [sx, sy] = at(0, across);
+      plot(ctx, sx, sy, Math.abs(across) === 2 ? color.edge : color.main);
+    }
   } else {
+    // Rivet crossbow bolt with gleaming steel head
+    const [tipX, tipY] = at(2, 0);
+    plot(ctx, tipX, tipY, '#ffffff');
     plot(ctx, x, y, color.core);
     for (const across of [-2, -1, 1, 2]) {
       const [sx, sy] = at(0, across);
@@ -594,19 +644,19 @@ function drawProjectile(ctx, projectile, target, reduced) {
     plot(ctx, x - 2, y + 2, accent.core);
     plot(ctx, x + 2, y + 2, accent.core);
   }
-  if (faded) ctx.restore();
+  ctx.restore();
 }
 
 function cloudColor(cloud) {
   const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
   if (kind.includes('fire') || kind.includes('burn')) return '#e25a2a';
-  if (kind.includes('poison') || kind.includes('toxin')) return '#6aaa3a';
+  if (kind.includes('poison') || kind.includes('toxin') || kind.includes('miasma')) return '#6aaa3a';
   if (kind.includes('frost') || kind.includes('ice') || kind.includes('slow')) return '#8fd0e0';
   if (kind.includes('light')) return '#ffe14a';
-  return '#c5d0c8';
+  return '#74c47a';
 }
 
-function drawCloud(ctx, cloud, index) {
+function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const x = finite(cloud.x);
   const y = finite(cloud.y);
   const radius = finite(cloud.radius) ?? finite(cloud.range);
@@ -614,19 +664,38 @@ function drawCloud(ctx, cloud, index) {
   const r = clamp(radius, 2, 120);
   const color = cloudColor(cloud);
   const seed = hashInt(index * 97 + Math.round(x) * 13 + Math.round(y) * 29);
-  let alpha = 0.55;
+  let fade = 1;
   const remaining = finite(cloud.remaining);
   const duration = finite(cloud.duration);
-  if (remaining != null && duration != null && duration > 0) alpha *= clamp(remaining / duration, 0, 1);
+  if (remaining != null && duration != null && duration > 0) fade = clamp(remaining / duration, 0, 1);
   ctx.save();
-  ctx.globalAlpha = alpha;
+  // Soft translucent ground hazard zone
+  ctx.globalAlpha = 0.16 * fade;
   ctx.fillStyle = color;
-  const step = r > 40 ? 5 : 4;
+  ctx.beginPath();
+  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
+  ctx.fill();
+  // Subtle dashed perimeter ring
+  ctx.globalAlpha = 0.38 * fade;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash?.([3, 3]);
+  ctx.beginPath();
+  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash?.([]);
+  // Drifting pixel vapor bubbles inside the cloud
+  ctx.globalAlpha = 0.48 * fade;
+  ctx.fillStyle = color;
+  const drift = reduced ? 0 : Math.floor(time * 8);
+  const step = r > 40 ? 7 : 6;
   for (let py = -r; py <= r; py += step) {
     for (let px = -r; px <= r; px += step) {
-      if (px * px + py * py > r * r) continue;
-      if ((hashInt(seed + px * 3 + py * 17) & 3) === 0) continue;
-      ctx.fillRect(Math.round(x + px), Math.round(y + py), 2, 2);
+      if (px * px + py * py > (r - 2) * (r - 2)) continue;
+      const h = hashInt(seed + px * 3 + py * 17);
+      if ((h & 3) !== 0) continue;
+      const rise = reduced ? 0 : ((drift + (h & 7)) % 5);
+      ctx.fillRect(Math.round(x + px), Math.round(y + py - rise), 2, 2);
     }
   }
   ctx.restore();
@@ -1076,130 +1145,6 @@ function activeLanguage(state, ui) {
     || 'en';
 }
 
-function bilingualHint(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const en = typeof value.en === 'string' ? value.en.trim() : '';
-  const zh = typeof value.zh === 'string' ? value.zh.trim() : '';
-  if (!en || !zh) return null;
-  return {en, zh};
-}
-
-function fieldHint(state) {
-  if (!state || typeof state !== 'object') return null;
-  return bilingualHint(state.director?.playerHint) || bilingualHint(state.systems?.waves?.current?.hint);
-}
-
-function textWidth(ctx, text) {
-  if (ctx && typeof ctx.measureText === 'function') {
-    try {
-      const width = ctx.measureText(String(text)).width;
-      if (Number.isFinite(width) && width > 0) return width;
-    } catch {
-      /* Estimate when the context cannot measure. */
-    }
-  }
-  let width = 0;
-  for (const ch of Array.from(String(text))) width += ch.charCodeAt(0) > 127 ? 11 : 6;
-  return width;
-}
-
-function shrinkToWidth(ctx, word, maxWidth, lines) {
-  let rest = word;
-  while (rest && textWidth(ctx, rest) > maxWidth) {
-    let fit = '';
-    for (const ch of Array.from(rest)) {
-      const next = fit + ch;
-      if (textWidth(ctx, next) > maxWidth) break;
-      fit = next;
-    }
-    if (!fit) {
-      const first = Array.from(rest)[0] || '';
-      if (!first) break;
-      lines.push(first);
-      rest = Array.from(rest).slice(1).join('');
-      continue;
-    }
-    lines.push(fit);
-    rest = Array.from(rest).slice(Array.from(fit).length).join('');
-  }
-  return rest;
-}
-
-function wrapHintLines(ctx, text, maxWidth) {
-  const lines = [];
-  const limited = Array.from(String(text)).slice(0, HINT_CHAR_LIMIT).join('');
-  for (const paragraph of limited.split('\n')) {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) continue;
-    let line = shrinkToWidth(ctx, words[0], maxWidth, lines);
-    for (let i = 1; i < words.length; i++) {
-      const next = line ? `${line} ${words[i]}` : words[i];
-      if (textWidth(ctx, next) <= maxWidth) line = next;
-      else {
-        if (line) lines.push(line);
-        line = shrinkToWidth(ctx, words[i], maxWidth, lines);
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
-}
-
-function ellipsize(ctx, line, maxWidth) {
-  const mark = '…';
-  let out = line;
-  while (out && textWidth(ctx, `${out}${mark}`) > maxWidth) out = Array.from(out).slice(0, -1).join('');
-  return `${out}${mark}`;
-}
-
-function drawFieldHint(ctx, state, ui) {
-  const hint = fieldHint(state);
-  if (!hint || typeof ctx.fillText !== 'function') return;
-  const text = hint[activeLanguage(state, ui)];
-  if (!text) return;
-  const maxWidth = ARENA.width - 16;
-  ctx.save();
-  try {
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    let lines = wrapHintLines(ctx, text, maxWidth);
-    if (lines.length > HINT_MAX_LINES) {
-      lines = lines.slice(0, HINT_MAX_LINES);
-      lines[HINT_MAX_LINES - 1] = ellipsize(ctx, lines[HINT_MAX_LINES - 1], maxWidth);
-    }
-    if (!lines.length) return;
-    const lineHeight = 13;
-    const blockWidth = Math.min(maxWidth, Math.max(...lines.map((line) => textWidth(ctx, line))));
-    const bandHeight = Math.min(HINT_BAND, lines.length * lineHeight + 6);
-    const x = Math.round((ARENA.width - blockWidth) / 2);
-    const y = 3;
-    if (typeof ctx.beginPath === 'function' && typeof ctx.rect === 'function' && typeof ctx.clip === 'function') {
-      ctx.beginPath();
-      ctx.rect(0, 0, ARENA.width, HINT_BAND);
-      ctx.clip();
-    }
-    ctx.fillStyle = 'rgba(8, 14, 16, 0.78)';
-    ctx.fillRect(x - 4, 1, Math.ceil(blockWidth) + 8, bandHeight - 1);
-    for (let i = 0; i < lines.length; i++) {
-      const lx = x;
-      const ly = y + i * lineHeight;
-      ctx.fillStyle = '#0c1216';
-      ctx.fillText(lines[i], lx - 1, ly);
-      ctx.fillText(lines[i], lx + 1, ly);
-      ctx.fillText(lines[i], lx, ly - 1);
-      ctx.fillText(lines[i], lx, ly + 1);
-      ctx.fillStyle = '#f4efe2';
-      ctx.fillText(lines[i], lx, ly);
-    }
-  } catch {
-    /* Hint text is optional. A missing text API must not blank the field. */
-  } finally {
-    ctx.restore();
-  }
-}
-
-// Rank 1–4 sits in the open band above the selected sprite, clear of its body.
 function drawSelectedRank(ctx, unit, anchorX, anchorY, size) {
   const rank = clamp(Math.round(finite(unit?.rank) ?? 1), 1, 4);
   const glyph = RANK_DIGIT[rank];
@@ -1297,6 +1242,9 @@ export function createRenderer(canvas) {
   const shots = [];
   const slotCues = [];
   let fenceAt = null;
+  let shakeAt = null;
+  let shakeAmp = 0;
+  let hordeAt = null;
   let pending = [];
   let runId;
   let seenRun = false;
@@ -1315,6 +1263,17 @@ export function createRenderer(canvas) {
     shots.length = 0;
     slotCues.length = 0;
     fenceAt = null;
+    shakeAt = null;
+    shakeAmp = 0;
+    hordeAt = null;
+  }
+
+  function triggerShake(at, amp) {
+    const active = shakeAt != null ? cueStrength(shakeAt, at, 260) * shakeAmp : 0;
+    if (amp >= active) {
+      shakeAt = at;
+      shakeAmp = amp;
+    }
   }
 
   function remember(batch) {
@@ -1340,6 +1299,15 @@ export function createRenderer(canvas) {
         });
       } else if (type === 'fence_hit') {
         fenceAt = at;
+        triggerShake(at, 1.5);
+      } else if (type === 'fence_surge') {
+        triggerShake(at, 4);
+      } else if (type === 'boss_enrage' || type === 'field_destroy') {
+        triggerShake(at, 2.5);
+      } else if (type === 'corpse_explode') {
+        triggerShake(at, 1.5);
+      } else if (type === 'wave_horde') {
+        hordeAt = at;
       } else if (type === 'merge') {
         const from = Number.isInteger(event.from) ? event.from : event.fromIndex;
         const to = Number.isInteger(event.to) ? event.to : event.toIndex;
@@ -1462,9 +1430,60 @@ export function createRenderer(canvas) {
     return dt > 0.1 ? 0.1 : dt;
   }
 
+  function drawTargetingPip(ctx, box, unit) {
+    if (!unit || unit.type === 'harvest') return;
+    const mode = unit.targeting;
+    if (!mode || mode === 'foremost') return;
+    const color = mode === 'priority' ? '#f0cb72' : mode === 'strongest' ? '#e86858' : '#7ad4f0';
+    const px = Math.round(box.left + box.width - 7);
+    const py = Math.round(box.top + 3);
+    ctx.fillStyle = '#0c1216';
+    ctx.fillRect(px - 1, py - 1, 6, 6);
+    ctx.fillStyle = color;
+    ctx.fillRect(px, py, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(px + 1, py + 1, 1, 1);
+  }
+
+  function drawSurgeOverlay(ctx, state, time, reduced) {
+    const timer = state.surge?.shieldTimer || 0;
+    if (!(timer > 0)) return;
+    const ratio = clamp(timer / 3, 0, 1);
+    const elapsed = Math.max(0, 3 - timer);
+    const shimmer = reduced ? 0.8 : (0.72 + 0.28 * Math.sin(time * 16));
+    ctx.save();
+    // Luminous crystalline aegis barrier shielding the fence
+    ctx.fillStyle = `rgba(120, 224, 255, ${(0.22 * shimmer).toFixed(3)})`;
+    ctx.fillRect(0, ARENA.fenceY - 14, ARENA.width, 14);
+    ctx.fillStyle = `rgba(155, 240, 255, ${(0.88 * shimmer).toFixed(3)})`;
+    ctx.fillRect(0, ARENA.fenceY - 9, ARENA.width, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, ARENA.fenceY - 10, ARENA.width, 1);
+    // Shield duration bar nestled directly above the fence
+    const bw = Math.round((ARENA.width - 48) * ratio);
+    if (bw > 0) {
+      ctx.fillStyle = '#f0cb72';
+      ctx.fillRect(24, ARENA.fenceY - 13, bw, 2);
+    }
+    // Sweeping upward shockwave wave crest during the initial 0.55s blast
+    if (elapsed < 0.55) {
+      const progress = elapsed / 0.55;
+      const waveY = Math.round(ARENA.fenceY - progress * 250);
+      const fade = 1 - progress;
+      ctx.fillStyle = `rgba(120, 224, 255, ${(0.24 * fade).toFixed(3)})`;
+      ctx.fillRect(0, waveY, ARENA.width, 18);
+      ctx.fillStyle = `rgba(240, 203, 114, ${(0.65 * fade).toFixed(3)})`;
+      ctx.fillRect(0, waveY, ARENA.width, 4);
+      ctx.fillStyle = `rgba(255, 252, 232, ${(0.92 * fade).toFixed(3)})`;
+      ctx.fillRect(0, waveY - 1, ARENA.width, 2);
+    }
+    ctx.restore();
+  }
+
   function paint(ctx, state, ui, now, logicalBuffer) {
     const reduced = !!(ui.settings && ui.settings.reducedMotion) || !!ui.reducedMotion;
     const selected = normalizeSlot(ui.selectedSlot);
+    const selectedField = normalizeSlot(ui.selectedField);
     const hover = normalizeSlot(ui.hoverSlot);
     const showRange = ui.range !== false;
     const time = finite(state?.time) ?? 0;
@@ -1484,165 +1503,203 @@ export function createRenderer(canvas) {
       return;
     }
 
-    isolate(ctx, () => drawWorld(ctx, state, {time: visualTime, reducedMotion: reduced}));
-
-    const clouds = Array.isArray(state.clouds) ? state.clouds : [];
-    const cloudCount = Math.min(clouds.length, MAX_CLOUDS);
-    const cloudStart = clouds.length - cloudCount;
-    for (let i = cloudStart; i < clouds.length; i++) {
-      if (clouds[i]) drawCloud(ctx, clouds[i], i);
+    // Subtle pixel-snapped screen shake on heavy combat impacts (respects reducedMotion)
+    const shakeStr = !reduced && shakeAt != null ? cueStrength(shakeAt, now, 260) : 0;
+    const shakeX = shakeStr > 0 ? Math.round(Math.sin(now * 0.085) * shakeAmp * shakeStr) : 0;
+    const shakeY = shakeStr > 0 ? Math.round(Math.cos(now * 0.11) * shakeAmp * 0.7 * shakeStr) : 0;
+    if (shakeX || shakeY) {
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
     }
 
-    if (showRange) drawRange(ctx, state, selected, false, warned, rangeCache);
+    try {
+      isolate(ctx, () => drawWorld(ctx, state, {time: visualTime, reducedMotion: reduced}));
 
-    const slots = Array.isArray(state.slots) ? state.slots : [];
-    if (hover >= 0 && hover !== selected) fillSlot(ctx, slotBox(slots[hover], hover), 'rgba(241, 238, 226, 0.08)');
-    if (selected >= 0) fillSlot(ctx, slotBox(slots[selected], selected), 'rgba(240, 203, 114, 0.14)');
+      isolate(ctx, () => drawFrontline(ctx, state, ui.fieldKind, visualTime, reduced, selectedField));
+      if (state.phase === 'placing') {
+        const pulse = reduced ? 0.24 : (0.18 + 0.12 * (0.5 + 0.5 * Math.sin(visualTime * 5)));
+        for (const slot of state.slots) {
+          if (!slot.unit || (state.pendingUnit?.replace && slot.unit.kind !== 'hero')) {
+            const box = slotBox(slot, slot.index);
+            fillSlot(ctx, box, `rgba(240, 203, 114, ${pulse.toFixed(3)})`);
+            strokeSlot(ctx, box, '#f0cb72', 1);
+          }
+        }
+      }
+      const clouds = Array.isArray(state.clouds) ? state.clouds : [];
+      const cloudCount = Math.min(clouds.length, MAX_CLOUDS);
+      const cloudStart = clouds.length - cloudCount;
+      for (let i = cloudStart; i < clouds.length; i++) {
+        if (clouds[i]) drawCloud(ctx, clouds[i], i, visualTime, reduced);
+      }
 
-    const buffed = auraRecipients(state, slots, warned);
+      if (showRange) drawRange(ctx, state, selected, false, warned, rangeCache);
 
-    const enemies = orderedEnemies(state);
-    const anchors = new Array(enemies.length);
-    const enemiesById = Object.create(null);
-    for (let i = 0; i < enemies.length; i++) {
-      const enemy = enemies[i];
-      if (enemy.id != null) enemiesById[enemy.id] = enemy;
-      const anchor = enemyAnchor(enemy);
-      anchors[i] = anchor;
-      const flash = enemyFlash(enemy, hits, now, flashSpan);
+      const slots = Array.isArray(state.slots) ? state.slots : [];
+      if (hover >= 0 && hover !== selected) fillSlot(ctx, slotBox(slots[hover], hover), 'rgba(241, 238, 226, 0.08)');
+      if (selected >= 0) fillSlot(ctx, slotBox(slots[selected], selected), 'rgba(240, 203, 114, 0.14)');
+
+      const buffed = auraRecipients(state, slots, warned);
+
+      const enemies = orderedEnemies(state);
+      const anchors = new Array(enemies.length);
+      const enemiesById = Object.create(null);
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        if (enemy.id != null) enemiesById[enemy.id] = enemy;
+        const anchor = enemyAnchor(enemy);
+        anchors[i] = anchor;
+        const flash = enemyFlash(enemy, hits, now, flashSpan);
+        isolate(ctx, () => {
+          if (enemy.phased === true) ctx.globalAlpha = 0.42;
+          drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash});
+          if (enemy.phased === true) ctx.globalAlpha = 1;
+        });
+        if (enemy.leapTimer > 0) drawLeapMark(ctx, enemy, anchor);
+        if (enemy.wardShield > 0) drawWardMark(ctx, enemy, anchor);
+        if (enemy.chargeGap > 0 || enemy.chargeTimer > 0) drawChargeMark(ctx, enemy, anchor);
+        if (enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0) drawPriorityMark(ctx, enemy, anchor);
+        if (enemy.hushFactor > 0) drawHushMark(ctx, enemy, anchor);
+        if (!enemy.dead && flash <= 0.4) {
+          const tint = statusTintColor(enemy);
+          if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
+          if (statusLive(enemy, 'stun')) isolate(ctx, () => drawStunFrame(ctx, anchor));
+        }
+        if (!enemy.dead && Number(enemy.armor) >= 0.5) isolate(ctx, () => drawPlateShoulders(ctx, anchor));
+      }
+
       isolate(ctx, () => {
-        if (enemy.phased === true) ctx.globalAlpha = 0.42;
-        drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash});
-        if (enemy.phased === true) ctx.globalAlpha = 1;
+        drawWardLinks(ctx, enemies, anchors);
+        drawBannerHaste(ctx, enemies, anchors);
+        drawMendLinks(ctx, enemies, anchors);
       });
-      if (enemy.leapTimer > 0) drawLeapMark(ctx, enemy, anchor);
-      if (enemy.wardShield > 0) drawWardMark(ctx, enemy, anchor);
-      if (enemy.chargeGap > 0 || enemy.chargeTimer > 0) drawChargeMark(ctx, enemy, anchor);
-      if (enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0) drawPriorityMark(ctx, enemy, anchor);
-      if (enemy.hushFactor > 0) drawHushMark(ctx, enemy, anchor);
-      if (!enemy.dead && flash <= 0.4) {
-        const tint = statusTintColor(enemy);
-        if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
-        if (statusLive(enemy, 'stun')) isolate(ctx, () => drawStunFrame(ctx, anchor));
+      const hushed = boardHushed(enemies);
+      const mergeable = mergeableSlotIndexes(state);
+
+      for (let index = 0; index < 10; index++) {
+        const slot = slots[index];
+        const unit = slot?.unit;
+        if (!unit) continue;
+        const size = measureDefender(unit);
+        const origin = slotCenter(slot, index);
+        const anchorX = Math.round(origin.x);
+        const anchorY = Math.round(origin.y + size.height / 2);
+        const flash = unitFlash(unit.id, shots, now, flashSpan);
+        isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
+        if (hushed) drawHushBoardMark(ctx, anchorX, anchorY - size.height);
+        if (mergeable.includes(index)) drawMergeCorner(ctx, slot, index, anchorX, anchorY - size.height);
+        if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
+        drawTargetingPip(ctx, slotBox(slot, index), unit);
       }
-      if (!enemy.dead && Number(enemy.armor) >= 0.5) isolate(ctx, () => drawPlateShoulders(ctx, anchor));
-    }
 
-    isolate(ctx, () => {
-      drawWardLinks(ctx, enemies, anchors);
-      drawBannerHaste(ctx, enemies, anchors);
-      drawMendLinks(ctx, enemies, anchors);
-    });
-    const hushed = boardHushed(enemies);
-    const mergeable = mergeableSlotIndexes(state);
-
-    for (let index = 0; index < 10; index++) {
-      const slot = slots[index];
-      const unit = slot?.unit;
-      if (!unit) continue;
-      const size = measureDefender(unit);
-      const origin = slotCenter(slot, index);
-      const anchorX = Math.round(origin.x);
-      const anchorY = Math.round(origin.y + size.height / 2);
-      const flash = unitFlash(unit.id, shots, now, flashSpan);
-      isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
-      if (hushed) drawHushBoardMark(ctx, anchorX, anchorY - size.height);
-      if (mergeable.includes(index)) drawMergeCorner(ctx, slot, index, anchorX, anchorY - size.height);
-      if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
-    }
-
-    const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
-    const visibleShots = [];
-    const shotStart = Math.max(0, projectiles.length - MAX_PROJECTILES);
-    for (let i = shotStart; i < projectiles.length; i++) {
-      const projectile = projectiles[i];
-      if (!projectile || !Number.isFinite(projectile.x) || !Number.isFinite(projectile.y)) continue;
-      if (finite(projectile.life) != null && projectile.life <= 0) continue;
-      if (projectile.x < -48 || projectile.y < -48 || projectile.x > ARENA.width + 48 || projectile.y > ARENA.height + 48) continue;
-      visibleShots.push(projectile);
-    }
-    const targeted = Object.create(null);
-    for (let i = 0; i < visibleShots.length; i++) {
-      const projectile = visibleShots[i];
-      if (projectile.targetId != null) targeted[projectile.targetId] = true;
-      drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
-    }
-
-    if (showRange) drawRange(ctx, state, selected, true, warned, rangeCache);
-
-    for (let i = 0; i < enemies.length; i++) {
-      const enemy = enemies[i];
-      if (enemy.dead) continue;
-      const anchor = anchors[i];
-      const cue = enemyCueLayout(anchor);
-      const fresh = enemyFlash(enemy, hits, now, flashSpan) > 0.4;
-      const maxHp = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : null;
-      const low = maxHp != null && Number.isFinite(enemy.hp) && enemy.hp / maxHp <= 0.28;
-      const emphasize = fresh || (!reduced && low && Math.floor(visualTime * 6) % 2 === 0);
-      drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize);
-      if (Number.isFinite(enemy.hp) && (fresh || targeted[enemy.id] === true)) {
-        drawTargetMark(ctx, cue.barX, cue.barY, cue.barW);
+      const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
+      const visibleShots = [];
+      const shotStart = Math.max(0, projectiles.length - MAX_PROJECTILES);
+      for (let i = shotStart; i < projectiles.length; i++) {
+        const projectile = projectiles[i];
+        if (!projectile || !Number.isFinite(projectile.x) || !Number.isFinite(projectile.y)) continue;
+        if (finite(projectile.life) != null && projectile.life <= 0) continue;
+        if (projectile.x < -48 || projectile.y < -48 || projectile.x > ARENA.width + 48 || projectile.y > ARENA.height + 48) continue;
+        visibleShots.push(projectile);
       }
-      drawStatuses(ctx, enemy, anchor.x, cue.statusY);
-    }
-
-    drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
-
-    for (let index = 0; index < 10; index++) {
-      const box = slotBox(slots[index], index);
-      const pulse = slotPulse(index, slotCues, now);
-      if (pulse.strength <= 0) continue;
-      if (pulse.role === 'empty') {
-        ctx.fillStyle = `rgba(20, 14, 12, ${0.35 + 0.45 * pulse.strength})`;
-        ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
-        strokeSlot(ctx, box, `rgba(231, 160, 138, ${0.55 + 0.45 * pulse.strength})`, 3);
-      } else if (pulse.role === 'kept') {
-        ctx.fillStyle = `rgba(240, 203, 114, ${0.18 + 0.28 * pulse.strength})`;
-        ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
-        strokeSlot(ctx, box, '#f0cb72', 3);
-      } else if (index !== selected) {
-        strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse.strength})`, 2);
+      const targeted = Object.create(null);
+      for (let i = 0; i < visibleShots.length; i++) {
+        const projectile = visibleShots[i];
+        if (projectile.targetId != null) targeted[projectile.targetId] = true;
+        drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
       }
-    }
-    if (hover >= 0 && hover !== selected) {
-      const intent = ui.hoverIntent;
-      const box = slotBox(slots[hover], hover);
-      const dropColor = intent === 'empty'
-        ? '#7ecea0'
-        : intent === 'merge'
-          ? '#f0cb72'
-          : intent === 'illegal'
-            ? '#e7a08a'
-            : 'rgba(198, 214, 210, 0.9)';
-      if (intent === 'empty' || intent === 'merge' || intent === 'illegal') {
-        ctx.fillStyle = intent === 'empty'
-          ? 'rgba(126, 206, 160, 0.34)'
+
+      if (showRange) drawRange(ctx, state, selected, true, warned, rangeCache);
+
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        if (enemy.dead) continue;
+        const anchor = anchors[i];
+        const cue = enemyCueLayout(anchor);
+        const fresh = enemyFlash(enemy, hits, now, flashSpan) > 0.4;
+        const maxHp = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : null;
+        const low = maxHp != null && Number.isFinite(enemy.hp) && enemy.hp / maxHp <= 0.28;
+        const emphasize = fresh || (!reduced && low && Math.floor(visualTime * 6) % 2 === 0);
+        drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize);
+        if (Number.isFinite(enemy.hp) && (fresh || targeted[enemy.id] === true)) {
+          drawTargetMark(ctx, cue.barX, cue.barY, cue.barW);
+        }
+        drawStatuses(ctx, enemy, anchor.x, cue.statusY);
+      }
+
+      drawSurgeOverlay(ctx, state, visualTime, reduced);
+      drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
+
+      // Brief crimson edge horizon pulse when a horde wave surges in
+      const hordeStr = hordeAt != null ? cueStrength(hordeAt, now, reduced ? 500 : 1500) : 0;
+      if (hordeStr > 0) {
+        const beat = reduced ? 0.65 : (0.55 + 0.45 * Math.sin(now * 0.018));
+        ctx.save();
+        ctx.globalAlpha = 0.24 * hordeStr * beat;
+        ctx.fillStyle = '#e5453c';
+        ctx.fillRect(0, 0, ARENA.width, 54);
+        ctx.globalAlpha = 0.55 * hordeStr * beat;
+        ctx.fillRect(0, 44, ARENA.width, 3);
+        ctx.restore();
+      }
+
+      for (let index = 0; index < 10; index++) {
+        const box = slotBox(slots[index], index);
+        const pulse = slotPulse(index, slotCues, now);
+        if (pulse.strength <= 0) continue;
+        if (pulse.role === 'empty') {
+          ctx.fillStyle = `rgba(20, 14, 12, ${0.35 + 0.45 * pulse.strength})`;
+          ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
+          strokeSlot(ctx, box, `rgba(231, 160, 138, ${0.55 + 0.45 * pulse.strength})`, 3);
+        } else if (pulse.role === 'kept') {
+          ctx.fillStyle = `rgba(240, 203, 114, ${0.18 + 0.28 * pulse.strength})`;
+          ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
+          strokeSlot(ctx, box, '#f0cb72', 3);
+        } else if (index !== selected) {
+          strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse.strength})`, 2);
+        }
+      }
+      if (hover >= 0 && hover !== selected) {
+        const intent = ui.hoverIntent;
+        const box = slotBox(slots[hover], hover);
+        const dropColor = intent === 'empty'
+          ? '#7ecea0'
           : intent === 'merge'
-            ? 'rgba(240, 203, 114, 0.34)'
-            : 'rgba(231, 160, 138, 0.34)';
-        ctx.fillRect(box.left, box.top, box.width, box.height);
+            ? '#f0cb72'
+            : intent === 'illegal'
+              ? '#e7a08a'
+              : 'rgba(198, 214, 210, 0.9)';
+        if (intent === 'empty' || intent === 'merge' || intent === 'illegal') {
+          ctx.fillStyle = intent === 'empty'
+            ? 'rgba(126, 206, 160, 0.34)'
+            : intent === 'merge'
+              ? 'rgba(240, 203, 114, 0.34)'
+              : 'rgba(231, 160, 138, 0.34)';
+          ctx.fillRect(box.left, box.top, box.width, box.height);
+        }
+        strokeSlot(ctx, box, dropColor, intent ? 4 : 1);
       }
-      strokeSlot(ctx, box, dropColor, intent ? 4 : 1);
-    }
-    if (selected >= 0) {
-      strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
-      const selectedUnit = slots[selected]?.unit;
-      if (selectedUnit) {
-        const selectedSize = measureDefender(selectedUnit);
-        const selectedOrigin = slotCenter(slots[selected], selected);
-        isolate(ctx, () => drawSelectedRank(
-          ctx,
-          selectedUnit,
-          Math.round(selectedOrigin.x),
-          Math.round(selectedOrigin.y + selectedSize.height / 2),
-          selectedSize,
-        ));
+      if (selected >= 0) {
+        strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
+        const selectedUnit = slots[selected]?.unit;
+        if (selectedUnit) {
+          const selectedSize = measureDefender(selectedUnit);
+          const selectedOrigin = slotCenter(slots[selected], selected);
+          isolate(ctx, () => drawSelectedRank(
+            ctx,
+            selectedUnit,
+            Math.round(selectedOrigin.x),
+            Math.round(selectedOrigin.y + selectedSize.height / 2),
+            selectedSize,
+          ));
+        }
       }
-    }
 
-    isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
-    // The HUD shows playerHint. Drawing it here covered enemies entering from the top.
-    void drawFieldHint;
+      isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
+      // The HUD shows playerHint. Drawing it here covered enemies entering from the top.
+    } finally {
+      if (shakeX || shakeY) ctx.restore();
+    }
   }
 
   function draw(state, ui) {
@@ -1654,6 +1711,8 @@ export function createRenderer(canvas) {
     pruneList(shots, now);
     pruneList(slotCues, now);
     if (fenceAt != null && now - fenceAt > CUE_MS) fenceAt = null;
+    if (shakeAt != null && now - shakeAt > 260) { shakeAt = null; shakeAmp = 0; }
+    if (hordeAt != null && now - hordeAt > 1500) hordeAt = null;
 
     if (state && seenRun && state.runId !== runId) {
       effects.clear();

@@ -64,7 +64,7 @@ test('full type coverage with empty slots includes a hero upgrade', () => {
 
 test('one empty slot on a covered board still offers a hero upgrade', () => {
   for (let seed = 1; seed <= 24; seed += 1) {
-    const {state, options} = offer(seed, ['bolt', 'fire'], `one-empty-${seed}`);
+    const {state, options} = offer(seed, ['bolt'], `one-empty-${seed}`);
     assert.equal(presentTypes(state).size, BASE_TYPES.length);
     assert.equal(state.slots.filter(slot => !slot.unit).length, 1);
     assertTrio(options, seed);
@@ -92,7 +92,7 @@ test('the same seed and covered board offer the same three cards', () => {
 });
 
 test('coverage does not change the XP curve', () => {
-  assert.deepEqual([0, 1, 2, 3, 4, 5].map(draftXpCost), [8, 12, 16, 21, 26, 31]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(draftXpCost), [6, 10, 14, 18, 22, 26]);
   const state = createRun({seed: 9, difficulty: 'normal', runId: 'curve'});
   cover(state);
   const cost = state.nextDraftXp;
@@ -151,7 +151,7 @@ test('one remaining hero upgrade is one of the three cards', () => {
     const hero = state.slots.find(slot => slot.unit && (slot.unit.kind === 'hero' || slot.unit.type === 'hero')).unit;
     hero.upgrades = {};
     for (const [id, spec] of Object.entries(HERO_UPGRADES)) {
-      if (id !== 'reach') hero.upgrades[id] = spec.cap;
+      if (id !== 'volley') hero.upgrades[id] = spec.cap;
     }
     assert.ok(state.slots.some(slot => !slot.unit));
     const options = generateDraft(state);
@@ -159,7 +159,7 @@ test('one remaining hero upgrade is one of the three cards', () => {
     assert.equal(new Set(options.map(card => card.id)).size, 3, `seed ${seed}`);
     const heroes = options.filter(card => card.kind === 'hero_upgrade');
     assert.equal(heroes.length, 1, `seed ${seed}`);
-    assert.equal(heroes[0].upgradeId, 'reach');
+    assert.equal(heroes[0].upgradeId, 'volley');
     assert.equal(heroes[0].replace, false);
     assert.equal(options.filter(card => card.kind === 'tower' && card.replace !== true).length, 2);
   }

@@ -1,8 +1,9 @@
 // Fixed-step integration. Speed changes how many STEP updates run per wall
 // second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit} from './shared.js';
+import {updateField} from './systems/field.js';
 import {updateMovement} from './systems/movement.js';
-import {damageEnemy, killEnemy, regenerateFence, updateCombat} from './systems/combat.js';
+import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
 import {updateStatuses} from './systems/status.js';
 import {updateWaves} from './systems/waves.js';
 import {updateDrafts} from './systems/drafts.js';
@@ -29,7 +30,7 @@ requireFn(getProfileBonuses, 'getProfileBonuses');
 function sanitizeBonuses(value) {
   const out = {...ZERO_BONUSES};
   if (!value || typeof value !== 'object') return out;
-  for (const key of Object.keys(out)) {
+  for (const key of [...Object.keys(out),'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount','fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate']) {
     const number = Number(value[key]);
     if (Number.isFinite(number)) out[key] = number;
   }
@@ -46,6 +47,9 @@ export function applyProfileBonuses(state, bonuses) {
     state.fence.maxHp += clean.fence;
     state.fence.hp = Math.min(state.fence.maxHp, state.fence.hp + clean.fence);
   }
+  state.energy=Math.min(state.maxEnergy,state.energy+(clean.energy||0));
+  state.freeRerollsLeft=clean.freeRerolls || 0;
+  state.surge.charges=state.surge.maxCharges=1+(clean.surgeCharges||0);
   state.initialized = true;
   return state;
 }
@@ -57,7 +61,7 @@ export function prepare(state) {
 
 export function integrationInfo() {
   return {
-    contract:1,
+    contract:2,
     present:{movement:true, combat:true, status:true, waves:true, drafts:true, progression:true},
     missing:[],
     failed:{},
@@ -110,7 +114,7 @@ function stepBody(state) {
   state.tick += 1;
   updateWaves(state, STEP);
   if (halted(state)) return;
-  regenerateFence(state, STEP);
+  updateField(state, STEP, damageEnemy);
   updateMovement(state, STEP);
   if (halted(state)) return;
   updateStatuses(state, STEP, damageEnemy);

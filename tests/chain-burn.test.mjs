@@ -47,7 +47,7 @@ test('a rank-1 wildfire burn reaches its chain jump and the primary, not an enem
   assert.equal(unit.rank, 1);
   slot.unit = unit;
   const stats = getUnitStats(unit, state);
-  assert.equal(stats.chain, 1);
+  assert.equal(stats.chain, 2);
   assert.ok(stats.chainRange > stats.splash, 'the jump can land beyond the splash');
   assert.ok(stats.burn && stats.burn.dps > 0 && stats.burn.duration > 0, 'wildfire burn payload');
 
@@ -56,7 +56,7 @@ test('a rank-1 wildfire burn reaches its chain jump and the primary, not an enem
   const primary = spawn(state, slot.x, slot.y - reach);
   const jumpGap = (stats.splash + stats.chainRange) / 2;
   const jump = spawn(state, slot.x, primary.y - jumpGap);
-  const outside = spawn(state, slot.x, primary.y - (stats.chainRange + stats.splash + 8));
+  const outside = spawn(state, slot.x, primary.y - (2*stats.chainRange + stats.splash + 8));
 
   assert.ok(gap(primary, jump) > stats.splash, 'the jump target starts outside the splash');
   assert.ok(gap(primary, jump) <= stats.chainRange, 'the jump target starts inside chain range');

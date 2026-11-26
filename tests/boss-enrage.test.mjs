@@ -30,7 +30,7 @@ function assertThreshold(label) {
 }
 
 test('boss copy says enrage is half of max HP and the threshold stays 0.5', () => {
-  assert.equal(ENEMIES.boss.hp, 3000);
+  assert.equal(ENEMIES.boss.hp, 3600);
   assert.equal(threshold, 0.5);
   assert.match(ENEMIES.boss.description.en, /half \(0\.5\)/);
   assert.match(ENEMIES.boss.description.zh, /一半（0\.5）/);

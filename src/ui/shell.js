@@ -1,6 +1,8 @@
-import { ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry } from '../shared.js';
+import {FIELD_UNITS} from '../data/field-units.js';
+import {fieldCost} from '../systems/field.js';
+import { ARENA, DIFFICULTIES, canPlan, hitFieldSlot, hitSlot, slotGeometry } from '../shared.js';
 import { previewMerge } from '../systems/merges.js';
-import { bossApproaching } from '../systems/waves.js';
+import { bossApproaching,getWaveInfo } from '../systems/waves.js';
 import { ENEMIES } from '../data/enemies.js';
 import { EXPEDITIONS } from '../data/expeditions.js';
 import { catalogIcon } from './icons.js';
@@ -94,7 +96,7 @@ export function mountShell(root, api) {
   const xpLabel = el('span', { class: 'meter-label' });
   const xpValue = el('strong', { class: 'meter-value', 'data-testid': 'hud-xp-value' });
   const xpFill = el('div', { class: 'meter-fill is-xp' });
-  const xpMeter = el('div', { class: 'meter hud-quiet', 'data-testid': 'hud-xp' });
+  const xpMeter = el('div', { class: 'meter', 'data-testid': 'hud-xp' });
   xpMeter.append(
     el('div', { class: 'meter-head' }, [xpLabel, xpValue]),
     el('div', { class: 'meter-track' }, [xpFill])
@@ -103,6 +105,8 @@ export function mountShell(root, api) {
   const waveLabel = el('span', { class: 'stat-label' });
   const waveValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-wave-value' });
   const waveStat = stat('hud-wave', waveLabel, waveValue);
+  const waveProgress = el('small',{'data-testid':'hud-wave-progress'});
+  waveStat.append(waveProgress);
   const killsLabel = el('span', { class: 'stat-label' });
   const killsValue = el('strong', { class: 'stat-value', 'data-testid': 'hud-kills-value' });
   const killsStat = stat('hud-kills', killsLabel, killsValue, 'hud-quiet');
@@ -116,6 +120,9 @@ export function mountShell(root, api) {
   const phase = el('span', { class: 'badge', 'data-testid': 'hud-phase' });
   const sortie = el('span', { class: 'badge hud-sortie', 'data-testid': 'hud-sortie' });
   const stats = el('div', { class: 'hud-stats' });
+  const energyValue = el('strong', { class: 'hud-chip hud-energy-chip', 'data-testid': 'hud-energy' });
+  const surgeValue = el('strong', { class: 'hud-chip hud-surge-chip', 'data-testid': 'hud-surge' });
+  stats.append(energyValue, surgeValue);
   stats.append(sortie, waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
 
   const pauseButton = controlButton('btn-pause', 'pause');
@@ -144,7 +151,15 @@ export function mountShell(root, api) {
     waveHint,
     message
   );
-  hud.append(hudMain, controls, live);
+  const fieldBar = el('div', { class: 'field-bar', 'data-testid': 'field-bar', role: 'group' });
+  const fieldButtons = Object.keys(FIELD_UNITS).map((kind) => {
+    const b = controlButton('field-' + kind, 'fieldKind');
+    b.className = `btn field-btn field-btn--${kind}`;
+    b.dataset.kind = kind;
+    fieldBar.append(b);
+    return b;
+  });
+  hud.append(hudMain, controls, fieldBar, live);
 
   const overlayRoot = el('div', {
     class: 'overlay-root',
@@ -243,6 +258,7 @@ export function mountShell(root, api) {
     const button = event.target.closest?.('button[data-action]');
     if (!button || button.dataset.shellControl !== 'true' || !shell.contains(button) || button.disabled) return;
     const action = button.dataset.action;
+    if (action==='fieldKind') { api.act(action,{kind:button.dataset.kind}); return; }
     if (action === 'speed') {
       const value = Number(button.dataset.value);
       api.act('speed', { value });
@@ -293,7 +309,7 @@ export function mountShell(root, api) {
         }
         return;
       }
-      if (slotIndex(ui?.selectedSlot) >= 0) {
+      if (slotIndex(ui?.selectedSlot) >= 0 || slotIndex(ui?.selectedField)>=0) {
         event.preventDefault();
         api.act('selectSlot', { index: -1 });
       }
@@ -435,7 +451,7 @@ export function mountShell(root, api) {
 
     const mergeOpen = Boolean(ui?.mergePreview);
     const selected = slotIndex(ui?.selectedSlot);
-    const unitOpen = screen === 'battle' && selected >= 0 && phaseName !== 'draft' && phaseName !== 'placing' && !mergeOpen;
+    const unitOpen = screen === 'battle' && (selected >= 0 || !!state?.fieldSlots?.[ui?.selectedField]?.unit) && phaseName !== 'draft' && phaseName !== 'placing' && !mergeOpen;
     shell.classList.toggle('is-unit-open', unitOpen);
     const overlayOpen = screen === 'battle' && (phaseName === 'draft' || phaseName === 'placing' || mergeOpen);
     overlayRoot.classList.toggle('is-open', overlayOpen);
@@ -476,6 +492,26 @@ export function mountShell(root, api) {
     const xp = finite(state?.xp, 0);
     const nextXp = finite(state?.nextDraftXp, 0);
     const xpPct = nextXp > 0 ? clamp01(xp / nextXp) : 0;
+    if (state) {
+      const energy = Number.isFinite(state.energy) ? Math.floor(state.energy) : 0;
+      setText(energyValue, text('energy') + ' ' + energy);
+      const charges = Number.isFinite(state.surge?.charges) ? state.surge.charges : 0;
+      const maxCharges = Number.isFinite(state.surge?.maxCharges) ? state.surge.maxCharges : 0;
+      setText(surgeValue, text('surge') + ' ' + charges + '/' + maxCharges);
+      surgeValue.classList.toggle('is-empty', charges <= 0);
+      surgeValue.classList.toggle('is-active', (state.surge?.shieldTime || 0) > 0);
+      for (const b of fieldButtons) {
+        const kind = b.dataset.kind;
+        const cd = Math.ceil(state.fieldCooldowns?.[kind] || 0);
+        const cost = fieldCost(state, kind);
+        const active = ui.fieldKind === kind;
+        b.disabled = !canPlan(state) || cd > 0 || energy < cost;
+        b.setAttribute('aria-pressed', String(active));
+        b.classList.toggle('is-active', active);
+        b.classList.toggle('is-cooldown', cd > 0);
+        setText(b, text(kind) + ' ' + cost + (cd ? ' · ' + cd + 's' : ''));
+      }
+    }
     setText(xpLabel, text('xp'));
     const levelBit = runReady ? `${text('level')} ${num(finite(state?.draftLevel, 0), language)} · ` : '';
     setText(xpValue, runReady ? `${levelBit}${num(xp, language)} / ${num(nextXp, language)}` : '—');
@@ -485,7 +521,8 @@ export function mountShell(root, api) {
     setText(sortie, sortieName);
     sortie.hidden = !sortieName;
     setText(waveLabel, text('wave'));
-    setText(waveValue, runReady ? num(finite(state?.wave, 0), language) : '—');
+    setText(waveValue, runReady ? num(finite(state.wave, 0), language) : '—');
+    setText(waveProgress, runReady ? Math.round((getWaveInfo(state).progress || 0) * 100) + '%' : '');
     setText(killsLabel, text('kills'));
     setText(killsValue, runReady ? num(finite(state?.kills, 0), language) : '—');
     setText(timeLabel, text('time'));
@@ -500,6 +537,7 @@ export function mountShell(root, api) {
     setText(phase, phaseText);
     phase.hidden = !phaseText;
     phase.classList.toggle('is-boss', !!phaseText && phaseText === text('bossWarning'));
+    phase.classList.toggle('is-danger', !!phaseText && phaseText === text('fenceDanger'));
 
     if (screen !== 'battle') shell.classList.remove('is-details-open');
     detailsButton.hidden = true;
@@ -528,6 +566,12 @@ export function mountShell(root, api) {
     if (!state || screenName(ui, state) !== 'battle') return;
     const phaseName = state.phase;
 
+    if (endIndex>=10 && phaseName!=='placing') {
+      const index=endIndex-10;
+      if (ui.fieldKind) api.act('deployField',{index,kind:ui.fieldKind});
+      else api.act('inspectField',{index});
+      return;
+    }
     if (phaseName === 'placing') {
       if (!validSlot(endIndex, state)) return;
       const unit = state.slots[endIndex]?.unit || null;
@@ -537,7 +581,7 @@ export function mountShell(root, api) {
     }
 
     if (!validSlot(endIndex, state)) {
-      if (!validSlot(startIndex, state) && slotIndex(ui?.selectedSlot) >= 0) {
+      if (!validSlot(startIndex, state) && (slotIndex(ui?.selectedSlot) >= 0 || slotIndex(ui?.selectedField)>=0)) {
         api.act('selectSlot', { index: -1 });
       }
       return;
@@ -547,17 +591,6 @@ export function mountShell(root, api) {
     if (planning && validSlot(startIndex, state) && startIndex !== endIndex) {
       routePlan(state, startIndex, endIndex);
       return;
-    }
-    if (planning && startIndex === endIndex) {
-      const selected = slotIndex(ui?.selectedSlot);
-      if (validSlot(selected, state) && selected !== endIndex) {
-        routePlan(state, selected, endIndex);
-        return;
-      }
-      if (selected === endIndex) {
-        api.act('selectSlot', { index: -1 });
-        return;
-      }
     }
     api.act('selectSlot', { index: endIndex });
   }
@@ -706,6 +739,8 @@ export function mountShell(root, api) {
     if (x < -slopX || y < -slopY || x >= ARENA.width + slopX || y >= ARENA.height + slopY) return -1;
     x = Math.max(0, Math.min(ARENA.width - 0.01, x));
     y = Math.max(0, Math.min(ARENA.height - 0.01, y));
+    const field=hitFieldSlot(x,y);
+    if (field>=0) return 10+field;
     const direct = hitSlot(x, y);
     if (direct >= 0) return direct;
     let best = -1;
@@ -984,11 +1019,12 @@ function structuralKey(state, profile, ui) {
     profile?.settings?.language ?? '',
     profile?.settings?.sound ? 1 : 0,
     profile?.settings?.reducedMotion ? 1 : 0,
-    ui?.selectedSlot ?? '',
+    ui?.selectedSlot ?? '',ui?.selectedField ?? '',ui?.fieldKind ?? '',
     ui?.mergeFrom ?? '',
     ui?.mergePreview ? 1 : 0,
     message,
-    state?.wave ?? '',
+    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',
+    ...Object.values(state?.fieldCooldowns || {}).map(Math.ceil),
     playerHintKey(state?.director?.playerHint),
     playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',

@@ -70,15 +70,15 @@ function assertFullBoardCanPlace(cards, label) {
 }
 
 function assertCurveUntouched(state, label) {
-  assert.equal(draftXpCost(0), 8, label);
-  assert.equal(state.nextDraftXp, 8, label);
+  assert.equal(draftXpCost(0), 6, label);
+  assert.equal(state.nextDraftXp, 6, label);
   assert.equal(state.draftLevel, 0, label);
   assert.equal(state.xp, 0, label);
 }
 
 test('generateDraft returns three different cards on an empty board and a full board', () => {
   assert.equal(new Set(SEEDS).size, 2);
-  assert.deepEqual([0, 1, 2, 3, 4].map(draftXpCost), [8, 12, 16, 21, 26]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(draftXpCost), [6, 10, 14, 18, 22]);
 
   for (const seed of SEEDS) {
     const empty = createRun({seed, difficulty: 'normal', runId: `draft-count-empty-${seed}`});

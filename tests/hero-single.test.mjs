@@ -251,24 +251,12 @@ test('controller place and merge actions keep the single hero', async () => {
   }
 
   const [first, second] = towers;
-  assert.equal(api.getUI().selectedSlot, second);
-  assert.equal(api.act('selectSlot', {index: second}).ok, true);
-  assert.equal(api.getUI().selectedSlot, -1);
-  assert.equal(api.act('selectSlot', {index: 2}).ok, true);
-  assert.equal(api.getUI().selectedSlot, 2);
-  const selected = api.act('selectSlot', {index: first});
-  assert.equal(selected.ok, false);
-  assert.equal(selected.reason, 'heroProtected');
-  assert.equal(api.getUI().selectedSlot, 2);
-  assert.equal(api.getUI().mergePreview, null);
-  assert.equal(api.act('selectSlot', {index: 2}).ok, true);
-  assert.equal(api.getUI().selectedSlot, -1);
-  assert.equal(api.act('selectSlot', {index: first}).ok, true);
-  const reverse = api.act('selectSlot', {index: 2});
-  assert.equal(reverse.ok, false);
-  assert.equal(reverse.reason, 'heroProtected');
-  assert.equal(api.getUI().selectedSlot, first);
-  assert.equal(api.getUI().mergePreview, null);
+  assert.equal(api.getUI().selectedSlot,-1);
+  for (const index of [second,2,first,2]) {
+    assert.equal(api.act('selectSlot',{index}).ok,true);
+    assert.equal(api.getUI().selectedSlot,index);
+    assert.equal(api.getUI().mergePreview,null);
+  }
   assert.equal(state.slots[2].unit, hero);
   assert.equal(state.slots[first].unit.kind, 'tower');
   assert.equal(state.slots[second].unit.kind, 'tower');

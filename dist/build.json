@@ -5,6 +5,7 @@
     "src/boot.js",
     "src/data/enemies.js",
     "src/data/expeditions.js",
+    "src/data/field-units.js",
     "src/data/recipes.js",
     "src/data/towers.js",
     "src/engine.js",
@@ -19,6 +20,7 @@
     "src/storage.js",
     "src/systems/combat.js",
     "src/systems/drafts.js",
+    "src/systems/field.js",
     "src/systems/hero.js",
     "src/systems/merges.js",
     "src/systems/movement.js",
@@ -43,8 +45,8 @@
     "css": "dist/static/assets/app.css"
   },
   "bytes": {
-    "standalone": 977135,
-    "script": 959103,
-    "css": 17623
+    "standalone": 948776,
+    "script": 925624,
+    "css": 22743
   }
 }

@@ -190,8 +190,8 @@ function woodKit(ratio) {
 }
 
 function paintSky(ctx) {
-  const stops = [[0, '#0c1216'], [14, '#142028'], [28, '#243430'], [48, '#4a5c52']];
-  ctx.fillStyle = '#0c1216';
+  const stops = [[0, '#070d12'], [14, '#0f1b24'], [28, '#1b2c2e'], [48, '#364a46']];
+  ctx.fillStyle = '#070d12';
   ctx.fillRect(0, 0, W, H);
   for (let y = 0; y < 56; y += 2) {
     let upper = stops[0];
@@ -226,7 +226,15 @@ function hexRgb(hex) {
 function drawMoon(ctx) {
   const x = 292;
   const y = 3;
-  ctx.fillStyle = '#f0e2c0';
+  const base = readAlpha(ctx);
+  ctx.globalAlpha = base * 0.14;
+  ctx.fillStyle = '#f0cb72';
+  ctx.fillRect(x - 6, y - 2, 19, 13);
+  ctx.globalAlpha = base * 0.22;
+  ctx.fillStyle = '#f8e9c6';
+  ctx.fillRect(x - 3, y - 1, 13, 11);
+  ctx.globalAlpha = base;
+  ctx.fillStyle = '#f5e8c8';
   const cells = [
     [3, 0], [4, 0], [5, 0], [6, 0],
     [2, 1], [3, 1], [4, 1], [5, 1], [6, 1],
@@ -337,22 +345,22 @@ function paintField(ctx) {
   for (let x = 0; x < W; x += 2) {
     const near = horizonY(x);
     const far = near - 7 - ((x >> 3) & 1);
-    ctx.fillStyle = '#121a18';
+    ctx.fillStyle = '#0e1718';
     ctx.fillRect(x, far, 2, near - far);
-    ctx.fillStyle = '#24302c';
+    ctx.fillStyle = '#1e2c2c';
     ctx.fillRect(x, far, 2, 1);
   }
   for (let x = 0; x < W; x += 2) {
     const y0 = horizonY(x);
     const edge = Math.min(x, W - 1 - x);
-    const margin = edge < 16 ? 0 : edge < 36 ? 1 : 2;
-    const far = margin === 0 ? '#1e2824' : margin === 1 ? '#28322c' : '#343e36';
-    const mid = margin === 0 ? '#1a2420' : margin === 1 ? '#222c28' : '#2c3630';
-    const near = margin === 0 ? '#161e1c' : margin === 1 ? '#1c2420' : '#242c28';
-    const farEnd = 168;
-    const midEnd = 320;
+    const margin = edge < 18 ? 0 : edge < 42 ? 1 : 2;
+    const far = margin === 0 ? '#141e1e' : margin === 1 ? '#1d2927' : '#263430';
+    const mid = margin === 0 ? '#121a1a' : margin === 1 ? '#192422' : '#212e2a';
+    const near = margin === 0 ? '#101718' : margin === 1 ? '#161f1e' : '#1d2825';
+    const farEnd = 176;
+    const midEnd = 330;
     const lip = ENTRY_Y + 16;
-    ctx.fillStyle = margin === 0 ? '#121a18' : '#1a2420';
+    ctx.fillStyle = margin === 0 ? '#0d1516' : '#141e1c';
     ctx.fillRect(x, y0, 2, Math.max(0, lip - y0));
     ctx.fillStyle = far;
     ctx.fillRect(x, lip, 2, farEnd - lip);
@@ -360,19 +368,20 @@ function paintField(ctx) {
     ctx.fillRect(x, farEnd, 2, midEnd - farEnd);
     ctx.fillStyle = near;
     ctx.fillRect(x, midEnd, 2, SLEEPER_Y - midEnd);
-    ctx.fillStyle = '#8ea094';
+    ctx.fillStyle = '#7b9188';
     ctx.fillRect(x, y0, 2, 1);
   }
   for (const [x, height] of TREES) drawTree(ctx, x, height);
+  // Subtle moonlit ground pebbles and tactical clearing texture
   for (let y = 64; y < APPROACH_TOP; y += 4) {
     for (let x = 8; x < 352; x += 4) {
       const dx = Math.abs(x - 180) / 180;
       const n = hash2(x, y);
-      if ((n % 100) > 42 + dx * 52) {
-        ctx.fillStyle = (n & 3) === 0 ? '#3e4c44' : '#323e38';
+      if ((n % 100) > 48 + dx * 48) {
+        ctx.fillStyle = (n & 3) === 0 ? '#31423c' : '#283632';
         ctx.fillRect(x, y, 1, 1);
-      } else if ((n % 23) === 0) {
-        ctx.fillStyle = '#1a2220';
+      } else if ((n % 19) === 0) {
+        ctx.fillStyle = '#121a19';
         ctx.fillRect(x, y, 1, 1);
       }
     }
@@ -380,7 +389,7 @@ function paintField(ctx) {
   for (let y = APPROACH_TOP - 14; y < SLEEPER_Y - 8; y += 3) {
     for (let x = 0; x < W; x += 3) {
       if ((hash2(x + 19, y) & 3) === 0) {
-        ctx.fillStyle = '#1e2622';
+        ctx.fillStyle = '#182220';
         ctx.fillRect(x, y, 1, 1);
       }
     }
@@ -928,6 +937,36 @@ function readSlots(state) {
   return slots;
 }
 
+function drawFenceTorches(ctx, ratio, time, reduced) {
+  if (ratio <= FENCE_RUIN) return;
+  const base = readAlpha(ctx);
+  shiftFenceArt(ctx, () => {
+    const lanterns = [86, 262];
+    for (let i = 0; i < lanterns.length; i++) {
+      const px = lanterns[i];
+      if (postFalls(px, ratio)) continue;
+      const flicker = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 5.2 + i * 2.1));
+      const warm = ratio <= FENCE_FAILING ? 0.55 : 1;
+      // Soft stepped lantern light halo casting upward onto approach ground (stays strictly inside [60..300] and above fence)
+      ctx.globalAlpha = base * (0.09 + flicker * 0.04) * warm;
+      ctx.fillStyle = '#f0a848';
+      ctx.fillRect(px - 18, 398, 44, 34);
+      ctx.globalAlpha = base * (0.14 + flicker * 0.05) * warm;
+      ctx.fillStyle = '#ffd578';
+      ctx.fillRect(px - 9, 408, 26, 20);
+      ctx.globalAlpha = base;
+      // Iron sconce bracket + glowing flame
+      ctx.fillStyle = '#4e5c64';
+      ctx.fillRect(px + 2, 412, 4, 6);
+      ctx.fillStyle = '#e26a28';
+      ctx.fillRect(px + 2, 409, 4, 4);
+      ctx.fillStyle = flicker > 0.45 ? '#fff3c4' : '#f0cb72';
+      ctx.fillRect(px + 3, 410 - (flicker > 0.7 ? 1 : 0), 2, 2);
+    }
+  });
+  ctx.globalAlpha = base;
+}
+
 export function drawWorld(ctx, state, options) {
   if (!ctx || typeof ctx.fillRect !== 'function') return;
   const opts = options && typeof options === 'object' ? options : {};
@@ -952,6 +991,7 @@ export function drawWorld(ctx, state, options) {
     drawMist(ctx, time, reduced);
     drawGrass(ctx, time, reduced);
     drawFence(ctx, ratio);
+    drawFenceTorches(ctx, ratio, time, reduced);
     drawBanner(ctx, ratio, time, reduced, phase);
     drawEmbers(ctx, ratio, time, reduced);
     drawShoulders(ctx, ratio);
@@ -1714,6 +1754,114 @@ const ICONS = {
     '................',
     '................',
     '................'
+  ]),
+  harvest: iconRows('harvest', [
+    '................',
+    '.......yy.......',
+    '....y.ywwy.y....',
+    '...yyyfwwfyyy...',
+    '....yyfyyfyy....',
+    '.....yyffyy.....',
+    '....y..yy..y....',
+    '.......bb.......',
+    '....bbbBBbbb....',
+    '...bb..bb..bb...',
+    '.......bb.......',
+    '.....eeeeee.....',
+    '.....eEEEEe.....',
+    '......EEEE......',
+    '................',
+    '................'
+  ]),
+  bulwark: iconRows('bulwark', [
+    '................',
+    '..m...m..m...m..',
+    '..m...m..m...m..',
+    '.mm..mm..mm..mm.',
+    '.MMMMMMMMMMMMMM.',
+    '.eeeeeeeeeeeeee.',
+    '.emeeemeeemeeem.',
+    '.eEeEeEeEeEeEeE.',
+    '.MMMMMMMMMMMMMM.',
+    '.eEeEeEeEeEeEeE.',
+    '.EEEEEEEEEEEEEE.',
+    '..EE........EE..',
+    '................',
+    '................',
+    '................',
+    '................'
+  ]),
+  spikes: iconRows('spikes', [
+    '................',
+    '................',
+    '................',
+    '...w...w...w....',
+    '...m...m...m....',
+    '..mm..mm..mm....',
+    '..mM..mM..mM..w.',
+    '.mMM.mMM.mMM.mm.',
+    '.mMM.mMM.mMM.mM.',
+    '.MMMMMMMMMMMMMM.',
+    '.nnnnnnnnnnnnnn.',
+    '.kkkkkkkkkkkkkk.',
+    '................',
+    '................',
+    '................',
+    '................'
+  ]),
+  flare: iconRows('flare', [
+    '................',
+    '.......w........',
+    '......ywy.......',
+    '.....yfwyf......',
+    '.....ryyyr......',
+    '....ggggggg.....',
+    '....gGGGGGg.....',
+    '.....ggggg......',
+    '......gGg.......',
+    '......gGg.......',
+    '.....ggGgg......',
+    '....gg...gg.....',
+    '...GG.....GG....',
+    '................',
+    '................',
+    '................'
+  ]),
+  energy: iconRows('energy', [
+    '................',
+    '.......y........',
+    '......ywy.......',
+    '....y.ywy.y.....',
+    '.....yyyyy......',
+    '..yyyywwyyyy....',
+    '...yyywwyyy.....',
+    '.....yyyyy......',
+    '....y.yyy.y.....',
+    '......yfy.......',
+    '.......f........',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................'
+  ]),
+  surge: iconRows('surge', [
+    '................',
+    '................',
+    '....CCCCCCCC....',
+    '..CCaaaaaaaaCC..',
+    '.Caa........aaC.',
+    '....CCCCCCCC....',
+    '..CCaawwwwaaCC..',
+    '.Caa........aaC.',
+    '....yyyyyyyy....',
+    '..yy........yy..',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................'
   ])
 };
 
@@ -1778,4 +1926,223 @@ export function drawIcon(ctx, id, x, y, size = 16) {
   } finally {
     if (canStack) ctx.restore();
   }
+}
+
+function drawPadCorners(ctx, left, top, w, h, color, arm = 5, thick = 1) {
+  ctx.fillStyle = color;
+  ctx.fillRect(left, top, arm, thick);
+  ctx.fillRect(left, top, thick, arm);
+  ctx.fillRect(left + w - arm, top, arm, thick);
+  ctx.fillRect(left + w - thick, top, thick, arm);
+  ctx.fillRect(left, top + h - thick, arm, thick);
+  ctx.fillRect(left, top + h - arm, thick, arm);
+  ctx.fillRect(left + w - arm, top + h - thick, arm, thick);
+  ctx.fillRect(left + w - thick, top + h - arm, thick, arm);
+}
+
+function drawBulwarkSprite(ctx, cx, cy, ratio) {
+  const x = Math.round(cx);
+  const y = Math.round(cy);
+  const damaged = ratio <= 0.65;
+  const critical = ratio <= 0.32;
+  // Ground shadow
+  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
+  ctx.fillRect(x - 24, y + 6, 48, 5);
+  // 5 sharpened iron stakes protruding upward
+  const spikes = [-19, -10, -1, 8, 17];
+  for (let i = 0; i < spikes.length; i++) {
+    if (critical && (i === 1 || i === 3)) continue;
+    const sx = x + spikes[i];
+    const tall = damaged && i === 2 ? 4 : 7;
+    ctx.fillStyle = '#33424a';
+    ctx.fillRect(sx, y - 8 - tall, 4, tall + 2);
+    ctx.fillStyle = '#a8bec6';
+    ctx.fillRect(sx + 1, y - 8 - tall, 2, tall);
+    ctx.fillStyle = '#f2f7f8';
+    ctx.fillRect(sx + 1, y - 8 - tall, 1, 2);
+  }
+  // Main reinforced timber-and-steel barricade body
+  ctx.fillStyle = '#181410';
+  ctx.fillRect(x - 23, y - 9, 46, 17);
+  ctx.fillStyle = critical ? '#4e3528' : damaged ? '#6e4c34' : '#8d6440';
+  ctx.fillRect(x - 22, y - 8, 44, 15);
+  // Vertical plank seams & top edge highlight
+  ctx.fillStyle = critical ? '#6a4836' : '#c09866';
+  ctx.fillRect(x - 22, y - 8, 44, 2);
+  ctx.fillStyle = '#2c1e14';
+  for (let px = -14; px <= 14; px += 7) ctx.fillRect(x + px, y - 8, 1, 15);
+  // Twin forged-iron cross straps + rivets
+  ctx.fillStyle = '#405058';
+  ctx.fillRect(x - 23, y - 5, 46, 4);
+  ctx.fillRect(x - 23, y + 2, 46, 4);
+  ctx.fillStyle = '#8fa4ae';
+  ctx.fillRect(x - 22, y - 5, 44, 1);
+  ctx.fillRect(x - 22, y + 2, 44, 1);
+  ctx.fillStyle = '#eef4f6';
+  for (let rx = -18; rx <= 18; rx += 9) {
+    ctx.fillRect(x + rx, y - 4, 2, 1);
+    ctx.fillRect(x + rx, y + 3, 2, 1);
+  }
+  // Progressive battle cracks
+  if (damaged) {
+    ctx.fillStyle = '#120d0a';
+    ctx.fillRect(x - 8, y - 7, 2, 6);
+    ctx.fillRect(x - 6, y - 2, 2, 5);
+    ctx.fillRect(x + 9, y - 6, 2, 7);
+  }
+  if (critical) {
+    ctx.fillStyle = '#120d0a';
+    ctx.fillRect(x - 16, y - 8, 5, 5);
+    ctx.fillRect(x + 4, y - 8, 4, 6);
+    ctx.fillStyle = '#e06038';
+    ctx.fillRect(x - 7, y - 1, 1, 2);
+    ctx.fillRect(x + 10, y - 2, 1, 2);
+  }
+}
+
+function drawSpikesSprite(ctx, cx, cy, time, reduced) {
+  const x = Math.round(cx);
+  const y = Math.round(cy);
+  const glint = reduced ? -1 : Math.floor(time * 4) % 5;
+  // Iron base grate recessed on the ground
+  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
+  ctx.fillRect(x - 23, y - 6, 46, 15);
+  ctx.fillStyle = '#242e34';
+  ctx.fillRect(x - 22, y - 5, 44, 13);
+  ctx.fillStyle = '#404f58';
+  ctx.fillRect(x - 22, y - 5, 44, 1);
+  ctx.fillRect(x - 22, y + 7, 44, 1);
+  // Back row of forged steel spikes
+  for (let i = 0; i < 5; i++) {
+    const sx = x - 19 + i * 9;
+    ctx.fillStyle = '#38464e';
+    ctx.fillRect(sx, y - 6, 6, 6);
+    ctx.fillStyle = '#8b9ba4';
+    ctx.fillRect(sx + 1, y - 9, 4, 7);
+    ctx.fillStyle = i === glint ? '#ffffff' : '#dce8ee';
+    ctx.fillRect(sx + 2, y - 11, 2, 5);
+  }
+  // Front staggered row of crimson-tipped thorn spikes
+  for (let i = 0; i < 4; i++) {
+    const sx = x - 15 + i * 9;
+    ctx.fillStyle = '#283238';
+    ctx.fillRect(sx, y, 6, 6);
+    ctx.fillStyle = '#a0b2bc';
+    ctx.fillRect(sx + 1, y - 3, 4, 7);
+    ctx.fillStyle = (i + 2) % 5 === glint ? '#fff4d0' : '#f2eee4';
+    ctx.fillRect(sx + 2, y - 5, 2, 4);
+    ctx.fillStyle = '#c4583c';
+    ctx.fillRect(sx + 2, y - 5, 2, 1);
+  }
+}
+
+function drawFlareSprite(ctx, cx, cy, time, reduced) {
+  const x = Math.round(cx);
+  const y = Math.round(cy);
+  const pulse = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 4.5));
+  const sway = reduced ? 0 : (Math.sin(time * 8) > 0 ? 1 : 0);
+  // Warm ground illumination pool
+  ctx.save();
+  ctx.globalAlpha = 0.14 + pulse * 0.06;
+  ctx.fillStyle = '#f0cb72';
+  ctx.beginPath();
+  ctx.arc(x, y, 28 + pulse * 4, 0, Math.PI * 2);
+  ctx.fill();
+  // Translucent reveal detection ring (115px matches simulation reveal radius)
+  ctx.globalAlpha = 0.22 + pulse * 0.08;
+  ctx.strokeStyle = '#f7d578';
+  ctx.lineWidth = 1;
+  ctx.setLineDash?.([4, 4]);
+  ctx.beginPath();
+  ctx.arc(x, y, 115, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash?.([]);
+  ctx.restore();
+
+  // Shadow & iron tripod legs
+  ctx.fillStyle = 'rgba(8, 12, 14, 0.5)';
+  ctx.fillRect(x - 10, y + 6, 20, 4);
+  ctx.fillStyle = '#2a343a';
+  ctx.fillRect(x - 8, y + 2, 3, 7);
+  ctx.fillRect(x + 5, y + 2, 3, 7);
+  ctx.fillRect(x - 1, y + 3, 3, 6);
+  // Ornate brass brazier bowl
+  ctx.fillStyle = '#5a421e';
+  ctx.fillRect(x - 9, y - 4, 18, 7);
+  ctx.fillStyle = '#c89b46';
+  ctx.fillRect(x - 8, y - 5, 16, 5);
+  ctx.fillStyle = '#f0cb72';
+  ctx.fillRect(x - 9, y - 5, 18, 2);
+  ctx.fillStyle = '#8a3418';
+  ctx.fillRect(x - 6, y - 6, 12, 2);
+  // Dancing radiant solar flame
+  ctx.fillStyle = '#e86824';
+  ctx.fillRect(x - 5 + sway, y - 12, 10, 7);
+  ctx.fillStyle = '#ffc84a';
+  ctx.fillRect(x - 4 + sway, y - 15, 8, 8);
+  ctx.fillStyle = '#fff9d6';
+  ctx.fillRect(x - 2 + sway, y - 17, 4, 7);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x - 1 + sway, y - 14, 2, 3);
+}
+
+// Baseline field occupancy and health are derived directly from the simulation snapshot.
+export function drawFrontline(ctx, state, selectedKind, time = 0, reduced = false, selectedField = -1) {
+  ctx.save();
+  const pulse = reduced ? 0.65 : (0.5 + 0.5 * Math.sin(time * 5));
+  for (const pad of state.fieldSlots || []) {
+    const u = pad.unit;
+    const isSelected = selectedField === pad.index;
+    const placingHere = Boolean(selectedKind && !u);
+    if (placingHere) {
+      ctx.fillStyle = `rgba(240, 203, 114, ${(0.1 + pulse * 0.1).toFixed(3)})`;
+      ctx.fillRect(pad.left + 1, pad.top + 1, pad.width - 2, pad.height - 2);
+      drawPadCorners(ctx, pad.left, pad.top, pad.width, pad.height, '#f0cb72', 8, 2);
+      // Center tactical placement crosshair
+      const cx = Math.round(pad.x);
+      const cy = Math.round(pad.y);
+      ctx.fillStyle = 'rgba(240, 203, 114, 0.85)';
+      ctx.fillRect(cx - 4, cy, 9, 1);
+      ctx.fillRect(cx, cy - 4, 1, 9);
+    } else if (!u) {
+      ctx.fillStyle = 'rgba(12, 20, 22, 0.22)';
+      ctx.fillRect(pad.left + 2, pad.top + 2, pad.width - 4, pad.height - 4);
+      drawPadCorners(ctx, pad.left, pad.top, pad.width, pad.height, 'rgba(122, 148, 140, 0.42)', 5, 1);
+    } else {
+      ctx.fillStyle = 'rgba(10, 16, 18, 0.26)';
+      ctx.fillRect(pad.left + 1, pad.top + 1, pad.width - 2, pad.height - 2);
+      drawPadCorners(
+        ctx,
+        pad.left,
+        pad.top,
+        pad.width,
+        pad.height,
+        isSelected ? '#f0cb72' : 'rgba(148, 174, 166, 0.35)',
+        isSelected ? 8 : 4,
+        isSelected ? 2 : 1
+      );
+    }
+    if (!u) continue;
+    const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 1;
+    if (u.kind === 'flare') drawFlareSprite(ctx, pad.x, pad.y, time, reduced);
+    else if (u.kind === 'bulwark') drawBulwarkSprite(ctx, pad.x, pad.y, ratio);
+    else drawSpikesSprite(ctx, pad.x, pad.y, time, reduced);
+
+    // Crisp framed pixel health bar under each field defense
+    const barW = 38;
+    const bx = Math.round(pad.x - barW / 2);
+    const by = Math.round(pad.y + 12);
+    ctx.fillStyle = '#0c1216';
+    ctx.fillRect(bx - 1, by - 1, barW + 2, 5);
+    ctx.fillStyle = '#2a383e';
+    ctx.fillRect(bx, by, barW, 3);
+    const fillW = Math.max(0, Math.min(barW, Math.round(barW * ratio)));
+    ctx.fillStyle = ratio > 0.6 ? '#74d08c' : ratio > 0.3 ? '#f0c15a' : '#e55a45';
+    if (fillW > 0) {
+      ctx.fillRect(bx, by, fillW, 3);
+      ctx.fillStyle = 'rgba(255, 250, 232, 0.45)';
+      ctx.fillRect(bx, by, fillW, 1);
+    }
+  }
+  ctx.restore();
 }

@@ -30,6 +30,7 @@ function namedStats(upgrade) {
   if (Number(effect.critMultiplier) > 0) named.push('critMultiplier');
   if (Number(effect.pierce) > 0) named.push('pierce');
   if (effect.poison && typeof effect.poison === 'object') named.push('poison');
+  for (const stat of ['splash','fence','multishot','brittle']) if (effect[stat]) named.push(stat);
   return named;
 }
 
@@ -42,6 +43,7 @@ function poisonValue(stats) {
 }
 
 function readStat(stats, name) {
+  if (name === 'brittle') return stats.brittle?.power || 0;
   if (name === 'poison') return poisonValue(stats);
   const value = stats ? stats[name] : undefined;
   return Number.isFinite(value) ? value : 0;

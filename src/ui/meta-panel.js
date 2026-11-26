@@ -7,13 +7,14 @@
  * the current level, or a function (level, profile). Bonus fractions are
  * damage, haste, critChance, and reward; range and fence are flat amounts.
  */
-import {localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
+import {t as translate,localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
 import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses, nextArmoryBuy} from '../systems/progression.js';
 import {TOWERS} from '../data/towers.js';
 import {RECIPES} from '../data/recipes.js';
 import {HERO_UPGRADES} from '../systems/hero.js';
 import {ENEMIES} from '../data/enemies.js';
 import {EXPEDITIONS, EXPEDITION_ORDER} from '../data/expeditions.js';
+import {HARVEST} from '../data/field-units.js';
 import {catalogIcon} from './icons.js';
 import {BASE_TYPES, CONTRACT_VERSION, DIFFICULTIES, clone} from '../shared.js';
 
@@ -21,9 +22,9 @@ const STYLE_ID = 'fencefall-meta-panel-styles';
 const SCREENS = new Set(['menu', 'armory', 'codex', 'settings', 'howto', 'results']);
 const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush'];
-const PERMANENT_ORDER = ['damage', 'haste', 'vitality'];
+const PERMANENT_ORDER = ['damage', 'haste', 'vitality','economy'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
-const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward']);
+const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage']);
 const PIXEL_KEYS = new Set(['range']);
 const FLAT_KEYS = new Set(['fence', 'vitality']);
 
@@ -43,61 +44,90 @@ const local = {
 };
 
 const META_CSS = `
-.meta-panel{min-width:0;max-width:100%;min-height:0;overflow:auto;color:#f1eee2;padding:8px 8px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
+.meta-panel{width:min(100%,920px);margin:0 auto;min-width:0;max-width:100%;min-height:0;overflow:auto;color:#f2efe4;padding:12px 12px calc(28px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;-webkit-overflow-scrolling:touch;background:transparent;border:none;box-shadow:none}
 .meta-panel *{box-sizing:border-box}
 .meta-panel h1,.meta-panel h2,.meta-panel h3,.meta-panel p{overflow-wrap:anywhere}
 .meta-panel h1,.meta-panel h2,.meta-panel h3{margin:0;line-height:1.25;font-weight:700}
-.meta-panel h1{font-size:1.85rem;letter-spacing:.04em}
-.meta-panel h2{font-size:1.25rem}
-.meta-panel h3{font-size:1.02rem}
+.meta-panel h1{font-size:1.95rem;letter-spacing:.04em;color:#f8f3e3;text-shadow:0 2px 12px rgba(240,203,114,.18)}
+.meta-panel h2{font-size:1.28rem;color:#f6e8c3}
+.meta-panel h3{font-size:1.02rem;color:#f3efe4}
 .meta-panel p{margin:0}
-.meta-brand{display:flex;flex-direction:column;gap:2px;padding-bottom:4px;border-bottom:3px solid #9b7951}
-.meta-brand-zh,.meta-gold{color:#f0cb72}
-.meta-panel .muted{color:#a5b8be}
-.meta-panel .badge{display:inline-flex;align-items:center;min-height:28px;padding:2px 8px;border-radius:999px;background:#2a4038;color:#f0cb72;font-size:.82rem;line-height:1.3}
+.meta-brand{display:flex;flex-direction:column;gap:3px;padding:10px 14px 12px;border-radius:14px;background:linear-gradient(135deg,rgba(31,52,58,.92) 0%,rgba(17,30,36,.95) 68%,rgba(54,42,24,.88) 100%);border:1px solid rgba(212,175,98,.38);border-bottom:3px solid #b58d52;box-shadow:0 10px 26px rgba(0,0,0,.32)}
+.meta-brand-zh,.meta-gold{color:#f2ce74;font-weight:650}
+.meta-panel .muted{color:#a1b6bc}
+.meta-panel .badge{display:inline-flex;align-items:center;align-self:flex-start;min-height:26px;padding:2px 9px;border-radius:999px;background:rgba(42,68,62,.85);border:1px solid rgba(240,203,114,.32);color:#f3d27d;font-size:.8rem;line-height:1.3}
 .meta-panel .panel,.meta-panel .card{min-width:0}
-.meta-panel .card{background:#162329;border:1px solid #2c454c;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.meta-panel .card{background:linear-gradient(180deg,rgba(24,41,48,.94) 0%,rgba(16,28,34,.96) 100%);border:1px solid rgba(114,154,164,.32);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px;box-shadow:0 8px 22px rgba(0,0,0,.24)}
+.meta-panel .card[data-equipped="true"]{border-color:rgba(240,203,114,.58);box-shadow:0 8px 22px rgba(0,0,0,.26),inset 0 0 0 1px rgba(240,203,114,.22)}
+.meta-panel .meta-result-card.is-victory{border-color:rgba(130,214,164,.62);border-top:3px solid #7dcea0}
+.meta-panel .meta-result-card.is-defeat{border-color:rgba(229,112,92,.58);border-top:3px solid #e15b4a}
 .meta-panel .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .meta-panel .grid.meta-sorties{grid-template-columns:1fr 1fr;gap:8px}
-.meta-panel .btn{min-height:44px;min-width:44px;padding:10px 12px;border-radius:10px;border:1px solid #3d5a54;background:#1a2c32;color:#f1eee2;font:inherit;line-height:1.25;text-align:center;cursor:pointer;overflow-wrap:anywhere;white-space:normal}
-.meta-panel .btn-primary{background:#2a6848;border-color:#8dcaa8;color:#f4fff8;font-weight:700}
-.meta-panel .btn[disabled]{opacity:.55;cursor:not-allowed}
-.meta-panel .btn[aria-pressed="true"]{border-color:#f0cb72;box-shadow:inset 0 0 0 1px #f0cb72}
-.meta-panel .btn:focus-visible,.meta-panel input:focus-visible,.meta-panel textarea:focus-visible{outline:2px solid #f0cb72;outline-offset:2px}
-@media (hover:hover){.meta-panel .btn:hover:not(:disabled){border-color:#d3b984}}
-.meta-actions,.meta-stack{display:flex;flex-direction:column;gap:8px}
+.meta-panel .btn{min-height:44px;min-width:44px;padding:10px 14px;border-radius:10px;border:1px solid rgba(114,154,164,.42);background:linear-gradient(180deg,#203841 0%,#162830 100%);color:#f2efe4;font:inherit;line-height:1.25;text-align:center;cursor:pointer;overflow-wrap:anywhere;white-space:normal;transition:border-color 140ms ease,background 140ms ease,transform 100ms ease,box-shadow 140ms ease}
+.meta-panel .btn-primary{background:linear-gradient(180deg,#357c58 0%,#24593e 100%);border-color:#e4c378;color:#f6fff9;font-weight:700;box-shadow:0 4px 14px rgba(42,104,72,.35)}
+.meta-panel .btn[disabled]{opacity:.5;cursor:not-allowed}
+.meta-panel .btn[aria-pressed="true"]{border-color:#f0cb72;background:linear-gradient(180deg,rgba(82,66,30,.58) 0%,rgba(42,36,22,.72) 100%);box-shadow:inset 0 0 0 1px #f0cb72}
+.meta-panel .btn:focus-visible,.meta-panel input:focus-visible,.meta-panel textarea:focus-visible,.meta-panel summary:focus-visible{outline:2px solid #f0cb72;outline-offset:2px}
+@media (hover:hover){
+  .meta-panel .btn:hover:not(:disabled){border-color:#e2c27a;background:linear-gradient(180deg,#27444f 0%,#1b313a 100%)}
+  .meta-panel .btn-primary:hover:not(:disabled){border-color:#f5dc9b;background:linear-gradient(180deg,#3d8e65 0%,#296748 100%)}
+}
+.meta-actions,.meta-stack{display:flex;flex-direction:column;gap:9px}
 .meta-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.meta-pagehead{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.meta-codex-tabs{padding:5px;border-radius:12px;background:rgba(13,23,28,.8);border:1px solid rgba(114,154,164,.25)}
+.meta-codex-tabs .btn{flex:1 1 88px}
+.meta-pagehead{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .meta-pagehead .btn{flex:0 0 auto}
 .meta-pagehead h2{flex:1 1 140px}
 .meta-panel .meta-actions>.btn,.meta-panel .meta-nav .btn,.meta-panel .meta-choice{width:100%}
 .meta-panel .meta-nav{grid-template-columns:1fr 1fr}
-.meta-choice{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.meta-choice{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left}
+.meta-choice>span:first-child{font-weight:700;color:#f6f1e2}
+.meta-mission-drawer{border:1px solid rgba(132,168,176,.35);border-radius:11px;background:rgba(12,22,27,.72);padding:0}
+.meta-mission-drawer>summary{min-height:44px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-weight:650;color:#f0d48a;list-style:none}
+.meta-mission-drawer>summary::-webkit-details-marker{display:none}
+.meta-mission-drawer>summary::after{content:"▸";color:#f0cb72;font-size:.95rem;transition:transform 140ms ease}
+.meta-mission-drawer[open]>summary::after{transform:rotate(90deg)}
+.meta-mission-drawer[open]>summary{border-bottom:1px solid rgba(114,154,164,.25)}
+.meta-mission-drawer>.meta-stack{padding:10px 12px 12px}
+.meta-bonus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.meta-bonus-grid .meta-line{padding:6px 10px;border-radius:9px;background:rgba(11,20,25,.7);border:1px solid rgba(108,144,154,.24);font-size:.9rem}
 .meta-line{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}
-.meta-line>span:last-child{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.meta-line>span:last-child{font-variant-numeric:tabular-nums;font-weight:650;overflow-wrap:anywhere}
+.meta-wallet-line{padding:9px 13px;border-radius:11px;background:linear-gradient(90deg,rgba(78,61,26,.34) 0%,rgba(22,38,44,.75) 100%);border:1px solid rgba(226,194,122,.36)}
+.meta-wallet-line>span:last-child{color:#f5d57a;font-size:1.05rem}
 .meta-note,.meta-warn{border-radius:10px;padding:10px 12px}
-.meta-note{background:#24362a;border:1px solid #3f6b45}
-.meta-warn{background:#3a2a22;border:1px solid #8a5a3a}
+.meta-note{background:rgba(36,58,44,.88);border:1px solid #487d52}
+.meta-warn{background:rgba(62,40,32,.9);border:1px solid #a06440}
 .meta-panel label{display:flex;flex-direction:column;gap:4px;min-width:0}
-.meta-panel input,.meta-panel textarea{width:100%;min-height:44px;padding:8px 10px;border-radius:10px;border:1px solid #3d5a54;background:#0e171c;color:#f1eee2;font:inherit}
+.meta-panel input,.meta-panel textarea{width:100%;min-height:44px;padding:8px 10px;border-radius:10px;border:1px solid rgba(114,154,164,.42);background:#0c151a;color:#f2efe4;font:inherit}
 .meta-panel textarea{min-height:128px;resize:vertical}
 .meta-badges{display:flex;flex-wrap:wrap;gap:6px}
 .catalog-head{display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:44px}
-.catalog-icon{width:44px;height:44px;min-width:44px;min-height:44px;flex:0 0 44px;display:block}
+.catalog-icon{width:44px;height:44px;min-width:44px;min-height:44px;flex:0 0 44px;display:block;border-radius:9px;background:rgba(10,18,22,.6);border:1px solid rgba(114,154,164,.28);padding:2px}
 .catalog-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 auto}
-.catalog-desc{min-width:0;color:#f1eee2}
+.catalog-desc{min-width:0;color:#dce4e6;font-size:.93rem}
 .meta-board{display:flex;flex-direction:column;gap:6px}
 .meta-beats{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;counter-reset:beat}
-.meta-beats li{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;padding:8px 12px;border-radius:10px;background:#24362a;border:1px solid #3f6b45}
-.meta-beats li::before{counter-increment:beat;content:counter(beat);flex:0 0 28px;width:28px;height:28px;border-radius:999px;background:#2a4038;color:#f0cb72;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
-.meta-fence{min-height:28px;border-radius:6px;background:#9b7951;color:#1a120c;font-weight:700;display:flex;align-items:center;justify-content:center}
+.meta-beats li{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;padding:8px 12px;border-radius:10px;background:rgba(34,54,42,.82);border:1px solid rgba(74,126,86,.58)}
+.meta-beats li::before{counter-increment:beat;content:counter(beat);flex:0 0 28px;width:28px;height:28px;border-radius:999px;background:#264036;border:1px solid rgba(240,203,114,.45);color:#f0cb72;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.meta-fence{min-height:28px;border-radius:6px;background:linear-gradient(180deg,#b08a58 0%,#8a673f 100%);color:#1a120c;font-weight:700;display:flex;align-items:center;justify-content:center}
 .meta-slotrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
-.meta-slot{min-height:44px;border:1px solid #687c80;background:#223743;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
-.meta-slot-hero{background:#5c4a28;border-color:#f0cb72;color:#f0cb72;font-weight:700}
-.meta-mini{font-size:.92rem}
-@media (max-width:340px){.meta-panel .meta-nav{grid-template-columns:minmax(0,1fr)}}
+.meta-slot{min-height:44px;border:1px solid #597278;background:#1f3440;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
+.meta-slot-hero{background:linear-gradient(180deg,#68522a 0%,#4e3c1e 100%);border-color:#f0cb72;color:#f7dfa0;font-weight:700}
+.meta-mini{font-size:.88rem}
+@media (max-width:340px){.meta-panel .meta-nav,.meta-bonus-grid{grid-template-columns:minmax(0,1fr)}}
 @media (min-width:400px){.meta-panel .meta-diffs{grid-template-columns:1fr 1fr}}
 @media (min-width:560px){.meta-panel .meta-cards{grid-template-columns:1fr 1fr}}
+@media (min-width:640px){
+  .meta-panel{padding:18px 20px calc(32px + env(safe-area-inset-bottom,0px))}
+  .meta-panel .meta-nav{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .meta-panel .meta-diffs{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .meta-bonus-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .meta-actions{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .meta-panel .meta-actions>.btn{width:auto;flex:1 1 170px}
+  .meta-panel .meta-actions>p{flex:1 0 100%}
+}
 .meta-reduced,.meta-reduced *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 `;
 
@@ -169,7 +199,7 @@ function renderMenu(ctx, root) {
   else if (run?.phase === 'placing') body.append(note(ctx, t(api, 'chooseSlot'), 'meta-note'));
   if (live && run.paused) body.append(note(ctx, tx(api, lang, 'paused', 'Paused', '已暂停'), 'meta-note'));
 
-  if (run) body.append(runCard(ctx));
+
 
   const actions = h(doc, 'div', {className: 'meta-actions'});
   const continueBtn = button(ctx, {
@@ -218,6 +248,8 @@ function renderMenu(ctx, root) {
   }
   body.append(actions);
   body.append(newRunForm(ctx, !live));
+  if (run) body.append(runCard(ctx));
+  if (api.getUI?.().message==='legacyRunReset') body.append(note(ctx,t(api,'legacyRunReset'),'meta-note'));
 
   const nav = h(doc, 'nav', {className: 'grid meta-nav', 'data-testid': 'meta-nav', 'aria-label': t(api, 'title')});
   nav.append(
@@ -229,7 +261,9 @@ function renderMenu(ctx, root) {
   if (finished || run?.settlement) nav.append(navButton(ctx, 'results', 'nav-results'));
   body.append(nav);
 
-  body.append(line(ctx, t(api, 'currency'), num(profile.currency, lang), 'menu-currency'));
+  const menuWallet = line(ctx, t(api, 'currency'), num(profile.currency, lang), 'menu-currency');
+  menuWallet.className = `${menuWallet.className} meta-wallet-line`;
+  body.append(menuWallet);
   const best = bestCard(ctx);
   if (best) body.append(best);
   body.append(h(doc, 'p', {className: 'muted meta-mini', text: `${t(api, 'version')} ${CONTRACT_VERSION}`}));
@@ -241,11 +275,14 @@ function renderArmory(ctx, root) {
   root.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'armoryIntro',
     'Settled runs pay currency for equipment and permanent hero upgrades. Bonuses stay bounded, and Normal remains playable without them.',
     '已结算的对局提供货币，用于购买装备和永久英雄升级。加成有上限，标准难度不依赖它们也能游玩。')}));
-  root.append(line(ctx, t(api, 'currency'), num(profile.currency, lang), 'currency-value'));
+  const armoryWallet = line(ctx, t(api, 'currency'), num(profile.currency, lang), 'currency-value');
+  armoryWallet.className = `${armoryWallet.className} meta-wallet-line`;
+  root.append(armoryWallet);
 
   const bonuses = profileBonuses(rawProfile);
   const summary = h(doc, 'section', {className: 'card', 'data-testid': 'profile-bonuses'});
   summary.append(h(doc, 'h3', {text: tx(api, lang, 'bonuses', 'Current bonuses', '当前加成')}));
+  const bonusGrid = h(doc, 'div', {className: 'meta-bonus-grid'});
   const fields = [
     ['damage', 'bonus-damage', bonuses.ok ? signed(percent(bonuses.damage, lang), bonuses.damage) : '—'],
     ['haste', 'bonus-haste', bonuses.ok ? signed(percent(bonuses.haste, lang), bonuses.haste) : '—'],
@@ -255,8 +292,9 @@ function renderArmory(ctx, root) {
     ['reward', 'bonus-reward', bonuses.ok ? signed(percent(bonuses.reward, lang), bonuses.reward) : '—']
   ];
   for (const [key, testid, value] of fields) {
-    summary.append(line(ctx, profileBonusLabel(ctx, key), value, testid));
+    bonusGrid.append(line(ctx, profileBonusLabel(ctx, key), value, testid));
   }
+  summary.append(bonusGrid);
   summary.append(h(doc, 'p', {className: 'muted meta-mini', text: tx(api, lang, 'rewardBonusNote',
     'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.',
     '奖励加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。')}));
@@ -288,7 +326,7 @@ function renderArmory(ctx, root) {
 
   root.append(h(doc, 'h3', {text: tx(api, lang, 'permanent', 'Permanent upgrades', '永久升级')}));
   const upgrades = orderedBy(catalogEntries(PERMANENT_UPGRADES), PERMANENT_ORDER);
-  const grid = h(doc, 'div', {className: 'grid'});
+  const grid = h(doc, 'div', {className: 'grid meta-cards'});
   if (!upgrades.length) grid.append(h(doc, 'p', {className: 'muted', text: t(api, 'locked')}));
   for (const upgrade of upgrades) grid.append(permanentCard(ctx, upgrade));
   root.append(grid);
@@ -297,7 +335,7 @@ function renderArmory(ctx, root) {
 function renderCodex(ctx, root) {
   const {doc, api, lang} = ctx;
   root.append(pageHead(ctx, 'meta-codex', t(api, 'codex')));
-  const tabs = h(doc, 'div', {className: 'meta-row', role: 'tablist', 'aria-label': t(api, 'codex')});
+  const tabs = h(doc, 'div', {className: 'meta-row meta-codex-tabs', role: 'tablist', 'aria-label': t(api, 'codex')});
   for (const tab of [['towers', 'towers'], ['recipes', 'recipes'], ['enemies', 'enemies'], ['hero', 'hero']]) {
     const selected = local.codexTab === tab[0];
     const btn = button(ctx, {
@@ -456,7 +494,7 @@ function renderResults(ctx, root) {
   root.append(pageHead(ctx, 'meta-results', t(api, 'results')));
   const settlement = run?.settlement && typeof run.settlement === 'object' ? run.settlement : null;
   const outcome = settlement?.result || (run?.phase === 'victory' || run?.phase === 'defeat' ? run.phase : null);
-  const card = h(doc, 'section', {className: 'card'});
+  const card = h(doc, 'section', {className: `card meta-result-card${outcome === 'victory' ? ' is-victory' : outcome === 'defeat' ? ' is-defeat' : ''}`});
   card.append(h(doc, 'h3', {text: t(api, 'runComplete')}));
   card.append(line(ctx, t(api, 'results'), outcomeText(ctx, outcome), 'result-outcome'));
   const paid = settlement && Number.isFinite(settlement.currency) ? settlement.currency : null;
@@ -542,7 +580,18 @@ function newRunForm(ctx, primary) {
   const {doc, api, lang} = ctx;
   const form = h(doc, 'form', {className: 'card', 'data-testid': 'new-run-form'});
   form.append(h(doc, 'h3', {text: t(api, 'newRun')}));
-  form.append(expeditionPicker(ctx));
+  const play = button(ctx, {
+    action: 'start',
+    testid: 'btn-play',
+    label: local.confirmStart && runIsLive(ctx.run) ? t(api, 'confirm') : t(api, 'play'),
+    primary
+  });
+  play.type = 'submit';
+  play.addEventListener('click', event => event.stopPropagation());
+  form.append(play);
+  const picker = h(doc, 'details', {className: 'meta-mission-drawer'});
+  picker.append(h(doc, 'summary', {text: t(api, 'selectMission') + ' · ' + localize(EXPEDITIONS[selectedExpedition(ctx.rawProfile || ctx.profile)].name, lang)}), expeditionPicker(ctx));
+  form.append(picker);
   form.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'difficultyRewards',
     'Higher difficulties increase enemy pressure and the reward multiplier.',
     '更高的难度会提高敌人压力和奖励倍率。')}));
@@ -573,15 +622,6 @@ function newRunForm(ctx, primary) {
         '开始新的一局会离开当前战斗。请再选一次开始以确认。')
     }));
   }
-  const play = button(ctx, {
-    action: 'start',
-    testid: 'btn-play',
-    label: local.confirmStart && runIsLive(ctx.run) ? t(api, 'confirm') : t(api, 'play'),
-    primary
-  });
-  play.type = 'submit';
-  play.addEventListener('click', event => event.stopPropagation());
-  form.append(play);
   form.addEventListener('submit', event => {
     event.preventDefault();
     event.stopPropagation();
@@ -770,9 +810,26 @@ function permanentCard(ctx, upgrade) {
   return card;
 }
 
+function harvestStatBlock(ctx) {
+  const {doc, api, lang} = ctx;
+  const crop = HARVEST[0] || {interval: 5, energy: 12, xp: 2, repair: 0};
+  const zh = lang === 'zh';
+  const box = h(doc, 'div', {className: 'meta-stack'});
+  box.append(line(ctx, t(api, 'energy'), `+${num(crop.energy, lang, 0)} / ${zh ? '次' : 'cycle'}`));
+  box.append(line(ctx, t(api, 'xp'), `+${num(crop.xp, lang, 0)} / ${zh ? '次' : 'cycle'}`));
+  box.append(line(ctx, tx(api, lang, 'interval', 'Interval', '间隔'), `${num(crop.interval, lang, 1)} s`));
+  box.append(line(ctx, zh ? '后排加成' : 'Rear-row bonus', '+30%'));
+  box.append(line(ctx, zh ? '2–4 阶修补栅栏' : 'Rank 2–4 fence repair', `+${HARVEST[1].repair} / +${HARVEST[2].repair} / +${HARVEST[3].repair}`));
+  const badges = h(doc, 'div', {className: 'meta-badges'});
+  badges.append(badge(ctx, zh ? '经济' : 'Economy'));
+  badges.append(badge(ctx, zh ? '后排增产' : 'Rear bonus'));
+  box.append(badges);
+  return box;
+}
+
 function renderTowers(ctx) {
   const {doc, api, lang} = ctx;
-  const wrap = h(doc, 'div', {className: 'grid', 'data-testid': 'codex-towers'});
+  const wrap = h(doc, 'div', {className: 'grid meta-cards', 'data-testid': 'codex-towers'});
   const towers = orderedBy(catalogEntries(TOWERS), BASE_TYPES);
   if (!towers.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'locked')}));
   for (const tower of towers) {
@@ -780,7 +837,7 @@ function renderTowers(ctx) {
     const description = entryDesc(tower, lang);
     card.append(catalogHead(ctx, tower.id, entryName(tower, lang, tower.id), description));
     card.append(badge(ctx, `${t(api, 'rank')} 1`));
-    card.append(statBlock(ctx, unitStatsOf(tower)));
+    card.append(tower.id === 'harvest' ? harvestStatBlock(ctx) : statBlock(ctx, unitStatsOf(tower)));
     if (tower.id === 'support' || unitStatsOf(tower)?.aura) {
       card.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'helpAura',
         'A support aura boosts nearby defenders. Its damage and haste bonuses are fractional and combat caps them.',
@@ -793,7 +850,7 @@ function renderTowers(ctx) {
 
 function renderRecipes(ctx) {
   const {doc, api, lang} = ctx;
-  const wrap = h(doc, 'div', {className: 'grid', 'data-testid': 'codex-recipes'});
+  const wrap = h(doc, 'div', {className: 'grid meta-cards', 'data-testid': 'codex-recipes'});
   const rules = h(doc, 'article', {className: 'card', 'data-testid': 'codex-merge-rules'});
   rules.append(h(doc, 'h3', {text: t(api, 'merge')}));
   rules.append(h(doc, 'p', {text: tx(api, lang, 'helpMerge',
@@ -840,7 +897,7 @@ function renderRecipes(ctx) {
 
 function renderEnemies(ctx) {
   const {doc, api, lang} = ctx;
-  const wrap = h(doc, 'div', {className: 'grid', 'data-testid': 'codex-enemies'});
+  const wrap = h(doc, 'div', {className: 'grid meta-cards', 'data-testid': 'codex-enemies'});
   const enemies = orderedBy(catalogEntries(ENEMIES), ENEMY_ORDER);
   if (!enemies.length) wrap.append(h(doc, 'p', {className: 'muted', text: t(api, 'locked')}));
   for (const enemy of enemies) {
@@ -873,7 +930,7 @@ function renderEnemies(ctx) {
 
 function renderHeroCodex(ctx) {
   const {doc, api, lang} = ctx;
-  const wrap = h(doc, 'div', {className: 'grid', 'data-testid': 'codex-hero'});
+  const wrap = h(doc, 'div', {className: 'grid meta-cards', 'data-testid': 'codex-hero'});
   const intro = h(doc, 'article', {className: 'card', 'data-testid': 'codex-hero-intro'});
   intro.append(h(doc, 'h3', {text: t(api, 'hero')}));
   intro.append(badge(ctx, t(api, 'heroProtected')));
@@ -1698,13 +1755,8 @@ function equippedBonusPhrase(ctx, key, value) {
   if (key === 'fence' || key === 'vitality') {
     return `${bonusLabel(ctx, 'fence')} ${shown}`;
   }
-  const heroLabel = {
-    damage: ['Hero damage', '英雄伤害'],
-    haste: ['Hero attack speed', '英雄攻击速度'],
-    range: ['Hero range', '英雄射程'],
-    critChance: ['Hero crit chance', '英雄暴击率'],
-  }[key];
-  if (heroLabel) return `${ctx.lang === 'zh' ? heroLabel[1] : heroLabel[0]} ${shown}`;
+  const teamKey={damage:'teamDamage',haste:'teamHaste',critChance:'teamCrit'}[key];
+  if (teamKey) return t(ctx.api,teamKey)+' '+shown;
   return `${bonusLabel(ctx, key)} ${shown}`;
 }
 
@@ -1761,15 +1813,9 @@ function profileBonuses(profile) {
   }
 }
 
-function profileBonusLabel(ctx, key) {
-  const named = {
-    damage: ['Hero damage', '英雄伤害'],
-    haste: ['Hero attack speed', '英雄攻击速度'],
-    range: ['Hero range', '英雄射程'],
-    critChance: ['Hero crit chance', '英雄暴击率'],
-  }[key];
-  if (named) return ctx.lang === 'zh' ? named[1] : named[0];
-  return bonusLabel(ctx, key);
+function profileBonusLabel(ctx,key) {
+  const labels={damage:'teamDamage',haste:'teamHaste',critChance:'teamCrit'};
+  return labels[key]?t(ctx.api,labels[key]):bonusLabel(ctx,key);
 }
 
 function bonusLabel(ctx, key) {
@@ -1791,7 +1837,7 @@ function bonusLabel(ctx, key) {
     projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速']
   };
   const entry = labels[key];
-  if (!entry) return String(key);
+  if (!entry) return t(ctx.api,key);
   return tx(ctx.api, ctx.lang, entry[0], entry[1], entry[2]);
 }
 
@@ -1833,25 +1879,10 @@ function dotText(ctx, effect) {
   return parts.join(' · ') || '—';
 }
 
-const MECHANIC_LABELS = {
-  projectile: ['Projectile', '投射'],
-  crit: ['Crit', '暴击'],
-  pierce: ['Pierce', '穿透'],
-  splash: ['Splash', '溅射'],
-  burn: ['Burn', '燃烧'],
-  slow: ['Slow', '减速'],
-  chain: ['Chain', '连锁'],
-  poison: ['Poison', '毒素'],
-  aura: ['Aura', '光环'],
-  stun: ['Stun', '眩晕'],
-  execute: ['Execute', '处决'],
-};
-
 function mechanicText(mechanic, lang) {
   if (typeof mechanic === 'string') {
-    const pair = MECHANIC_LABELS[mechanic];
-    if (pair) return lang === 'zh' ? pair[1] : pair[0];
-    return mechanic;
+    const key='badge.'+mechanic, label=translate(lang,key);
+    return label===key ? translate(lang,mechanic) : label;
   }
   if (!mechanic || typeof mechanic !== 'object') return '';
   const name = textOf(mechanic.name ?? mechanic.id, lang);

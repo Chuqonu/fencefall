@@ -64,12 +64,13 @@ function hitEvents(state) {
   return state.events.filter(event => event.type === 'hit');
 }
 
-function fireOnce(state) {
+function fireOnce(state, count=1) {
   updateCombat(state, STEP);
   const shots = state.events.filter(event => event.type === 'shot');
-  assert.equal(shots.length, 1);
+  assert.equal(shots.length,count);
   assert.equal(hitEvents(state).length, 0);
-  assert.equal(state.projectiles.length, 1);
+  assert.equal(state.projectiles.length,count);
+  if (count>1) { assert.notEqual(shots[0].targetId,shots[1].targetId); state.projectiles.splice(1); }
   for (const slot of state.slots) {
     if (slot.unit) slot.unit.cooldown = 10;
   }
@@ -165,7 +166,7 @@ test('arcbolt stores critChance and each chain jump rolls its own crit', () => {
   assert.ok(stats.chain >= 2);
   assert.ok(stats.critChance > 0);
   const enemies = column(state, slot, stats.chain + 1, 150, chainGap(stats.chainRange));
-  const fired = fireOnce(state);
+  const fired = fireOnce(state,2);
   const projectile = fired.projectile;
   assert.equal(projectile.critChance, stats.critChance);
   assert.equal(projectile.critMultiplier, stats.critMultiplier);
@@ -253,16 +254,16 @@ test('a chain with no crit chance keeps the fired roll and does not draw random 
   assert.equal(stats.pierce, 0);
   assert.ok(stats.chain >= 2);
   const enemies = column(state, slot, stats.chain + 1, 150, chainGap(stats.chainRange));
-  const before = state.rng;
+  const stunRoll={rng:state.rng}; random(stunRoll);
   const fired = fireOnce(state);
-  assert.equal(state.rng, before);
+  assert.equal(state.rng, stunRoll.rng);
   assert.equal(fired.projectile.critChance, 0);
   assert.equal(fired.projectile.crit, false);
   assert.equal(fired.projectile.critMultiplier, 1);
   assert.equal(fired.projectile.chain, stats.chain);
   assert.equal(fired.projectile.splash, 0);
   settle(state);
-  assert.equal(state.rng, before);
+  assert.equal(state.rng, stunRoll.rng);
   const direct = hitEvents(state).filter(event => event.attack !== 'splash');
   assert.deepEqual(direct.map(event => event.attack), ['projectile', ...Array(stats.chain).fill('chain')]);
   assert.deepEqual(direct.map(event => event.targetId), enemies.map(enemy => enemy.id));

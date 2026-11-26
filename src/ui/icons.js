@@ -77,18 +77,57 @@ function flame(dx, dy, color, scale = 1) {
 }
 
 const MARKS = {
+  harvest: () => [
+    L(22, 20, 22, 37, POISON, 2.6),
+    P('M22 31 C16 30 12 26 12 23 C16 24 19 26 22 29', POISON, 1.8, POISON),
+    P('M22 28 C28 27 32 23 32 20 C28 21 25 23 22 26', POISON, 1.8, POISON),
+    L(22, 6, 22, 10, GOLD, 2.2),
+    L(14, 9, 17, 12, GOLD, 2.2),
+    L(30, 9, 27, 12, GOLD, 2.2),
+    L(11, 15, 15, 15, GOLD, 2.2),
+    L(33, 15, 29, 15, GOLD, 2.2),
+    C(22, 15, 6.2, GOLD, INK, 1.1),
+    C(22, 15, 2.5, FIRE),
+  ],
+  bulwark: () => [
+    G('11,16 13,8 15,16', PIERCE),
+    G('20,16 22,7 24,16', PIERCE),
+    G('29,16 31,8 33,16', PIERCE),
+    R(8, 16, 28, 18, '#5a3f28', GOLD, 2),
+    L(8, 22, 36, 22, MUTED, 2.4),
+    L(8, 29, 36, 29, MUTED, 2.4),
+    C(13, 22, 1.3, INK),
+    C(22, 22, 1.3, INK),
+    C(31, 22, 1.3, INK),
+  ],
+  spikes: () => [
+    R(7, 30, 30, 5, PLATE, MUTED, 1.5),
+    G('9,30 14,13 19,30', PIERCE, MUTED, 1.2),
+    G('17,30 22,10 27,30', INK, GOLD, 1.2),
+    G('25,30 30,13 35,30', PIERCE, MUTED, 1.2),
+  ],
+  flare: () => [
+    C(22, 17, 13, 'none', GOLD, 1.2),
+    flame(0, -7, GOLD, 0.52),
+    P('M12 22 H32 L29 29 H15 Z', GOLD, 1.6, '#4c3818'),
+    L(17, 29, 13, 37, MUTED, 2.2),
+    L(27, 29, 31, 37, MUTED, 2.2),
+    L(22, 29, 22, 37, MUTED, 2.2),
+  ],
+  economy:()=>[C(22,20,12,GOLD),C(22,20,7,PLATE),L(22,14,22,26,GOLD,2)],
+  bastion:()=>[R(9,15,26,20,PLATE,GOLD),L(10,14,34,14,INK,4)],
   splinter_bow: () => [
     ...bow(14, GOLD),
     ...dart(20, 37, 22, GOLD),
   ],
-  hawk_brace: () => [
+  kinetic_core: () => [
     P('M9 17 C14 9 30 9 35 17 L33 31 C28 37 16 37 11 31 Z', MUTED, 2, PLATE),
     L(8, 23, 12, 23, GOLD, 2),
     L(32, 23, 36, 23, GOLD, 2),
     C(22, 23, 5, 'none', GOLD, 2),
     C(22, 23, 2, GOLD),
   ],
-  stormglass_edge: () => [
+  prism_lens: () => [
     G('22,6 33,22 22,38 11,22', '#16343c', FROST, 2),
     L(22, 12, 22, 32, INK, 1.5),
     L(16, 22, 28, 22, GOLD, 1.7),
@@ -99,7 +138,7 @@ const MARKS = {
     P('M6 16 L11 22 L6 28', INK, 2.2),
     P('M38 16 L33 22 L38 28', INK, 2.2),
   ],
-  survey_bead: () => [
+  sun_spindle: () => [
     C(22, 22, 8, 'none', GOLD, 2.3),
     C(22, 22, 2.3, GOLD),
     L(22, 5, 22, 11, MUTED, 2.2),
@@ -117,7 +156,7 @@ const MARKS = {
     ...nail(22, 2),
     ...nail(33),
   ],
-  ward_planks: () => [
+  vanguard_kit: () => [
     R(7, 10, 30, 9, '#2c3330', GOLD, 1.5),
     R(7, 25, 30, 9, '#2c3330', MUTED, 1.5),
     C(14, 14.5, 1.4, GOLD),
@@ -127,7 +166,7 @@ const MARKS = {
     L(18, 13, 26, 13, GOLD, 1.2),
     L(18, 28, 26, 28, MUTED, 1.2),
   ],
-  bastion_mail: () => [
+  surge_capacitor: () => [
     P('M7 18 Q22 7 37 18 Q22 14 7 18 Z', MUTED, 1.8, PLATE),
     P('M9 27 Q22 15 35 27 Q22 23 9 27 Z', GOLD, 1.8, '#243028'),
     P('M7 36 Q22 24 37 36 Q22 32 7 36 Z', MUTED, 1.8, PLATE),
@@ -154,7 +193,7 @@ const MARKS = {
     ...dart(8, 30, 22, INK),
     ...dart(8, 36, 33, GOLD),
   ],
-  reach: () => [
+  volley: () => [
     P('M8 31 A16 16 0 0 1 36 31', FROST, 2.3),
     L(22, 31, 22, 9, GOLD, 2.3),
     C(22, 31, 2.2, GOLD),
@@ -165,7 +204,7 @@ const MARKS = {
     C(22, 22, 4.4, GOLD, INK, 1.6),
     C(23.4, 21, 1.6, INK),
   ],
-  lethality: () => [
+  shrapnel: () => [
     P('M30 7 C41 16 41 28 30 37', GOLD, 3),
     P('M30 7 L9 22 L30 37', CRIT, 2.2),
     C(9, 22, 2.4, CRIT),
@@ -176,7 +215,7 @@ const MARKS = {
     L(4, 22, 34, 22, PIERCE, 2.5),
     G('40,22 33,18 33,26', PIERCE),
   ],
-  barbed: () => [
+  frostbite: () => [
     L(8, 34, 33, 9, POISON, 2.5),
     L(15, 27, 10, 20, GOLD, 2.2),
     L(21, 21, 16, 14, GOLD, 2.2),

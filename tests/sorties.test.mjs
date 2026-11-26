@@ -32,7 +32,7 @@ test('the long campaign still opens with four shamblers', () => {
   const opening = WAVES[0];
   assert.ok(opening);
   assert.ok(Array.isArray(opening.groups));
-  assert.ok(opening.groups.some(group => group && group.kind === 'shambler' && group.count === 4));
+  assert.ok(opening.groups.some(group => group && group.kind === 'shambler' && group.count === 6));
 });
 
 test('the long watch at 40s has no leaper or warden', () => {
@@ -45,7 +45,7 @@ test('the long watch at 40s has no leaper or warden', () => {
 
 test('the long watch teaches each new role after the opening', () => {
   const marks = [
-    [210, 'leaper'],
+    [215, 'leaper'],
     [270, 'shade'],
     [320, 'banner'],
     [380, 'splitter'],

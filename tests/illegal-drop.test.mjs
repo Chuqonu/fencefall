@@ -142,9 +142,9 @@ test('an invalid merge leaves every unit in place and keeps one hero', () => {
     [8, 6, 'rank_mismatch'],
     [6, 7, 'hybrid_locked'],
     [7, 6, 'hybrid_locked'],
-    [6, 0, 'hybrid_locked'],
-    [0, 6, 'hybrid_locked'],
-    [8, 0, 'hybrid_locked'],
+    [6, 0, 'rank_mismatch'],
+    [0, 6, 'rank_mismatch'],
+    [8, 0, 'rank_mismatch'],
     [6, 4, 'hybrid_locked'],
     [0, 0, 'same_slot'],
     [0, 2, 'empty_slot'],
@@ -221,8 +221,8 @@ test('an illegal drop, including one onto the hero, keeps both units', async () 
     [5, 4, 'rank_cap'],
     [6, 7, 'hybrid_locked'],
     [7, 6, 'hybrid_locked'],
-    [6, 0, 'hybrid_locked'],
-    [0, 6, 'hybrid_locked']
+    [6, 0, 'rank_mismatch'],
+    [0, 6, 'rank_mismatch']
   ];
   for (const [from, to, reason] of drops) {
     const dropped = api.act('dragDrop', {from, to});

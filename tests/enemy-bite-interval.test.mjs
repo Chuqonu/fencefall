@@ -110,14 +110,14 @@ test('codex enemies label the pause between bites as an interval', () => {
 test('enemy speed keeps its number and shows px/s', () => {
   const zh = enemies('zh');
   const en = enemies('en');
-  assert.equal(rowText(findByTestId(zh, 'enemy-speed-runner')), '速度 58 px/s');
-  assert.equal(rowText(findByTestId(zh, 'enemy-speed-brute')), '速度 18 px/s');
-  assert.equal(rowText(findByTestId(en, 'enemy-speed-runner')), 'Speed 58 px/s');
-  assert.equal(rowText(findByTestId(en, 'enemy-speed-brute')), 'Speed 18 px/s');
-  assert.equal(rowText(findByTestId(zh, 'enemy-damage-runner')), '伤害 6 / 口');
-  assert.equal(rowText(findByTestId(zh, 'enemy-damage-brute')), '伤害 28 / 口');
-  assert.equal(rowText(findByTestId(en, 'enemy-damage-runner')), 'Damage 6 / bite');
-  assert.equal(rowText(findByTestId(en, 'enemy-damage-brute')), 'Damage 28 / bite');
+  assert.equal(rowText(findByTestId(zh, 'enemy-speed-runner')), '速度 62 px/s');
+  assert.equal(rowText(findByTestId(zh, 'enemy-speed-brute')), '速度 19 px/s');
+  assert.equal(rowText(findByTestId(en, 'enemy-speed-runner')), 'Speed 62 px/s');
+  assert.equal(rowText(findByTestId(en, 'enemy-speed-brute')), 'Speed 19 px/s');
+  assert.equal(rowText(findByTestId(zh, 'enemy-damage-runner')), '伤害 5 / 口');
+  assert.equal(rowText(findByTestId(zh, 'enemy-damage-brute')), '伤害 26 / 口');
+  assert.equal(rowText(findByTestId(en, 'enemy-damage-runner')), 'Damage 5 / bite');
+  assert.equal(rowText(findByTestId(en, 'enemy-damage-brute')), 'Damage 26 / bite');
 });
 
 function lines(card) {

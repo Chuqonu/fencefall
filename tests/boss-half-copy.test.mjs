@@ -8,9 +8,9 @@ import {ENEMIES} from '../src/data/enemies.js';
 const boss = ENEMIES.boss;
 
 test('boss copy says enrage starts at half of maximum health and the threshold stays 0.5', () => {
-  assert.equal(boss.hp, 3000);
+  assert.equal(boss.hp, 3600);
   assert.equal(boss.speed, 16);
-  assert.equal(boss.damage, 26);
+  assert.equal(boss.damage, 28);
   assert.deepEqual(boss.enrage, {
     threshold: 0.5,
     speedScale: 1.18,

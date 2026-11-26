@@ -1,3 +1,7 @@
+import {rerollCost} from '../systems/drafts.js';
+import {fieldCost} from '../systems/field.js';
+import {HARVEST} from '../data/field-units.js';
+import {catalogIcon} from './icons.js';
 /**
  * Placement, draft, and merge UI.
  *
@@ -31,87 +35,108 @@ import { localize, formatNumber, t as translate } from '../i18n.js';
 const STYLE_ID = 'fencefall-build-panel-styles';
 
 const CSS = `
-.ff-build{display:flex;flex-direction:column;gap:10px;max-width:100%;min-width:0;color:#f1eee2;font:15px/1.35 ui-sans-serif,system-ui,sans-serif}
+.ff-build{display:flex;flex-direction:column;gap:8px;max-width:100%;min-width:0;color:#f2efe4;font:15px/1.35 "Segoe UI","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif}
 .ff-build *{box-sizing:border-box}
 .ff-build h2,.ff-build h3,.ff-build p{margin:0}
-.ff-build h2{font-size:1.15rem;line-height:1.25}
-.ff-build h3{font-size:1rem;line-height:1.3;word-break:break-word}
+.ff-build h2{font-size:1.1rem;line-height:1.22;letter-spacing:.01em}
+.ff-build h3{font-size:.96rem;line-height:1.28;word-break:break-word}
 .ff-build .card{min-width:0}
-.ff-build .muted{color:#a5b8be}
-.ff-build .ff-next-wave{font-size:13px;line-height:1.3}
-.ff-build .badge{display:inline-block;padding:2px 6px;border:1px solid #6d8388;vertical-align:middle}
-.ff-build .hero-lock{border-color:#e0c17a;color:#e0c17a}
+.ff-build .muted{color:#9eb3ba}
+.ff-build .ff-next-wave{font-size:12.5px;line-height:1.3}
+.ff-build .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid rgba(130,164,172,.38);background:rgba(28,48,56,.78);font-size:12px;vertical-align:middle}
+.ff-build .hero-lock{border-color:rgba(240,203,114,.65);background:rgba(92,70,28,.35);color:#f0cb72}
 .ff-build button{touch-action:manipulation}
-.ff-build .btn{appearance:none;width:auto;min-height:44px;min-width:44px;height:auto;padding:8px 10px;border:1px solid #6d8388;border-radius:2px;background:#1c3338;color:#f1eee2;font:inherit;line-height:1.25;text-align:center;white-space:normal;word-break:break-word;cursor:pointer}
-.ff-build .btn-primary{background:#2d6a4f;border-color:#e0c17a;color:#f7fff8;font-weight:700}
-.ff-build .btn:focus-visible{outline:2px solid #f1eee2;outline-offset:2px}
+.ff-build .btn{appearance:none;width:auto;min-height:44px;min-width:44px;height:auto;padding:8px 12px;border:1px solid rgba(126,162,172,.4);border-radius:10px;background:linear-gradient(180deg,#203841 0%,#162830 100%);color:#f2efe4;font:inherit;line-height:1.2;text-align:center;white-space:normal;word-break:break-word;cursor:pointer;transition:border-color 140ms ease,background 140ms ease,transform 100ms ease}
+.ff-build .btn-primary{background:linear-gradient(180deg,#337a57 0%,#245a40 100%);border-color:#e6c57a;color:#f7fff8;font-weight:700}
+.ff-build .btn:focus-visible{outline:2px solid #f0cb72;outline-offset:2px}
 .ff-build .ff-actions{display:flex;flex-wrap:wrap;gap:8px}
-.ff-build .ff-actions .btn{flex:1 1 140px}
+.ff-build .ff-actions .btn{flex:1 1 120px}
 .ff-build .ff-merge .ff-actions .btn{flex:1 1 140px;min-width:44px;min-height:44px;height:44px}
 .ff-build .card>.btn,.ff-build .ff-choice .btn{width:100%}
+.ff-build .ff-draft-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.ff-build .ff-reroll-btn{flex:0 0 auto;min-height:44px;padding:6px 12px;font-size:13px;font-weight:600;border-color:rgba(240,203,114,.55);background:linear-gradient(180deg,#2a3934 0%,#1b2826 100%);color:#f5d888;white-space:nowrap}
 .ff-build .ff-draft-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
 .ff-build .ff-draft-list li{min-width:0}
 .ff-build .ff-effect{white-space:pre-line}
-.ff-build.is-draft{gap:6px;background:rgba(12,22,28,.94);border:1px solid #3e5960;padding:8px}
-.ff-build.is-draft .ff-title{font-size:18px}
-.ff-build.is-draft .ff-draft-hint{font-size:13px;line-height:1.3}
-.ff-build.is-draft .ff-choice{padding:6px 8px;display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;min-height:44px;text-align:left;cursor:pointer}
-.ff-build.is-draft .ff-choice-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
-.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:1px solid currentColor;font-size:16px;line-height:1}
-.ff-build.is-draft .ff-mark small{font-size:9px;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ff-build.is-draft .ff-meter{width:64px;height:44px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.ff-build.is-draft{gap:6px;background:rgba(10,18,23,.95);border:1px solid rgba(212,175,98,.42);border-radius:14px;padding:10px;box-shadow:0 16px 36px rgba(0,0,0,.5)}
+.ff-build.is-draft .ff-title{font-size:17px;color:#f6e4b4}
+.ff-build.is-draft .ff-draft-hint{font-size:12.5px;line-height:1.3}
+.ff-build.is-draft .ff-choice{padding:7px 9px;display:flex;flex-direction:row;align-items:center;gap:9px;width:100%;min-height:44px;text-align:left;cursor:pointer;border-radius:11px;background:linear-gradient(180deg,#1a2f37 0%,#13232a 100%);border:1px solid rgba(126,162,172,.36);box-shadow:inset 3px 0 0 var(--choice-accent,#6d8388)}
+.ff-build.is-draft .ff-choice:hover:not(:disabled){border-color:#f0cb72;background:linear-gradient(180deg,#213c46 0%,#182c34 100%)}
+.ff-build.is-draft .ff-choice-copy{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:2px}
+.ff-build.is-draft .ff-choice-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.ff-build.is-draft .ff-mark{width:44px;height:44px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:9px;border:1px solid currentColor;background:rgba(8,14,18,.65);font-size:17px;line-height:1}
+.ff-build.is-draft .ff-mark small{font-size:9px;font-weight:700;line-height:1;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ff-build.is-draft .ff-meter{width:64px;height:44px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:3px}
 .ff-build.is-draft .ff-meter-row{display:flex;align-items:center;gap:3px;height:10px;min-height:0;min-width:0}
 .ff-build.is-draft .ff-meter-row>span:first-child{flex:none;font-size:9px;line-height:1;color:#c5d5da;white-space:nowrap}
-.ff-build.is-draft .ff-meter-track{flex:1 1 auto;min-width:12px;height:6px;background:#24383e;overflow:hidden}
-.ff-build.is-draft .ff-meter-fill{display:block;height:100%;width:0}
+.ff-build.is-draft .ff-meter-track{flex:1 1 auto;min-width:12px;height:6px;border-radius:999px;background:#0d181d;border:1px solid rgba(112,148,156,.25);overflow:hidden}
+.ff-build.is-draft .ff-meter-fill{display:block;height:100%;width:0;border-radius:999px}
 .ff-build.is-draft [data-meter="damage"] .ff-meter-fill{background:#f0d56a}
 .ff-build.is-draft [data-meter="speed"] .ff-meter-fill{background:#f0cb72}
-.ff-build.is-draft [data-meter="range"] .ff-meter-fill{background:#9fd7e8}
+.ff-build.is-draft [data-meter="range"] .ff-meter-fill{background:#88d6ec}
 .ff-build.is-draft [data-meter="crit"] .ff-meter-fill{background:#f0cb72}
 .ff-build.is-draft [data-meter="critDamage"] .ff-meter-fill{background:#e7a08a}
 .ff-build.is-draft [data-meter="pierce"] .ff-meter-fill{background:#d7e4ea}
 .ff-build.is-draft [data-meter="poison"] .ff-meter-fill{background:#7dce6a}
+.ff-build.is-draft [data-meter="energy"] .ff-meter-fill{background:#f5cc58}
+.ff-build.is-draft [data-meter="multishot"] .ff-meter-fill{background:#f0cb72}
+.ff-build.is-draft [data-meter="burn"] .ff-meter-fill{background:#e86a38}
+.ff-build.is-draft [data-meter="brittle"] .ff-meter-fill{background:#9fd7e8}
+.ff-build.is-draft [data-meter="fence"] .ff-meter-fill{background:#7dce92}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-row{height:14px}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-track,.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-fill{height:14px}
-.ff-build.is-draft .ff-choice h3{font-size:16px;line-height:1.2}
-.ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:13px;line-height:1.25}
+.ff-build.is-draft .ff-choice h3{font-size:15.5px;line-height:1.2;color:#f7f4ea}
+.ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{font-size:12.5px;line-height:1.25;color:#cbd9de}
 .ff-build.is-draft .ff-statline{color:#c5d5da}
-.ff-build.is-draft .ff-field{align-self:flex-start;font-size:12px;line-height:1.2;padding:1px 6px}
-.ff-build .ff-field.is-new{border-color:#e0c17a;color:#e0c17a}
-.ff-build .ff-field.is-owned{color:#a5b8be}
+.ff-build.is-draft .ff-field{align-self:flex-start;font-size:11px;line-height:1.2;padding:1px 7px}
+.ff-build .ff-field.is-new{border-color:rgba(240,203,114,.68);background:rgba(104,78,24,.32);color:#f5d888}
+.ff-build .ff-field.is-owned{border-color:rgba(130,164,172,.35);color:#a5b8be}
 .ff-build.is-draft .ff-draft-merge{display:flex;flex-direction:column;gap:6px}
 .ff-build.is-draft .ff-draft-merge .btn{width:100%}
-.ff-build .ff-details{padding:8px 8px 6px}
-.ff-build .ff-unit-signature{font-size:15px;font-weight:650;line-height:1.25;color:#f0cb72}
+.panel-wrap .ff-build.panel{background:transparent;border:none;padding:0;box-shadow:none}
+.ff-build .ff-details{padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:transparent;border:none;border-radius:10px}
+.ff-build .ff-unit-toolbar{display:flex;align-items:center;gap:6px;min-width:0}
+.ff-build .ff-unit-toolbar .ff-target-btn{flex:1 1 auto;min-height:44px;padding:6px 10px;font-size:13px;font-weight:600;border-color:rgba(240,203,114,.48);background:linear-gradient(180deg,#25393d 0%,#18272b 100%);color:#f3dca0;white-space:nowrap}
+.ff-build .ff-unit-toolbar .ff-close-btn{flex:0 0 auto;min-height:44px;min-width:52px;padding:6px 12px;margin-left:auto;font-size:13px;background:rgba(20,34,40,.92)}
+.ff-build .ff-unit-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ff-build .ff-unit-badges{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.ff-build .ff-unit-signature{font-size:14px;font-weight:650;line-height:1.25;color:#f0cb72}
+.ff-build .ff-field-card{padding:8px 10px;display:flex;flex-direction:column;gap:8px;background:transparent;border:none;border-radius:10px}
+.ff-build .ff-field-head{display:flex;align-items:center;gap:8px;min-width:0}
+.ff-build .ff-field-head .catalog-icon{width:38px;height:38px;min-width:38px;min-height:38px;flex:0 0 38px}
+.ff-build .ff-field-meta{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.ff-build .ff-field-hp-track{height:7px;border-radius:999px;background:#0c1519;border:1px solid rgba(112,148,156,.3);overflow:hidden}
+.ff-build .ff-field-hp-fill{height:100%;border-radius:999px;background:#68cf8b}
+.ff-build .ff-field-hp-fill.is-mid{background:#f0c15a}
+.ff-build .ff-field-hp-fill.is-low{background:#e55a45}
+.ff-build .ff-dismantle-btn{width:100%;border-color:rgba(229,120,96,.55);background:linear-gradient(180deg,#3d2622 0%,#2b1a18 100%);color:#ffd5c8;font-weight:600}
+.ff-build.is-placing{background:rgba(10,18,23,.94);border:1px solid rgba(126,206,160,.52);border-radius:12px;padding:8px 10px}
+.ff-build.is-placing .ff-place-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ff-build.is-placing .ff-place-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 140px}
 .ff-build.is-placing .ff-place-title{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:0}
-.ff-build.is-placing .ff-place-signature{font-size:13px;font-weight:550;line-height:1.2;color:#c5d5da}
-.ff-build.is-placing .ff-place-row{grid-template-columns:repeat(5,minmax(0,1fr))}
-.ff-build.is-placing .ff-place-body{overflow:auto;max-height:6.5rem}
-.ff-build.is-placing .ff-place-row .btn,.ff-build.is-placing [data-testid="cancel-placement"]{min-height:44px;min-width:44px}
-.ff-build.is-placing .ff-place-row .btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-width:0;height:auto;padding:3px 2px;line-height:1.05}
-.ff-build.is-placing .ff-place-row .btn small{display:block;flex:none;width:100%;max-width:100%;font-size:11px;line-height:1.05;text-align:center;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
-.ff-build.is-placing .ff-place-row .ff-note{min-width:0;height:auto;padding:3px 2px;line-height:1.05}
-.ff-build.is-placing .ff-place-row .ff-note small{max-width:100%;font-size:11px;line-height:1.05;text-align:center;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.ff-build.is-placing .ff-place-signature{font-size:13px;font-weight:550;line-height:1.2;color:#b8d4cc}
+.ff-build.is-placing [data-testid="cancel-placement"]{flex:0 0 auto;min-height:44px;min-width:44px;padding:6px 12px;font-size:13px}
 .ff-build .ff-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0;padding:0;list-style:none}
-.ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15}
+.ff-build .ff-slots .btn,.ff-build .ff-note{width:100%;min-height:44px;padding:4px;font-size:12px;line-height:1.15;border-radius:8px}
 .ff-build .ff-note{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #3e5960;background:#122128;text-align:center;overflow:hidden}
 .ff-build .ff-note small,.ff-build .ff-slots .btn small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ff-build .ff-slots:not(.ff-place-row) .btn{display:flex;flex-direction:column;align-items:center;justify-content:center}
 .ff-build .ff-slots:not(.ff-place-row) .btn small{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .ff-build .is-selected{border-color:#e0c17a;box-shadow:inset 0 0 0 1px #e0c17a}
 .ff-build .is-hero{color:#e0c17a}
-.ff-build .ff-stats{list-style:none;margin:0;padding:0;display:grid;gap:4px}
-.ff-build .ff-stats li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #2a4148;padding:2px 0}
-.ff-build .ff-stats b{font-weight:650;text-align:right}
-.ff-build .ff-pips{letter-spacing:1px}
-.ff-build .ff-message{padding:8px;border:1px solid #e7a08a;background:#3a2a22}
+.ff-build .ff-stats{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.ff-build .ff-stats li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(72,106,116,.35);padding:3px 0;font-size:13.5px}
+.ff-build .ff-stats b{font-weight:650;text-align:right;font-variant-numeric:tabular-nums}
+.ff-build .ff-pips{letter-spacing:1px;color:#f0cb72}
+.ff-build .ff-message{padding:7px 10px;border-radius:9px;border:1px solid #e7a08a;background:rgba(66,38,30,.92);font-size:13px}
 .ff-build .ff-mechs{display:flex;flex-wrap:wrap;gap:4px;margin:0;padding:0;list-style:none}
 @media (max-width:899px){
-  .ff-build.is-draft{gap:4px;padding:6px}
+  .ff-build.is-draft{gap:4px;padding:7px}
   .ff-build.is-draft .ff-title{font-size:16px}
   .ff-build.is-draft .ff-draft-hint{font-size:12px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-  .ff-build.is-draft .ff-draft-list{gap:4px}
-  .ff-build.is-draft .ff-choice{padding:4px 6px;gap:6px}
+  .ff-build.is-draft .ff-draft-list{gap:5px}
+  .ff-build.is-draft .ff-choice{padding:5px 7px;gap:7px}
   .ff-build.is-draft .ff-blurb,.ff-build.is-draft .ff-statline{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 }
 @media (max-width:360px){
@@ -123,311 +148,6 @@ const CSS = `
   .ff-build *,.ff-build *::before,.ff-build *::after{transition:none !important;animation:none !important}
 }
 `;
-
-const EXTRA = {
-  en: {
-    damage: 'Damage',
-    range: 'Range',
-    attackSpeed: 'Attack speed',
-    interval: 'Interval',
-    crit: 'Critical',
-    critDamage: 'Crit damage',
-    rank: 'Rank',
-    hero: 'Hero',
-    towers: 'Tower',
-    upgrade: 'Upgrade',
-    select: 'Select',
-    place: 'Place',
-    move: 'Move',
-    merge: 'Merge',
-    mergePreview: 'Merge preview',
-    mergeConfirm: 'Confirm merge',
-    mergeCancel: 'Cancel merge',
-    heroProtected: 'Hero stays independent',
-    invalidMerge: 'These units cannot merge',
-    fullBoard: 'All slots are full',
-    chooseUpgrade: 'Choose upgrade',
-    chooseOneOfThree: 'Choose one of three',
-    chooseSlot: 'Choose a slot',
-    cancelPlacement: 'Cancel placement',
-    replace: 'Replace',
-    replaceConfirm: 'Confirm replacement',
-    effect: 'Effect',
-    emptySlot: 'Empty slot',
-    recipes: 'Recipe',
-    ingredients: 'Ingredients',
-    cost: 'Cost',
-    level: 'Level',
-    maxLevel: 'Max level',
-    pause: 'Pause',
-    resume: 'Resume',
-    planning: 'Planning',
-    nextWave: 'Next wave',
-    pausedHidden: 'Paused while the page is hidden',
-    helpPlacement: 'Drag a defender to an empty slot to move it, or onto a compatible tower to merge. The fight keeps running. An illegal drop snaps back.',
-    helpMerge: 'Matching type and rank raise rank, up to 4. Different base towers of equal rank follow a recipe. Cancel keeps both units.',
-    helpDraft: 'Choose one card. A tower is placed next. A hero upgrade applies immediately and the hero stays on the board.',
-    helpRange: 'Range is measured from this slot center to an enemy center, across the field. Rear slots sit farther back, so their range reaches past the fence.',
-    kills: 'Kills',
-    xp: 'XP',
-    victory: 'Victory',
-    defeat: 'Defeat',
-    cancel: 'Cancel',
-    close: 'Close',
-    back: 'Back',
-    confirm: 'Confirm',
-    locked: 'Unavailable',
-    loading: 'Loading',
-    frontRow: 'Front row',
-    backRow: 'Rear row',
-    hybrid: 'Hybrid',
-    projectile: 'Projectile',
-    splash: 'Splash',
-    chain: 'Chain',
-    pierce: 'Pierce',
-    burn: 'Burn',
-    slow: 'Slow',
-    poison: 'Poison',
-    aura: 'Aura',
-    haste: 'Haste',
-    stacks: 'Stacks',
-    speed: 'Speed',
-    swap: 'Swap',
-    pauseToPlan: 'Move defenders or merge towers while the fight is running.',
-    noMergePartner: 'A merge needs two towers. The hero stays independent.',
-    heroNoMerge: 'The hero stays independent. You can move the hero while the fight is running. Moving it only changes its slot. Merges and replacement leave the hero in place.',
-    placeHint: 'Choose an empty slot. Occupied towers stay unless this card is a replacement.',
-    replaceHeroSafe: 'Choose the tower to replace. The hero stays in place.',
-    confirmReplaceBody: 'The tower in this slot will be removed.',
-    slotOccupied: 'Occupied',
-    statsUnavailable: 'Stats will appear when the catalog is ready.',
-    noDraft: 'The draft has no cards yet. Wait for the next choice.',
-    planningLocked: 'The fight is running. You can still move or merge.',
-    emptySelection: 'Select a slot to see its stats.',
-    sameTypeMerge: 'Same type and rank combine into the next rank.',
-    hybridMerge: 'This pair becomes the hybrid below.',
-    maxRankNote: 'Rank 4 can form a hybrid with a different rank-4 base tower when a recipe exists.',
-    supportNote: 'Support range is a circle from this slot. Aura bonuses reach defenders inside that circle. Attacks use the same geometric range.',
-    youGain: 'Result',
-    currentStats: 'Stats',
-    nextStats: 'After this choice',
-    draftWaiting: 'The three choices stay available until you pick one.',
-    draftOnField: 'Already on the field',
-    draftNewType: 'Not on the field yet',
-    mergeReview: 'Review the merge, then confirm or cancel. Both units stay if you cancel.',
-    lostOnReplace: 'Removed tower',
-    chooseEmpty: 'Empty slots are ready for placement.',
-    heroStays: 'The hero stays on the board.',
-    cancelPick: 'Back',
-    noValidTarget: 'No legal merge is available from this tower.',
-    moveHint: 'Choose a destination. An occupied slot swaps places.',
-    mergeHint: 'Choose a tower of equal rank. The preview explains the result before you confirm.',
-    sourceHint: 'Choose the defender to move.',
-    mergeSourceHint: 'Choose the first tower. The hero is not a merge ingredient.',
-    attacks: 'Attacks',
-    duration: 'Duration',
-    reduction: 'slow',
-    buildPanelLabel: 'Build, draft, and merge',
-    kindTower: 'Tower',
-    kindHybrid: 'Hybrid',
-    kindUpgrade: 'Hero upgrade',
-    slotLabel: 'Slot',
-  },
-  zh: {
-    damage: '伤害',
-    range: '射程',
-    attackSpeed: '攻速',
-    interval: '间隔',
-    crit: '暴击',
-    critDamage: '暴击伤害',
-    rank: '阶',
-    hero: '英雄',
-    towers: '塔',
-    upgrade: '升级',
-    select: '选择',
-    place: '放置',
-    move: '移动',
-    merge: '合成',
-    mergePreview: '合成预览',
-    mergeConfirm: '确认合成',
-    mergeCancel: '取消合成',
-    heroProtected: '英雄保持独立',
-    invalidMerge: '这些单位不能合成',
-    fullBoard: '栏位已满',
-    chooseUpgrade: '选择升级',
-    chooseOneOfThree: '三选一',
-    chooseSlot: '选择格子',
-    cancelPlacement: '取消放置',
-    replace: '替换',
-    replaceConfirm: '确认替换',
-    effect: '效果',
-    emptySlot: '空位',
-    recipes: '配方',
-    ingredients: '材料',
-    cost: '花费',
-    level: '等级',
-    maxLevel: '已满级',
-    pause: '暂停',
-    resume: '继续',
-    planning: '规划中',
-    nextWave: '下一波',
-    pausedHidden: '页面隐藏，战斗已暂停',
-    helpPlacement: '把防守者拖到空位即可移动，拖到可以合成的防御塔上即可合成。战斗会继续进行。非法放置会弹回。',
-    helpMerge: '同类型且同阶会升阶，最高 4 阶。不同基础塔在同阶时按配方合成。取消会保留双方。',
-    helpDraft: '选择一张卡。塔需要接着放置。英雄升级会立即生效，英雄留在场上。',
-    helpRange: '射程从本格中心量到敌人中心，可以跨列。后排更靠后，因此射程要能覆盖到栅栏前方。',
-    kills: '击杀',
-    xp: '经验',
-    victory: '胜利',
-    defeat: '失败',
-    cancel: '取消',
-    close: '关闭',
-    back: '返回',
-    confirm: '确认',
-    locked: '不可用',
-    loading: '读取中',
-    frontRow: '前排',
-    backRow: '后排',
-    hybrid: '混合',
-    projectile: '弹道',
-    splash: '溅射',
-    chain: '连锁',
-    pierce: '穿透',
-    burn: '燃烧',
-    slow: '减速',
-    poison: '毒素',
-    aura: '光环',
-    haste: '急速',
-    stacks: '层数',
-    speed: '速度',
-    swap: '交换',
-    pauseToPlan: '战斗进行中就可以移动防守者或合成防御塔。',
-    noMergePartner: '合成需要两座塔。英雄保持独立。',
-    heroNoMerge: '英雄保持独立。战斗进行中可以移动英雄，移动只改变格子。合成和替换都不会动英雄。',
-    placeHint: '选择一个空位。已有的塔会留下，除非这张卡是替换。',
-    replaceHeroSafe: '选择要替换的塔。英雄会留在原位。',
-    confirmReplaceBody: '这个格子上的塔会被移除。',
-    slotOccupied: '已占用',
-    statsUnavailable: '图鉴就绪后会显示属性。',
-    noDraft: '这次选拔还没有卡牌。请等待下一次选择。',
-    planningLocked: '战斗进行中，仍然可以移动或合成。',
-    emptySelection: '选择一个格子以查看属性。',
-    sameTypeMerge: '相同类型且阶数相同，会升到下一阶。',
-    hybridMerge: '这一对会变成下面的混合单位。',
-    maxRankNote: '4 阶可以与另一座 4 阶的不同基础塔按配方混合。',
-    supportNote: '支援范围是以本格为圆心的圆。光环加成覆盖圆内的防守单位。攻击也按这个几何距离判定。',
-    youGain: '结果',
-    currentStats: '属性',
-    nextStats: '选择之后',
-    draftWaiting: '在你做出选择之前，三张卡都会保留。',
-    draftOnField: '场上已有',
-    draftNewType: '场上还没有',
-    mergeReview: '先查看合成结果，再确认或取消。取消会保留双方。',
-    lostOnReplace: '被移除的塔',
-    chooseEmpty: '空位可以直接放置。',
-    heroStays: '英雄会留在场上。',
-    cancelPick: '返回',
-    noValidTarget: '这座塔目前没有合法的合成对象。',
-    moveHint: '选择目的地。占用的格子会交换位置。',
-    mergeHint: '选择一座同阶塔。确认前会显示合成结果。',
-    sourceHint: '选择要移动的防守单位。',
-    mergeSourceHint: '选择第一座塔。英雄不能作为合成材料。',
-    attacks: '攻击',
-    duration: '持续',
-    reduction: '减速',
-    buildPanelLabel: '构筑、选拔与合成',
-    kindTower: '塔',
-    kindHybrid: '混合',
-    kindUpgrade: '英雄升级',
-    slotLabel: '格子',
-  },
-};
-
-const REASONS = {
-  en: {
-    hero: 'The hero stays independent and is not a merge ingredient.',
-    hero_protected: 'The hero stays independent and is not a merge ingredient.',
-    heroProtected: 'The hero stays independent and is not a merge ingredient.',
-    same: 'Choose two different slots.',
-    same_slot: 'Choose two different slots.',
-    empty: 'That slot is empty.',
-    not_planning: 'You cannot move or merge right now.',
-    planning: 'You can move or merge while the fight is running.',
-    phase: 'Move and merge while the fight is running. Pause and an open draft still allow it.',
-    rank: 'Both units need the same rank.',
-    rank_mismatch: 'Both units need the same rank.',
-    max_rank: 'Rank 4 does not rank up. A different rank-4 base tower can still form a hybrid.',
-    capped: 'That upgrade is already at its cap.',
-    no_recipe: 'This pair has no hybrid recipe.',
-    recipe: 'This pair has no hybrid recipe.',
-    hybrid: 'A hybrid merges only with the same hybrid at the same rank.',
-    hybrid_mix: 'A hybrid merges only with the same hybrid at the same rank.',
-    different: 'These types have no combination.',
-    invalid: 'These units cannot merge.',
-    invalidMerge: 'These units cannot merge.',
-    full: 'Every slot is full. Replace a tower, or merge two towers.',
-    fullBoard: 'Every slot is full. Replace a tower, or merge two towers.',
-    occupied: 'That slot already holds a defender.',
-  },
-  zh: {
-    hero: '英雄保持独立，不能作为合成材料。',
-    hero_protected: '英雄保持独立，不能作为合成材料。',
-    heroProtected: '英雄保持独立，不能作为合成材料。',
-    same: '请选择两个不同的格子。',
-    same_slot: '请选择两个不同的格子。',
-    empty: '这个格子是空的。',
-    not_planning: '现在不能移动或合成。',
-    planning: '战斗进行中可以移动或合成。',
-    phase: '战斗进行中可以移动和合成。暂停和整备打开时也可以。',
-    rank: '双方阶数需要相同。',
-    rank_mismatch: '双方阶数需要相同。',
-    max_rank: '4 阶不能再升阶。另一座 4 阶的不同基础塔仍可混合。',
-    capped: '这项升级已经到达上限。',
-    no_recipe: '这一对没有混合配方。',
-    recipe: '这一对没有混合配方。',
-    hybrid: '混合单位只能与相同的混合单位在同阶合成。',
-    hybrid_mix: '混合单位只能与相同的混合单位在同阶合成。',
-    different: '这两种类型不能组合。',
-    invalid: '这些单位不能合成。',
-    invalidMerge: '这些单位不能合成。',
-    full: '栏位已满。可以替换一座塔，或先合成两座塔。',
-    fullBoard: '栏位已满。可以替换一座塔，或先合成两座塔。',
-    occupied: '这个格子已经有防守单位。',
-  },
-};
-
-const MECHANICS = {
-  en: {
-    splash: 'Hits enemies around the impact.',
-    chain: 'Jumps to another enemy in chain range.',
-    pierce: 'Continues through additional enemies.',
-    burn: 'Applies burning damage over time.',
-    slow: 'Lowers enemy move speed for a short time.',
-    poison: 'Stacks poison damage over time.',
-    aura: 'Buffs defenders inside the aura circle.',
-    support: 'Buffs nearby defenders and still uses geometric range.',
-    stun: 'Can stop an enemy briefly.',
-    brittle: 'Marked enemies take extra damage.',
-    frost: 'Chills and slows enemies in range.',
-    lightning: 'Chains a strike between enemies.',
-    execute: 'Deals heavier damage to weakened enemies.',
-  },
-  zh: {
-    splash: '命中点周围的敌人也会受伤。',
-    chain: '会跳到连锁范围内的另一个敌人。',
-    pierce: '可以继续打穿后面的敌人。',
-    burn: '附加持续燃烧伤害。',
-    slow: '短时间内降低敌人移速。',
-    poison: '叠加持续毒素伤害。',
-    aura: '强化光环圆内的防守单位。',
-    support: '强化附近防守单位，攻击仍按几何距离判定。',
-    stun: '可以短暂停住敌人。',
-    brittle: '被标记的敌人会受到额外伤害。',
-    frost: '减速范围内的敌人。',
-    lightning: '在敌人之间连锁电击。',
-    execute: '对残血敌人造成更重的伤害。',
-  },
-};
 
 const ephemeral = {
   runId: '',
@@ -556,7 +276,7 @@ function readUI(api) {
     if (!ui || typeof ui !== 'object') return empty;
     return {
       screen: typeof ui.screen === 'string' ? ui.screen : '',
-      selectedSlot: pickIndex(ui.selectedSlot),
+      selectedSlot: pickIndex(ui.selectedSlot),selectedField:pickIndex(ui.selectedField),replaceIndex:pickIndex(ui.replaceIndex),
       mergeFrom: pickIndex(ui.mergeFrom),
       mergePreview: ui.mergePreview ?? null,
       message: ui.message ?? '',
@@ -584,27 +304,9 @@ function reducedMotion(state, api) {
   }
 }
 
-function makeT(api, lang) {
-  const table = EXTRA[lang] || EXTRA.en;
-  return (key, vars) => {
-    let value = '';
-    try {
-      if (typeof api?.t === 'function') value = api.t(key, vars);
-    } catch {
-      value = '';
-    }
-    if (typeof value !== 'string' || value === '' || value === key) {
-      let fallback = table[key] ?? EXTRA.en[key] ?? '';
-      if (!fallback) return typeof value === 'string' && value !== '' ? value : String(key);
-      if (vars && typeof vars === 'object') {
-        fallback = fallback.replace(/\{(\w+)\}/g, (_, name) => (vars[name] != null ? String(vars[name]) : `{${name}}`));
-      }
-      return fallback;
-    }
-    return value;
-  };
+function makeT(api,lang) {
+  return (key,vars)=>{const value=api?.t?.(key,vars); return value && value!==key ? value : translate(lang,key,vars);};
 }
-
 function localizeSafe(value, lang) {
   if (value == null) return '';
   if (typeof value === 'string') return value;
@@ -650,10 +352,9 @@ function reasonText(reason, lang, tr) {
   if (reason == null || reason === '') return tr('invalidMerge');
   if (typeof reason === 'object') return localizeSafe(reason, lang) || tr('invalidMerge');
   const code = String(reason);
-  const table = REASONS[lang] || REASONS.en;
-  const normalized = code.replace(/[\s-]+/g, '_');
-  if (table[code]) return table[code];
-  if (table[normalized]) return table[normalized];
+  const normalized=code.replace(/[\s-]+/g,'_');
+  const label=translate(lang,normalized);
+  if (label!==normalized) return label;
   if (code.includes(' ')) return code;
   const translated = tr(code);
   if (translated && translated !== code) return translated;
@@ -941,17 +642,40 @@ function mechanicText(item, lang) {
   }
   const id = String(item ?? '').trim();
   if (!id) return '';
-  const table = MECHANICS[lang] || MECHANICS.en;
-  return table[id] || table[id.replace(/[\s-]+/g, '_')] || id.replace(/[_-]+/g, ' ');
+  return translate(lang,id);
 }
 
-function describeStats(stats, lang, tr) {
+function isHarvestUnit(unit, stats) {
+  if (unit?.type === 'harvest') return true;
+  if (!unit && stats && Number(stats.damage) === 0 && Number(stats.range) === 0 && !stats.aura && Number(stats.interval) >= 3) return true;
+  return false;
+}
+
+function harvestCrop(unit) {
+  const rank = Math.max(1, Math.min(HARVEST.length, Number(unit?.rank) || 1));
+  return HARVEST[rank - 1];
+}
+
+function describeStats(stats, lang, tr, unit = null) {
   const rows = [];
   const specials = [];
   const push = (id, label, value) => {
     if (value == null || value === '' || value === '—') return;
     rows.push({ id, label, value: String(value) });
   };
+  if (isHarvestUnit(unit, stats)) {
+    const crop = harvestCrop(unit);
+    const sec = lang === 'zh' ? ' 秒' : 's';
+    push('stat-energy', tr('energy'), `+${fmtNum(crop.energy, lang)} / ${fmtNum(crop.interval, lang)}${sec}`);
+    push('stat-xp', tr('xp'), `+${fmtNum(crop.xp, lang)} / ${fmtNum(crop.interval, lang)}${sec}`);
+    push('stat-rear', lang === 'zh' ? '后排加成' : 'Rear row bonus', '+30%');
+    if (crop.repair > 0) {
+      const repairLabel = lang === 'zh' ? '工事修复' : 'Field repair';
+      push('stat-repair', repairLabel, `+${fmtNum(crop.repair, lang)} HP`);
+      specials.push(`${repairLabel} +${fmtNum(crop.repair, lang)}`);
+    }
+    return { rows, specials };
+  }
   if (!stats || typeof stats !== 'object') return { rows, specials };
   if (finite(stats.damage)) {
     const amount = fmtNum(stats.damage, lang);
@@ -973,7 +697,7 @@ function describeStats(stats, lang, tr) {
     push('stat-crit', tr('crit'), `${chanceText}${multiplier}`);
   }
   if (finite(stats.projectileSpeed) && Number(stats.projectileSpeed) > 0) {
-    push('stat-projectile', tr('projectile'), `${fmtNum(stats.projectileSpeed, lang)} px/s`);
+    push('stat-projectile', tr('projectileSpeed'), `${fmtNum(stats.projectileSpeed, lang)} px/s`);
   }
   if (finite(stats.splash) && Number(stats.splash) > 0) {
     const amount = fmtNum(stats.splash, lang);
@@ -1024,11 +748,11 @@ function describeStats(stats, lang, tr) {
   return { rows, specials };
 }
 
-function effectLinesFromStats(stats, lang, tr) {
+function effectLinesFromStats(stats, lang, tr, unit = null) {
   if (!stats) return [tr('statsUnavailable')];
-  const { rows, specials } = describeStats(stats, lang, tr);
+  const { rows, specials } = describeStats(stats, lang, tr, unit);
   const lines = [];
-  for (const id of ['stat-damage', 'stat-attackSpeed', 'stat-range', 'stat-crit']) {
+  for (const id of ['stat-energy', 'stat-xp', 'stat-rear', 'stat-damage', 'stat-attackSpeed', 'stat-range', 'stat-crit']) {
     const row = rows.find((item) => item.id === id);
     if (row) lines.push(`${row.label} ${row.value}`);
   }
@@ -1045,8 +769,8 @@ function effectLinesFromStats(stats, lang, tr) {
   return lines.length ? lines : [tr('statsUnavailable')];
 }
 
-function statList(stats, lang, tr, testid = 'unit-stats') {
-  const { rows } = describeStats(stats, lang, tr);
+function statList(stats, lang, tr, testid = 'unit-stats', unit = null) {
+  const { rows } = describeStats(stats, lang, tr, unit);
   const list = el('ul', { class: 'ff-stats', 'data-testid': testid });
   const prefix = testid === 'unit-stats' ? '' : `${testid}-`;
   if (!rows.length) {
@@ -1112,7 +836,7 @@ function effectObjectLines(record, lang, tr) {
     haste: 'haste',
     critChance: 'crit',
     critMultiplier: 'crit',
-    projectileSpeed: 'projectile',
+    projectileSpeed: 'projectileSpeed',
     splash: 'splash',
     chain: 'chain',
     pierce: 'pierce',
@@ -1711,7 +1435,14 @@ function roleSegment(role, signature) {
   return role;
 }
 
-function signatureLine(stats, lang, tr) {
+function signatureLine(stats, lang, tr, unit = null) {
+  if (isHarvestUnit(unit, stats)) {
+    const crop = harvestCrop(unit);
+    const repairBit = crop.repair > 0 ? (lang === 'zh' ? ` · 修工事 +${fmtNum(crop.repair, lang)}` : ` · Repair +${fmtNum(crop.repair, lang)}`) : '';
+    return lang === 'zh'
+      ? `产辉光 +${fmtNum(crop.energy, lang)} · 经验 +${fmtNum(crop.xp, lang)} / ${fmtNum(crop.interval, lang)}秒${repairBit}`
+      : `+${fmtNum(crop.energy, lang)} Energy · +${fmtNum(crop.xp, lang)} XP / ${fmtNum(crop.interval, lang)}s${repairBit}`;
+  }
   if (!stats) return lang === 'zh' ? '单体射击' : 'Single-target shot';
   if (stats.burn && typeof stats.burn === 'object') {
     const dps = fmtNum(Number(stats.burn.dps ?? stats.burn.damage), lang);
@@ -1752,8 +1483,9 @@ function signatureLine(stats, lang, tr) {
   return lang === 'zh' ? '单体射击' : 'Single-target shot';
 }
 
-function unitLead(stats, lang, tr) {
-  const signature = signatureLine(stats, lang, tr);
+function unitLead(stats, lang, tr, unit = null) {
+  const signature = signatureLine(stats, lang, tr, unit);
+  if (isHarvestUnit(unit, stats)) return signature;
   const reach = finite(stats?.range) ? `${tr('range')} ${fmtNum(stats.range, lang)}` : '';
   return [signature, reach].filter(Boolean).join(' · ');
 }
@@ -1761,6 +1493,10 @@ function unitLead(stats, lang, tr) {
 function heroEffectLine(record, lang, tr) {
   const effect = record?.effect;
   if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
+  if (effect.multishot) return tr('multishot')+' +'+effect.multishot;
+  if (effect.burn) return tr('burn')+' '+effect.burn.dps+'/'+(lang==='zh'?'秒':'s');
+  if (effect.brittle) return tr('brittle')+' +'+Math.round(100*effect.brittle.power)+'%';
+  if (effect.fence) return tr('fenceBonus')+' +'+effect.fence;
   if (finite(effect.damageAdd) && Number(effect.damageAdd) !== 0) {
     return `${tr('damage')} +${fmtNum(effect.damageAdd, lang)}`;
   }
@@ -1817,7 +1553,20 @@ function compactOffer(state, option, lang, tr) {
     ? option.unit
     : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
   const stats = safeStats(preview, state);
-  const signature = signatureLine(stats, lang, tr);
+  if (isHarvestUnit(preview, stats)) {
+    const crop = harvestCrop(preview);
+    const rear = lang === 'zh' ? '后排 +30%' : 'Rear +30%';
+    const yieldText = lang === 'zh'
+      ? `+${fmtNum(crop.energy, lang)}辉光/+${fmtNum(crop.xp, lang)}经验`
+      : `+${fmtNum(crop.energy, lang)} Energy / +${fmtNum(crop.xp, lang)} XP`;
+    const blurb = fitChoice([
+      { text: option?.replace ? tr('replace') : '', optional: false },
+      { text: yieldText, optional: false },
+      { text: rear, optional: true, drop: 1 },
+    ], max);
+    return { blurb, stats: [] };
+  }
+  const signature = signatureLine(stats, lang, tr, preview);
   const role = roleSegment(towerRole(option?.type || preview.type, lang), signature);
   const aura = stats?.aura && typeof stats.aura === 'object';
   const amount = fmtNum(stats.damage, lang);
@@ -1935,11 +1684,12 @@ const ROLE_CUES = {
   lightning: { glyph: '↯', color: '#f4e27a', en: 'Chain', zh: '连锁' },
   poison: { glyph: '●', color: '#7dce6a', en: 'Stack', zh: '叠毒' },
   support: { glyph: '✚', color: '#8fd0c6', en: 'Aura', zh: '光环' },
+  harvest: { glyph: '☀', color: '#f5cc58', en: 'Eco', zh: '经济' },
 };
 
 const METER_CAPTION = {
-  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox' },
-  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒' },
+  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco' },
+  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光' },
 };
 
 function fillPct(part, whole) {
@@ -1957,6 +1707,12 @@ function threeBars(damage, speed, range) {
 
 function towerPowerBars(state, option) {
   const rank = Number.isInteger(Number(option?.rank)) && option.rank >= 1 && option.rank <= 4 ? Number(option.rank) : 1;
+  if (option?.type === 'harvest') {
+    return [
+      { key: 'energy', fill: Math.min(100, 32 + rank * 17) },
+      { key: 'speed', fill: Math.min(100, 48 + rank * 12) },
+    ];
+  }
   const preview = option?.unit && typeof option.unit === 'object'
     ? option.unit
     : { id: `preview-${option?.type || 'tower'}`, kind: option?.kind || 'tower', type: option?.type, rank, upgrades: {}, cooldown: 0, kills: 0 };
@@ -1965,7 +1721,7 @@ function towerPowerBars(state, option) {
   return threeBars(
     fillPct(Number(stats.damage) || 0, 12),
     fillPct(interval > 0 ? 1 / interval : 0, 1.6),
-    fillPct(Number(stats.range) || 0, 280),
+    fillPct(Number(stats.range) || 0, 330),
   );
 }
 
@@ -1983,7 +1739,7 @@ function heroPowerBars(option) {
   if (effect.critChance) return [{ key: 'crit', fill: strong }];
   if (effect.critMultiplier) return [{ key: 'critDamage', fill: strong }];
   if (Number(effect.pierce) > 0) return [{ key: 'pierce', fill: strong }];
-  if (effect.poison) return [{ key: 'poison', fill: strong }];
+  for (const key of ['multishot','burn','brittle','fence']) if (effect[key]) return [{key,fill:strong}];
   return [{ key: 'damage', fill: strong }];
 }
 
@@ -1994,7 +1750,7 @@ function powerBars(state, option) {
 
 function meterCaption(key, lang) {
   const table = lang === 'zh' ? METER_CAPTION.zh : METER_CAPTION.en;
-  return table[key] || '';
+  return table[key] || translate(lang,key);
 }
 
 function renderMeter(state, option, lang, index) {
@@ -2026,10 +1782,10 @@ function heroMarkLabel(effect, lang) {
   else if (effect.critMultiplier) key = 'critDamage';
   else if (Number(effect.pierce) > 0) key = 'pierce';
   else if (effect.poison) key = 'poison';
-  const labels = lang === 'zh'
-    ? { damage: '伤害', speed: '攻速', range: '射程', crit: '暴击', critDamage: '暴伤', pierce: '穿透', poison: '毒素' }
-    : { damage: 'Damage', speed: 'Speed', range: 'Range', crit: 'Crit', critDamage: 'Crit×', pierce: 'Pierce', poison: 'Poison' };
-  return labels[key] || '';
+  if (!key) key=['multishot','burn','brittle','fence'].find(k=>effect[k]);
+  if (!key) return '';
+  const badge='badge.'+key, value=translate(lang,badge);
+  return value===badge?translate(lang,key):value;
 }
 
 function heroStatCue(option, lang) {
@@ -2075,7 +1831,19 @@ function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
   const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
-  section.append(title);
+  const fee = rerollCost(state);
+  const energyNow = Number.isFinite(Number(state.energy)) ? Math.floor(Number(state.energy)) : 0;
+  const rerollsUsed = Number(state.draftRerollsUsed) || 0;
+  const head = el('div', { class: 'ff-draft-head' });
+  head.append(title);
+  head.append(button({
+    class: 'ff-reroll-btn',
+    'data-action': 'rerollDraft',
+    'data-testid': 'reroll-draft',
+    disabled: rerollsUsed >= 3 || energyNow < fee,
+    text: tr('reroll') + ' · ' + (fee || tr('free')) + ' / ' + energyNow + ' ' + tr('energy'),
+  }));
+  section.append(head);
   section.setAttribute('aria-labelledby', titleId);
   section.append(el('p', { class: 'muted ff-draft-hint', 'data-testid': 'draft-hint', text: draftIntro(lang) }));
   const threat = bilingualHint(state?.director?.playerHint, lang);
@@ -2104,6 +1872,7 @@ function renderDraft(state, lang, tr, idSuffix) {
     const spoken = field ? `${name}. ${field.text}. ${described}` : `${name}. ${described}`;
     const card = button({
       class: 'card ff-choice',
+      style: `--choice-accent:${mark.color}`,
       'data-action': 'chooseDraft',
       'data-index': String(index),
       'data-kind': option?.kind || '',
@@ -2126,9 +1895,10 @@ function renderDraft(state, lang, tr, idSuffix) {
     if (mark.label) markNode.append(el('small', { text: mark.label }));
     card.append(markNode, renderMeter(state, option, lang, index));
     const copy = el('span', { class: 'ff-choice-copy' });
-    copy.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
+    const top = el('span', { class: 'ff-choice-top' });
+    top.append(el('h3', { 'data-testid': `draft-choice-${index}-name`, text: name }));
     if (field) {
-      copy.append(el('p', {
+      top.append(el('p', {
         class: `badge ff-field ${field.onField ? 'is-owned' : 'is-new'}`,
         'data-testid': `draft-choice-${index}-field`,
         'data-on-field': field.onField ? 'true' : 'false',
@@ -2136,6 +1906,7 @@ function renderDraft(state, lang, tr, idSuffix) {
         text: field.text,
       }));
     }
+    copy.append(top);
     copy.append(el('p', { id: effectId, class: 'ff-blurb', 'data-testid': `draft-choice-${index}-effect`, text: offer.blurb }));
     if (statText) {
       copy.append(el('p', { class: 'ff-statline', 'data-testid': `draft-choice-${index}-stats`, text: statText }));
@@ -2150,7 +1921,7 @@ function renderDraft(state, lang, tr, idSuffix) {
 function placingTitle(state, unit, lang, tr) {
   if (!unit) return el('h2', { class: 'ff-title', text: tr('chooseSlot') });
   const name = unitLabel(unit, lang, tr);
-  const signature = signatureLine(safeStats(unit, state), lang, tr);
+  const signature = signatureLine(safeStats(unit, state), lang, tr, unit);
   const title = el('h2', {
     class: 'ff-title ff-place-title',
     'data-testid': 'placing-title',
@@ -2161,12 +1932,12 @@ function placingTitle(state, unit, lang, tr) {
   return title;
 }
 
-function renderPlacing(state, lang, tr) {
+function renderPlacing(state, lang, tr, activeReplaceIndex = -1) {
   const section = el('section', { 'data-testid': 'build-placing' });
   const pending = state.pendingUnit;
   const unit = pending?.unit;
-  section.append(placingTitle(state, unit, lang, tr));
   if (!unit) {
+    section.append(placingTitle(state, unit, lang, tr));
     section.append(el('p', { text: tr('loading') }));
     section.append(button({
       'data-action': 'cancelPlacement',
@@ -2175,95 +1946,84 @@ function renderPlacing(state, lang, tr) {
     }));
     return section;
   }
-  const allowReplace = pending.replace === true || emptySlots(state).length === 0;
-  // Slot buttons and cancel stay above the long description.
-  if (ephemeral.replaceIndex >= 0) {
-    const actions = el('div', { class: 'ff-actions' });
-    actions.append(button({
+  const bar = el('div', { class: 'ff-place-bar' });
+  const info = el('div', { class: 'ff-place-info' });
+  info.append(placingTitle(state, unit, lang, tr));
+  info.append(el('span', { class: 'muted', text: tr('chooseSlot') }));
+  bar.append(info);
+  const index = state.pendingUnit.replace ? activeReplaceIndex : -1;
+  if (index >= 0) {
+    bar.append(button({
       primary: true,
       'data-action': 'place',
-      'data-index': String(ephemeral.replaceIndex),
+      'data-index': String(index),
       'data-replace': 'true',
       'data-testid': 'replace-confirm',
-      text: tr('replaceConfirm'),
+      text: tr('replaceConfirm') + ' · ' + unitLabel(state.slots[index].unit, lang, tr),
     }));
-    actions.append(button({
-      'data-intent': 'cancel-replace',
-      'data-testid': 'replace-cancel',
-      text: tr('cancel'),
-    }));
-    section.append(actions);
-  } else {
-    const list = el('div', { class: 'grid ff-slots ff-place-row', 'data-testid': 'place-grid' });
-    for (let index = 0; index < 10; index += 1) {
-      const slot = slotAt(state, index) || { index, unit: null };
-      const occupant = slot.unit;
-      if (!occupant) {
-        list.append(button({
-          class: 'slot-btn empty-slot',
-          primary: true,
-          'data-action': 'place',
-          'data-index': String(index),
-          'data-replace': 'false',
-          'data-testid': `place-slot-${index}`,
-          'aria-label': `${tr('place')} ${slotCaption(slot, tr)}`,
-          'data-row': slotRow(slot) ? 'rear' : 'front',
-        }, el('small', { text: String(index + 1) }), el('small', { text: tr('place') }), el('small', { text: slotRowName(slot, tr) })));
-        continue;
-      }
-      if (isHero(occupant) || !allowReplace) {
-        const blockedName = unitLabel(occupant, lang, tr);
-        const blockedKey = isHero(occupant) ? 'heroProtected' : 'slotOccupied';
-        const blockedReason = tr(blockedKey);
-        const shortReason = (EXTRA[lang] || EXTRA.en)[blockedKey] || blockedReason;
-        list.append(el('div', {
-          class: isHero(occupant) ? 'ff-note is-hero' : 'ff-note',
-          'data-testid': `place-blocked-${index}`,
-          role: 'note',
-          title: `${blockedName}. ${blockedReason}`,
-        }, el('small', { text: blockedName }), el('small', { text: shortReason })));
-        continue;
-      }
-      list.append(button({
-        class: 'slot-btn occupied-slot',
-        'data-intent': 'arm-replace',
-        'data-index': String(index),
-        'data-testid': `replace-slot-${index}`,
-        'data-focus': 'replace-confirm',
-        'aria-label': `${tr('replace')} ${unitLabel(occupant, lang, tr)}`,
-      }, el('small', { text: tr('replace') }), el('small', { text: unitLabel(occupant, lang, tr) })));
-    }
-    section.append(list);
   }
-  section.append(button({
+  bar.append(button({
     'data-action': 'cancelPlacement',
     'data-testid': 'cancel-placement',
     text: tr('cancelPlacement'),
   }));
-  const body = el('div', { class: 'ff-place-body' });
-  body.append(el('article', { class: 'card', 'data-testid': 'placing-unit' },
-    el('span', { class: 'badge', text: pending.replace ? tr('replace') : tr('kindTower') }),
-    el('h3', { 'data-testid': 'pending-name', text: unitLabel(unit, lang, tr) }),
-    unitDescription(unit, lang) ? el('p', { class: 'muted', text: unitDescription(unit, lang) }) : null,
-    el('p', { class: 'ff-pips', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank || 1)}` }),
-    statList(safeStats(unit, state), lang, tr, 'pending-stats'),
-  ));
-  if (ephemeral.replaceIndex >= 0) {
-    const target = slotUnit(state, ephemeral.replaceIndex);
-    const box = el('article', { class: 'card', 'data-testid': 'replace-preview' });
-    box.append(el('h3', { text: tr('replaceConfirm') }));
-    box.append(el('p', { text: tr('confirmReplaceBody') }));
-    box.append(el('p', { 'data-testid': 'replace-target-name', text: `${tr('lostOnReplace')}: ${target ? unitLabel(target, lang, tr) : tr('emptySlot')}` }));
-    box.append(el('p', { class: 'badge hero-lock', text: tr('heroProtected') }));
-    body.append(box);
-  } else if (allowReplace && emptySlots(state).length === 0) {
-    body.append(el('p', { text: tr('fullBoard') }));
-    body.append(el('p', { class: 'muted', text: tr('replaceHeroSafe') }));
-  } else {
-    body.append(el('p', { class: 'muted', text: tr('placeHint') }));
+  section.append(bar);
+  return section;
+}
+
+function fieldUnitRole(kind, lang) {
+  const zh = lang === 'zh';
+  if (kind === 'bulwark') {
+    return zh
+      ? '格挡来袭敌军并承受伤害（15% 减伤），为后排塔群争取输出时间。'
+      : 'Blocks approaching enemies with 15% armor, buying firing time for rear towers.';
   }
-  body.append(el('p', { class: 'muted', text: tr('helpPlacement') }));
-  section.append(body);
+  if (kind === 'spikes') {
+    return zh
+      ? '敌军经过时持续造成穿刺伤害，专门削弱集群与高速突进单位。'
+      : 'Shreds enemies crossing the pad; ideal against swarms and fast runners.';
+  }
+  if (kind === 'flare') {
+    return zh
+      ? '照亮半径 115px 区域，强制显现隐身敌军并阻挡其前进。'
+      : 'Reveals faded enemies within 115 px and blocks incoming movement.';
+  }
+  return '';
+}
+
+function renderFieldInspector(state, ui, lang, tr, popup) {
+  const field = state?.fieldSlots?.[ui.selectedField]?.unit;
+  if (!field) return null;
+  const section = el('section', { class: 'card ff-field-card', 'data-testid': 'field-inspector' });
+  const head = el('div', { class: 'ff-field-head' });
+  head.append(catalogIcon(currentDoc, field.kind));
+  const meta = el('div', { class: 'ff-field-meta' });
+  const maxHp = Math.max(1, Number(field.maxHp) || 1);
+  const hp = Math.max(0, Number(field.hp) || 0);
+  const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+  meta.append(el('h2', { 'data-testid': 'field-name', text: `${tr(field.kind)} · ${Math.ceil(hp)} / ${Math.ceil(maxHp)}` }));
+  const fillClass = pct <= 30 ? 'ff-field-hp-fill is-low' : pct <= 60 ? 'ff-field-hp-fill is-mid' : 'ff-field-hp-fill';
+  meta.append(el('div', { class: 'ff-field-hp-track' }, el('div', { class: fillClass, style: `width:${pct}%` })));
+  head.append(meta);
+  if (popup) {
+    head.append(button({
+      class: 'ff-close-btn',
+      'data-intent': 'dismiss-unit',
+      'data-testid': 'unit-close',
+      text: tr('close'),
+    }));
+  }
+  section.append(head);
+  const roleText = fieldUnitRole(field.kind, lang);
+  if (roleText) section.append(el('p', { class: 'muted', text: roleText }));
+  const refund = Math.floor(fieldCost(state, field.kind) * 0.5 * hp / maxHp);
+  section.append(button({
+    class: 'ff-dismantle-btn',
+    'data-action': 'removeField',
+    'data-index': String(ui.selectedField),
+    'data-testid': 'remove-field',
+    text: `${tr('removeField')} +${refund} ${tr('energy')}`,
+  }));
   return section;
 }
 
@@ -2281,12 +2041,28 @@ function renderDetails(state, ui, lang, tr, options) {
     }
     if (state.hiddenPaused) section.append(el('p', { class: 'muted', text: tr('pausedHidden') }));
   }
-  if (options.popup && slot) {
-    section.append(button({
-      'data-intent': 'dismiss-unit',
-      'data-testid': 'unit-close',
-      text: tr('close'),
-    }));
+  const canTarget = !!(options.showTargeting && unit && unit.type !== 'harvest');
+  const showClose = !!(options.popup && slot);
+  if (canTarget || showClose) {
+    const toolbar = el('div', { class: 'ff-unit-toolbar' });
+    if (canTarget) {
+      toolbar.append(button({
+        class: 'ff-target-btn',
+        'data-action': 'setTargeting',
+        'data-index': String(index),
+        'data-testid': 'unit-targeting',
+        text: `${tr('targeting')} · ${tr(unit.targeting)}`,
+      }));
+    }
+    if (showClose) {
+      toolbar.append(button({
+        class: 'ff-close-btn',
+        'data-intent': 'dismiss-unit',
+        'data-testid': 'unit-close',
+        text: tr('close'),
+      }));
+    }
+    section.append(toolbar);
   }
   if (!slot) {
     section.append(el('h2', { text: tr('select') }));
@@ -2310,16 +2086,18 @@ function renderDetails(state, ui, lang, tr, options) {
     const kind = isHero(unit) ? tr('hero') : (unit.kind === 'hybrid' ? tr('hybrid') : tr('towers'));
     const stats = safeStats(unit, state);
     section.append(el('h2', { 'data-testid': 'unit-name', text: unitLabel(unit, lang, tr) }));
-    const lead = unitLead(stats, lang, tr);
+    const lead = unitLead(stats, lang, tr, unit);
     if (lead) section.append(el('p', { class: 'ff-unit-signature', 'data-testid': 'unit-signature', text: lead }));
     if (leadWithUnit && state.hiddenPaused) {
       section.append(el('p', { class: 'muted', text: tr('pausedHidden') }));
     }
-    section.append(el('p', { class: isHero(unit) ? 'badge hero-lock' : 'badge', 'data-testid': 'unit-type', text: kind }));
+    const badges = el('div', { class: 'ff-unit-badges' });
+    badges.append(el('p', { class: isHero(unit) ? 'badge hero-lock' : 'badge', 'data-testid': 'unit-type', text: kind }));
     if (isHero(unit) && options.heroBadge) {
-      section.append(el('p', { class: 'badge hero-lock', 'data-testid': 'hero-protected', text: tr('heroProtected') }));
+      badges.append(el('p', { class: 'badge hero-lock', 'data-testid': 'hero-protected', text: tr('heroProtected') }));
     }
-    section.append(el('p', { class: 'muted', text: slotCaption(slot, tr) }));
+    badges.append(el('p', { class: 'muted', text: slotCaption(slot, tr) }));
+    section.append(badges);
     if (!isHero(unit)) {
       section.append(el('p', { class: 'ff-pips', 'data-testid': 'unit-rank', text: `${tr('rank')} ${fmtNum(unit.rank || 1, lang)} ${rankPips(unit.rank)}` }));
       if (Number(unit.rank) >= 4) section.append(el('p', { class: 'muted', text: tr('maxRankNote') }));
@@ -2332,7 +2110,7 @@ function renderDetails(state, ui, lang, tr, options) {
       }
     }
     section.append(el('h3', { text: tr('currentStats') }));
-    section.append(statList(stats, lang, tr, 'unit-stats'));
+    section.append(statList(stats, lang, tr, 'unit-stats', unit));
     if (isHero(unit) && options.heroBadge) {
       section.append(el('p', { class: 'muted', 'data-testid': 'hero-note', text: tr('heroNoMerge') }));
     }
@@ -2502,6 +2280,10 @@ function handlePress(container, api, action, intent, control) {
       return;
     }
     payload = { from, to };
+  } else if (action==='setTargeting' || action==='removeField') {
+    payload={index};
+  } else if (action==='rerollDraft') {
+    payload={};
   } else if (action === 'selectSlot') {
     if (!validSlot(index)) return;
     payload = { index };
@@ -2603,20 +2385,30 @@ export function renderBuildPanel(container, state, api) {
   });
   const messages = renderMessages(ui, lang, tr, { omitEssays: role === 'overlay' });
   if (messages) root.append(messages);
-  const inspected = role === 'panel' && validSlot(ui.selectedSlot) && slotAt(state, ui.selectedSlot)?.unit;
+  const field = state.fieldSlots?.[ui.selectedField]?.unit || null;
+  const selected = state.slots[ui.selectedSlot]?.unit || null;
+  const inspected = role === 'panel' && ((validSlot(ui.selectedSlot) && selected) || Boolean(field));
   if (showProgress && state.phase !== 'placing' && !inspected) {
     root.append(el('p', { class: 'muted', 'data-testid': 'xp-progress', text: progressText(state, tr, lang) }));
   }
   if (confirming && modalHere) root.append(renderMergeConfirm(state, ui, lang, tr));
   if (modalKind === 'draft' && includeModal) root.append(renderDraft(state, lang, tr, role || 'main', ui));
-  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr));
-  if (includeDetails) {
+  if (modalKind === 'placing' && includeModal) root.append(renderPlacing(state, lang, tr, ui.replaceIndex));
+  if (includeDetails && !modalHere && field && !selected) {
+    const fieldCard = renderFieldInspector(state, ui, lang, tr, role === 'panel');
+    if (fieldCard) root.append(fieldCard);
+  } else if (includeDetails) {
+    if (!modalHere && field) {
+      const fieldCard = renderFieldInspector(state, ui, lang, tr, false);
+      if (fieldCard) root.append(fieldCard);
+    }
     const draftOwnsHeroNote = modalKind === 'draft' && includeModal;
     root.append(renderDetails(state, ui, lang, tr, {
       actions: actionsHere && !modalHere,
       heroBadge: !draftOwnsHeroNote && isHero(slotUnit(state, ui.selectedSlot)),
       placeSelected: false,
       popup: role === 'panel',
+      showTargeting: !modalHere,
     }));
   }
   if (!root.childNodes.length) {

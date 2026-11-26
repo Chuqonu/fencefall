@@ -1,5 +1,7 @@
 import {ARENA, DIFFICULTIES, canPlan, clone, hitSlot, slotGeometry} from './shared.js';
 import {advance, createProfile, createRun, enterEndless, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
+import {deployFieldUnit, removeFieldUnit} from './systems/field.js';
+import {setTargeting} from './systems/combat.js';
 import * as hero from './systems/hero.js';
 import * as merges from './systems/merges.js';
 import * as drafts from './systems/drafts.js';
@@ -16,42 +18,7 @@ import * as audioMod from './audio.js';
 import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless']);
-
-const TEXT = {
-  en:{
-    title:'Fencefall', subtitle:'最后一道防线', play:'Play', continue:'Continue', restart:'Restart', back:'Back',
-    pause:'Pause', resume:'Resume', speed:'Speed', language:'Language', sound:'Sound', soundOn:'Sound on', soundOff:'Sound off',
-    reducedMotion:'Reduced motion', difficulty:'Difficulty', fence:'Fence', wave:'Wave', xp:'XP', kills:'Kills', time:'Time',
-    currency:'Cores', results:'Results', victory:'Victory', defeat:'Defeat', settings:'Settings', howto:'How to play',
-    armory:'Armory', codex:'Codex', menu:'Menu', abandon:'Abandon', newRun:'New run', rewardMultiplier:'Reward',
-    chooseOneOfThree:'Choose one of three', chooseSlot:'Choose a slot', mergePreview:'Merge preview', mergeConfirm:'Confirm merge',
-    mergeCancel:'Cancel merge', heroProtected:'The hero never merges', notPlanning:'You cannot move or merge right now', unavailable:'Not integrated yet',
-    noSave:'No saved run', settlementPending:'Rewards are not settled until the progression module is present',
-    helpFence:'Enemies advance from above and damage only the fence.', helpDraft:'Each draft offers three towers or hero upgrades.',
-    helpMerge:'Combine equal ranks while the fight is running. The hero stays independent.', helpRange:'A selected defender shows the range it can actually reach.',
-    systems:'Systems online', missing:'Still waiting', exportSave:'Export', importSave:'Import', close:'Close', replace:'Replace',
-    'not-planning':'You cannot move or merge right now', 'no-run':'Start a run first', 'bad-phase':'Not available right now', 'bad-slot':'Choose a defender slot',
-    'bad-speed':'Speed stays at 1, 1.5, 3, or 10', 'emptySlot':'Choose occupied slots', 'replaceConfirm':'Confirm replacement', 'bad-choice':'Choose one of the three cards',
-    'unknown-action':'Unknown action', error:'Something went wrong', 'bad-language':'Language is English or Chinese', 'bad-screen':'Unknown screen', 'importError':'Import failed',
-  },
-  zh:{
-    title:'最后一道防线', subtitle:'Fencefall', play:'开始', continue:'继续', restart:'重新开始', back:'返回',
-    pause:'暂停', resume:'继续游戏', speed:'速度', language:'语言', sound:'声音', soundOn:'声音开', soundOff:'声音关',
-    reducedMotion:'减少动态', difficulty:'难度', fence:'栅栏', wave:'波次', xp:'经验', kills:'击破', time:'时间',
-    currency:'核心', results:'结算', victory:'守住了', defeat:'栅栏倒下', settings:'设置', howto:'玩法',
-    armory:'武备', codex:'图鉴', menu:'主菜单', abandon:'放弃本局', newRun:'新的一局', rewardMultiplier:'奖励',
-    chooseOneOfThree:'三选一', chooseSlot:'选择一个空位', mergePreview:'合成预览', mergeConfirm:'确认合成',
-    mergeCancel:'取消合成', heroProtected:'英雄不能合成', notPlanning:'现在不能移动或合成', unavailable:'这个模块还没接入',
-    noSave:'没有可继续的存档', settlementPending:'进度模块接入前，这一局不会发放奖励',
-    helpFence:'敌人从上方进入，只攻击共同的栅栏。', helpDraft:'每次整备给出三个新塔或英雄强化。',
-    helpMerge:'战斗进行中就可以把同等级单位合成。英雄始终独立。', helpRange:'选中防守单位后，能看到它真正打得到的范围。',
-    systems:'已接入系统', missing:'还在等待', exportSave:'导出', importSave:'导入', close:'关闭', replace:'替换',
-    'not-planning':'现在不能移动或合成', 'no-run':'先开始一局', 'bad-phase':'现在不能这么做', 'bad-slot':'请选择防守格',
-    'bad-speed':'速度只能是 1、1.5、3 或 10', 'emptySlot':'请选择有单位的格子', 'replaceConfirm':'需要确认替换', 'bad-choice':'请选择三张牌中的一张',
-    'unknown-action':'未知操作', error:'出错了', 'bad-language':'语言只能是中文或英文', 'bad-screen':'未知界面', 'importError':'导入失败',
-  },
-};
+export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
 
 const MODULES = {
   hero, merges, drafts, progression, storage, i18n, towers, recipes, waves,
@@ -80,7 +47,7 @@ export async function createController(options = {}) {
   let storedRun = null;
   let audio = null;
   const settledIds = new Set();
-  const ui = {screen:'menu', selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
+  const ui = {screen:'menu', fieldKind:null, selectedField:-1, replaceIndex:-1, selectedSlot:-1, hoverSlot:-1, hoverIntent:'', mergeFrom:-1, mergePreview:null, message:'', exportText:''};
 
   function storageCall(name, args) {
     const fn = modules.storage && modules.storage[name];
@@ -110,6 +77,7 @@ export async function createController(options = {}) {
 
   if (!profile) profile = loadProfile() || createProfile(detectLanguage());
   storedRun = loadStoredRun();
+  if (!storedRun) ui.message=storageCall('legacyRunNotice',[]) || '';
   if (storedRun && storedRun.phase === 'playing') storedRun.paused = true;
 
   function saveProfile() {
@@ -124,7 +92,7 @@ export async function createController(options = {}) {
     const language = profile.settings?.language === 'zh' ? 'zh' : 'en';
     const aliases = {
       'not-planning':'notPlanning', 'bad-slot':'invalidSlot', 'no-run':'noSave', 'bad-choice':'invalidChoice',
-      replaceConfirm:'replaceRequired', not_planning:'notPlanning', hero_protected:'heroProtected', invalid_slot:'invalidSlot',
+      not_planning:'notPlanning', hero_protected:'heroProtected', invalid_slot:'invalidSlot',
       empty_slot:'emptySlot', same_slot:'sameSlot', rank_mismatch:'rankMismatch', rank_cap:'maxRank', no_recipe:'noRecipe',
       hybrid_locked:'hybridMix', invalid_merge:'invalidMerge',
     };
@@ -137,9 +105,7 @@ export async function createController(options = {}) {
         console.error(error);
       }
     }
-    let text = TEXT[language][lookupKey] || TEXT.en[lookupKey] || TEXT[language][key] || TEXT.en[key] || lookupKey;
-    if (vars) for (const [name, replacement] of Object.entries(vars)) text = text.replaceAll(`{${name}}`, String(replacement));
-    return text;
+    return i18n.t(language,lookupKey,vars);
   }
 
   function maybeSettle() {
@@ -178,7 +144,7 @@ export async function createController(options = {}) {
       if (typeof run.expedition === 'string') profile.settings.expedition = run.expedition;
       prepare(run);
       ui.screen = 'battle';
-      ui.selectedSlot = -1;
+      ui.selectedSlot = -1; ui.fieldKind=null; ui.selectedField=-1; ui.replaceIndex=-1;
       ui.mergeFrom = -1;
       ui.mergePreview = null;
       ui.exportText = '';
@@ -276,22 +242,45 @@ export async function createController(options = {}) {
       ui.hoverIntent = ui.hoverSlot >= 0 && (intent === 'empty' || intent === 'merge' || intent === 'illegal') ? intent : '';
       return {ok:true};
     }
+    if (action==='fieldKind') {
+      ui.fieldKind=ui.fieldKind===payload.kind ? null : payload.kind;
+      ui.selectedSlot=-1;
+      ui.selectedField=-1;
+      return {ok:true};
+    }
+    if (action==='inspectField') {
+      ui.selectedField=run?.fieldSlots?.[payload.index]?.unit && ui.selectedField!==payload.index ? payload.index : -1;
+      ui.selectedSlot=-1;
+      return {ok:true};
+    }
+    if (['deployField','removeField','setTargeting','rerollDraft'].includes(action)) {
+      if (!run) return {ok:false,reason:'no-run'};
+      const result=action==='deployField' ? deployFieldUnit(run,payload.kind,payload.index) :
+        action==='removeField' ? removeFieldUnit(run,payload.index) :
+        action==='setTargeting' ? setTargeting(run,payload.index,payload.mode) : drafts.rerollDraft(run);
+      if (result.ok) { ui.fieldKind=null; if(action==='removeField') ui.selectedField=-1; saveRun(); }
+      return result;
+    }
     if (action === 'selectSlot') {
       if (!run) return {ok:false, reason:'no-run'};
       const index = payload.index;
       if (index === -1) {
         ui.selectedSlot = -1;
+        ui.selectedField = -1;
+        ui.fieldKind = null;
         return {ok:true, index:-1};
       }
       if (!integerSlot(index)) return {ok:false, reason:'bad-slot'};
-      if (run.phase === 'placing') return perform('place', {index, replace:payload.replace === true});
-      const previous = ui.selectedSlot;
-      if (previous >= 0 && previous !== index && canRearrange(run)) {
-        const origin = run.slots[previous]?.unit;
-        const target = run.slots[index]?.unit;
-        if (origin && target) return perform('mergePreview', {from:previous, to:index});
-        if (origin || target) return perform('move', {from:previous, to:index});
+      if (run.phase==='placing') {
+        if (run.slots[index].unit && run.pendingUnit?.replace && run.slots[index].unit.kind!=='hero') {
+          ui.replaceIndex=index;
+          return {ok:true};
+        }
+        return perform('place',{index,replace:false});
       }
+      ui.selectedField=-1;
+      ui.fieldKind=null;
+      const previous = ui.selectedSlot;
       ui.selectedSlot = previous === index ? -1 : index;
       return {ok:true, index:ui.selectedSlot};
     }
@@ -352,13 +341,7 @@ export async function createController(options = {}) {
     }
     const preview = resultOf(modules.merges.previewMerge(run, from, to));
     if (!preview.ok) return {...preview, snapped:true};
-    const merged = resultOf(modules.merges.mergeUnits(run, from, to));
-    if (!merged.ok) return {...merged, snapped:true};
-    ui.mergePreview = null;
-    ui.mergeFrom = -1;
-    ui.selectedSlot = to;
-    saveRun();
-    return {...merged, description: preview.description};
+    return previewMerge(from,to);
   }
 
   function chooseDraft(index) {
@@ -381,7 +364,7 @@ export async function createController(options = {}) {
     if (typeof modules.drafts?.placePending !== 'function') return {ok:false, reason:'unavailable'};
     const placed = resultOf(modules.drafts.placePending(run, index, {replace}));
     if (placed.ok) {
-      ui.selectedSlot = index;
+      ui.selectedSlot = -1; ui.replaceIndex=-1;
       saveRun();
     }
     return placed;
@@ -489,7 +472,8 @@ export async function createController(options = {}) {
       ui.screen = run.phase === 'victory' || run.phase === 'defeat' ? 'results' : 'battle';
     }
     ui.mergePreview = null;
-    return {ok:true};
+    if (imported.notice) {run=null; storedRun=null; ui.screen='menu';}
+    return {ok:true,notice:imported.notice};
   }
 
   function act(action, payload = {}) {
@@ -501,7 +485,7 @@ export async function createController(options = {}) {
       outcome = {ok:false, reason:'error'};
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
-    else if (action === 'dragDrop' && outcome.description) {
+    else if ((action === 'dragDrop' || action === 'mergeConfirm') && outcome.description) {
       const lang = profile.settings?.language === 'zh' ? 'zh' : 'en';
       const text = outcome.description[lang] || outcome.description.en;
       ui.message = typeof text === 'string' ? text.trim() : '';
@@ -511,7 +495,7 @@ export async function createController(options = {}) {
       const described = ui.mergePreview?.description;
       ui.message = (described && (described[lang] || described.en)) || '';
     }
-    else ui.message = '';
+    else ui.message = outcome.notice || '';
     return outcome;
   }
 
@@ -521,7 +505,7 @@ export async function createController(options = {}) {
     t:translate,
     act,
     getUI:() => ({
-      screen:ui.screen,
+      screen:ui.screen,fieldKind:ui.fieldKind,selectedField:ui.selectedField,replaceIndex:ui.replaceIndex,
       selectedSlot:ui.selectedSlot,
       hoverSlot:ui.hoverSlot,
       hoverIntent:ui.hoverIntent || '',
@@ -546,307 +530,8 @@ function copyValue(value) {
   try { return clone(value); } catch { return {...value}; }
 }
 
-function statusLine(api, state, language, ready, online) {
-  if (!state) return `${api.t('missing')}: ${online.engine.missing.length}`;
-  return `${api.t('fence')} ${formatNumber(Math.max(0, state.fence.hp), language)}/${formatNumber(state.fence.maxHp, language)} · ${api.t('wave')} ${formatNumber(state.wave, language)} · ${api.t('time')} ${formatNumber(Math.floor(state.time), language)}s`;
-}
-
-function formatNumber(value, language, i18n) {
-  if (typeof i18n?.formatNumber === 'function') {
-    try { return i18n.formatNumber(value, language); } catch { /* use Intl below */ }
-  }
-  try { return new Intl.NumberFormat(language === 'zh' ? 'zh-CN' : 'en-US').format(value); } catch { return String(value); }
-}
-
-function el(tag, className) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  return node;
-}
-
-function button(action, label, extra = {}) {
-  const node = el('button', 'btn');
-  node.type = 'button';
-  node.dataset.action = action;
-  node.dataset.testid = extra.testid || action;
-  node.textContent = label;
-  node.style.minHeight = '44px';
-  node.style.minWidth = '44px';
-  node.style.padding = '8px 12px';
-  node.style.touchAction = 'manipulation';
-  for (const [key, value] of Object.entries(extra)) {
-    if (key === 'testid' || value == null) continue;
-    node.dataset[key] = String(value);
-  }
-  return node;
-}
-
 function clear(node) {
   if (node) node.replaceChildren();
-}
-
-function payloadFrom(node, root) {
-  const action = node.dataset.action;
-  const payload = {};
-  if (node.dataset.difficulty) payload.difficulty = node.dataset.difficulty;
-  if (node.dataset.name) payload.name = node.dataset.name;
-  if (node.dataset.index) payload.index = Number(node.dataset.index);
-  if (node.dataset.from) payload.from = Number(node.dataset.from);
-  if (node.dataset.to) payload.to = Number(node.dataset.to);
-  if (node.dataset.value != null) payload.value = action === 'speed' ? Number(node.dataset.value) : node.dataset.value;
-  if (action === 'importSave') payload.text = root.querySelector('#import-text')?.value || '';
-  return payload;
-}
-
-function fillMenu(container, api) {
-  clear(container);
-  const hud = el('div');
-  hud.style.display = 'flex';
-  hud.style.flexWrap = 'wrap';
-  hud.style.gap = '8px';
-  const panel = el('div');
-  container.append(hud, panel);
-  const view = api.getUI();
-  if (view.screen === 'menu') renderMenu(hud, api);
-  else if (view.screen === 'results') renderResults(hud, panel, api);
-  else renderPage(hud, panel, api, view.screen);
-}
-
-function mountFallback(root, api) {
-  clear(root);
-  const header = el('header');
-  const title = el('h1');
-  const status = el('p');
-  status.id = 'status';
-  const hud = el('div');
-  hud.style.display = 'flex';
-  hud.style.flexWrap = 'wrap';
-  hud.style.gap = '8px';
-  hud.style.margin = '8px 0';
-  const canvas = el('canvas');
-  canvas.width = ARENA.width;
-  canvas.height = ARENA.height;
-  canvas.dataset.testid = 'battlefield';
-  canvas.dataset.role = 'battlefield';
-  canvas.setAttribute('aria-label', 'Fencefall battlefield');
-  canvas.style.display = 'block';
-  canvas.style.width = '100%';
-  canvas.style.maxWidth = '360px';
-  canvas.style.height = 'auto';
-  canvas.style.touchAction = 'none';
-  canvas.style.imageRendering = 'pixelated';
-  const panel = el('div');
-  panel.dataset.ui = 'panel';
-  const overlay = el('div');
-  overlay.dataset.ui = 'overlay';
-  const message = el('p');
-  header.append(title, status);
-  root.append(header, hud, canvas, overlay, panel, message);
-  canvas.addEventListener('pointerdown', event => {
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const point = {x:(event.clientX - rect.left) / rect.width * ARENA.width, y:(event.clientY - rect.top) / rect.height * ARENA.height};
-    const index = hitSlot(point.x, point.y);
-    if (index >= 0) api.act('selectSlot', {index});
-  });
-  return {
-    canvas,
-    render() {
-      const state = api.getState();
-      const profile = api.getProfile();
-      const view = api.getUI();
-      const language = profile.settings.language === 'zh' ? 'zh' : 'en';
-      title.textContent = `${api.t('title')} · ${api.t('subtitle')}`;
-      const online = api.integration();
-      const ready = Object.values(online.engine.present).filter(Boolean).length;
-      status.textContent = statusLine(api, state, language, ready, online);
-      clear(hud);
-      clear(panel);
-      clear(overlay);
-      message.textContent = view.message ? api.t(view.message) : '';
-      if (view.screen === 'menu') renderMenu(hud, api);
-      else if (view.screen === 'battle') renderBattle(hud, overlay, api);
-      else if (view.screen === 'results') renderResults(hud, panel, api);
-      else renderPage(hud, panel, api, view.screen);
-      if (view.exportText) {
-        const box = el('textarea');
-        box.readOnly = true;
-        box.value = view.exportText;
-        box.setAttribute('aria-label', api.t('exportSave'));
-        box.style.width = '100%';
-        box.style.minHeight = '88px';
-        panel.append(box);
-      }
-    },
-  };
-}
-
-function renderMenu(hud, api) {
-  const profile = api.getProfile();
-  for (const id of Object.keys(DIFFICULTIES)) {
-    const node = button('start', `${api.t('play')} · ${labelOf(DIFFICULTIES[id].name, profile, api)} ×${DIFFICULTIES[id].reward}`, {testid:`play-${id}`, difficulty:id});
-    if (profile.settings.difficulty === id) node.setAttribute('aria-pressed', 'true');
-    hud.append(node);
-  }
-  hud.append(button('resume', api.t('continue'), {testid:'continue'}));
-  for (const name of ['armory', 'codex', 'howto', 'settings']) hud.append(button('screen', api.t(name), {testid:name, name}));
-  hud.append(button('language', api.t('language'), {testid:'language', value:profile.settings.language === 'zh' ? 'en' : 'zh'}));
-}
-
-function renderBattle(hud, overlay, api) {
-  const state = api.getState();
-  const profile = api.getProfile();
-  if (!state) return;
-  hud.append(button(state.paused || state.hiddenPaused ? 'resume' : 'pause', api.t(state.paused || state.hiddenPaused ? 'resume' : 'pause'), {testid:'pause'}));
-  for (const speed of [1, 1.5, 3, 10]) {
-    const node = button('speed', `${api.t('speed')} ${speed}`, {testid:`speed-${String(speed).replace('.', '-')}`, value:speed});
-    if (state.speed === speed) node.setAttribute('aria-pressed', 'true');
-    hud.append(node);
-  }
-  hud.append(button('language', profile.settings.language === 'zh' ? 'EN' : '中', {testid:'language', value:profile.settings.language === 'zh' ? 'en' : 'zh'}));
-  hud.append(button('sound', profile.settings.sound ? api.t('soundOn') : api.t('soundOff'), {testid:'sound'}));
-  hud.append(button('screen', api.t('menu'), {testid:'menu', name:'menu'}));
-  hud.append(button('abandon', api.t('abandon'), {testid:'abandon'}));
-  if (state.hiddenPaused) {
-    const note = el('p');
-    note.textContent = api.t('resume');
-    overlay.append(note);
-  }
-  if (state.phase === 'draft' && state.draft?.options) {
-    const heading = el('p');
-    heading.textContent = api.t('chooseOneOfThree');
-    overlay.append(heading);
-    state.draft.options.slice(0, 3).forEach((option, index) => {
-      overlay.append(button('chooseDraft', optionLabel(option, api), {testid:`draft-${index}`, index}));
-    });
-  }
-  if (state.phase === 'placing') {
-    const heading = el('p');
-    heading.textContent = api.t('chooseSlot');
-    overlay.append(heading, button('cancelPlacement', api.t('close'), {testid:'cancelPlacement'}));
-  }
-  if (api.getUI().mergePreview) {
-    const preview = api.getUI().mergePreview;
-    const heading = el('p');
-    const language = api.getProfile().settings.language === 'zh' ? 'zh' : 'en';
-    const described = preview.description && (preview.description[language] || preview.description.en);
-    heading.textContent = described || `${api.t('mergePreview')}: ${api.t(preview.reason || 'invalidMerge')}`;
-    overlay.append(heading, button('mergeConfirm', api.t('mergeConfirm'), {testid:'mergeConfirm', from:api.getUI().mergeFrom, to:api.getUI().selectedSlot}), button('mergeCancel', api.t('mergeCancel'), {testid:'mergeCancel'}));
-  }
-}
-
-function renderResults(hud, panel, api) {
-  const state = api.getState();
-  const profile = api.getProfile();
-  const language = profile.settings.language === 'zh' ? 'zh' : 'en';
-  const outcome = state?.settlement?.result || (state?.phase === 'victory' || state?.phase === 'defeat' ? state.phase : null);
-  const heading = el('h2');
-  heading.textContent = i18n.resultLabel(language, outcome);
-  const detail = el('p');
-  detail.dataset.testid = 'result-story';
-  const paid = state?.settlement && Number.isFinite(state.settlement.currency) ? state.settlement.currency : null;
-  detail.textContent = i18n.resultStory(language, outcome, paid);
-  panel.append(heading, detail);
-  if (outcome === 'defeat') {
-    const offer = progression.nextArmoryBuy(profile);
-    const named = offer ? i18n.armoryNextLine(language, offer) : '';
-    const next = el('p');
-    next.dataset.testid = 'result-next';
-    next.textContent = named || i18n.defeatAdvice(language, state?.settlement?.difficulty || state?.difficulty);
-    panel.append(next);
-  }
-  hud.append(button('restart', api.t('newRun'), {testid:'restart'}), button('screen', api.t('menu'), {name:'menu', testid:'menu'}));
-}
-
-function renderPage(hud, panel, api, screen) {
-  hud.append(button('screen', api.t('back'), {name:'menu', testid:'back'}));
-  const heading = el('h2');
-  heading.textContent = api.t(screen);
-  panel.append(heading);
-  if (screen === 'howto') {
-    for (const key of ['helpFence', 'helpDraft', 'helpMerge', 'helpRange']) {
-      const line = el('p');
-      line.textContent = api.t(key);
-      panel.append(line);
-    }
-  }
-  if (screen === 'settings') {
-    const profile = api.getProfile();
-    panel.append(button('language', api.t('language'), {value:profile.settings.language === 'zh' ? 'en' : 'zh', testid:'language'}));
-    panel.append(button('sound', profile.settings.sound ? api.t('soundOn') : api.t('soundOff'), {testid:'sound'}));
-    panel.append(button('reducedMotion', api.t('reducedMotion'), {testid:'reducedMotion'}));
-    panel.append(button('exportSave', api.t('exportSave'), {testid:'exportSave'}));
-    const field = el('textarea');
-    field.id = 'import-text';
-    field.setAttribute('aria-label', api.t('importSave'));
-    field.style.width = '100%';
-    field.style.minHeight = '88px';
-    panel.append(field, button('importSave', api.t('importSave'), {testid:'importSave'}));
-  }
-  if (screen === 'armory' || screen === 'codex') {
-    const line = el('p');
-    line.textContent = api.t('unavailable');
-    panel.append(line);
-  }
-}
-
-function optionLabel(option, api) {
-  if (!option || typeof option !== 'object') return api.t('chooseOneOfThree');
-  if (option.kind === 'hero_upgrade') return `${api.t('hero')} ${option.upgradeId || ''}`.trim();
-  return `${option.type || option.kind || api.t('towers')}${option.replace ? ' · replace' : ''}`;
-}
-
-function labelOf(value, profile, api) {
-  const language = profile.settings.language === 'zh' ? 'zh' : 'en';
-  if (value && typeof value === 'object') return value[language] || value.en || api.t('difficulty');
-  return api.t(String(value));
-}
-
-function drawPlaceholder(canvas, state, ui) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  if (canvas.width !== ARENA.width) canvas.width = ARENA.width;
-  if (canvas.height !== ARENA.height) canvas.height = ARENA.height;
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = '#122128';
-  ctx.fillRect(0, 0, ARENA.width, ARENA.height);
-  ctx.fillStyle = '#183238';
-  ctx.fillRect(8, 8, ARENA.width - 16, ARENA.fenceY - 16);
-  const ratio = state && state.fence?.maxHp > 0 ? Math.max(0, Math.min(1, state.fence.hp / state.fence.maxHp)) : 1;
-  ctx.fillStyle = ratio > 0.34 ? '#9b7951' : '#8a3e32';
-  ctx.fillRect(0, ARENA.fenceY, ARENA.width, 14);
-  ctx.fillStyle = '#e6d2a8';
-  ctx.fillRect(0, ARENA.fenceY, Math.round(ARENA.width * ratio), 4);
-  const slots = state?.slots || Array.from({length:10}, (_, index) => slotGeometry(index));
-  for (const slot of slots) {
-    ctx.fillStyle = slot.index === ui.selectedSlot ? '#316074' : '#223743';
-    ctx.fillRect(slot.left, slot.top, slot.width, slot.height);
-    ctx.strokeStyle = '#7f9498';
-    ctx.strokeRect(slot.left + 1, slot.top + 1, slot.width - 2, slot.height - 2);
-    if (!slot.unit) continue;
-    const color = slot.unit.kind === 'hero' ? '#f0cb72' : '#d7c09a';
-    ctx.fillStyle = color;
-    ctx.fillRect(slot.x - 8, slot.y - 20, 16, 22);
-    ctx.fillStyle = '#1b2428';
-    ctx.fillRect(slot.x - 5, slot.y - 16, 10, 4);
-  }
-  for (const enemy of state?.enemies || []) {
-    if (!enemy || enemy.dead) continue;
-    const size = Math.max(8, Math.round((enemy.radius || 8) * 2));
-    ctx.fillStyle = '#6e8b74';
-    ctx.fillRect(Math.round(enemy.x - size / 2), Math.round(enemy.y - size / 2), size, size);
-  }
-  for (const shot of state?.projectiles || []) {
-    if (!shot) continue;
-    ctx.fillStyle = shot.crit ? '#fff4c2' : '#f0cb72';
-    ctx.fillRect(Math.round(shot.x) - 2, Math.round(shot.y) - 2, 4, 4);
-  }
-}
-
-function clientPoint(canvas, renderer, clientX, clientY) {
-  if (renderer && typeof renderer.pointFromClient === 'function') return renderer.pointFromClient(clientX, clientY);
-  const rect = canvas.getBoundingClientRect();
-  return {x:(clientX - rect.left) / (rect.width || 1) * ARENA.width, y:(clientY - rect.top) / (rect.height || 1) * ARENA.height};
 }
 
 function mountShell(root, api, modules) {
@@ -867,7 +552,8 @@ async function mount() {
   const api = await createController();
   const modules = MODULES;
   const shell = mountShell(root, api, modules);
-  const canvas = shell?.canvas || root.querySelector('canvas');
+  if (!shell) return;
+  const canvas=shell.canvas;
   let renderer = null;
   if (canvas && typeof modules.renderer?.createRenderer === 'function') {
     try { renderer = modules.renderer.createRenderer(canvas); renderer.resize?.(); } catch (error) { console.error(error); renderer = null; }
@@ -875,21 +561,20 @@ async function mount() {
   if (typeof modules.audio?.createAudio === 'function') {
     try { api.setAudio(modules.audio.createAudio()); } catch (error) { console.error(error); }
   }
-  const fallback = shell ? null : mountFallback(root, api);
-  const activeCanvas = fallback?.canvas || canvas;
+
   let last = performance.now();
   let seen = '';
   const draw = () => {
     const state = api.getState();
     const view = api.getUI();
     if (renderer && state) {
-      renderer.draw(state, {selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
-    } else if (activeCanvas) drawPlaceholder(activeCanvas, state, view);
+      renderer.draw(state, {fieldKind:view.fieldKind, selectedField:view.selectedField, selectedSlot:view.selectedSlot, hoverSlot:view.hoverSlot, hoverIntent:view.hoverIntent, settings:{reducedMotion:api.getProfile().settings.reducedMotion === true}, range:true});
+    }
   };
   const refresh = () => {
     const view = api.getUI();
     const state = api.getState();
-    const mark = [view.screen, view.selectedSlot, view.mergeFrom, view.message, view.exportText.length, state?.phase, state?.paused, state?.hiddenPaused, state?.speed, state?.draftLevel, state?.draft?.options?.map(option => option.id).join(',') || '', state?.pendingUnit ? 1 : 0, api.getProfile().settings.language, api.getProfile().settings.sound, api.getProfile().settings.reducedMotion, api.getProfile().currency].join('|');
+    const mark = [view.screen, view.fieldKind,view.selectedField,view.replaceIndex,state?.slots?.[view.selectedSlot]?.unit?.targeting,Math.ceil(state?.fieldSlots?.[view.selectedField]?.unit?.hp||0),state?.draftRerollsUsed,view.selectedSlot, view.mergeFrom, view.message, view.exportText.length, state?.phase, state?.paused, state?.hiddenPaused, state?.speed, state?.draftLevel, state?.draft?.options?.map(option => option.id).join(',') || '', state?.pendingUnit ? 1 : 0, api.getProfile().settings.language, api.getProfile().settings.sound, api.getProfile().settings.reducedMotion, api.getProfile().currency].join('|');
     if (mark === seen) return;
     seen = mark;
     try {
@@ -905,9 +590,9 @@ async function mount() {
         }
         if (view.screen !== 'battle' && typeof modules.meta?.renderMetaPanel === 'function') {
           modules.meta.renderMetaPanel(shell.menuRoot || shell.panelRoot, view.screen, stateNow, api.getProfile(), api);
-        } else if (view.screen !== 'battle') fillMenu(shell.menuRoot, api);
+        }
         else clear(shell.menuRoot);
-      } else fallback.render();
+      }
     } catch (error) {
       console.error('[fencefall] ui render failed', error);
     }
@@ -919,39 +604,6 @@ async function mount() {
     last = performance.now();
     refresh();
   });
-  if (shell?.menuRoot) {
-    shell.menuRoot.addEventListener('click', event => {
-      const node = event.target.closest('[data-action]');
-      if (!node || !shell.menuRoot.contains(node)) return;
-      api.act(node.dataset.action, payloadFrom(node, root));
-      refresh();
-    });
-  }
-  if (!shell) {
-    document.addEventListener('keydown', event => {
-      const tag = event.target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) return;
-      if (event.code === 'Space') {
-        event.preventDefault();
-        const state = api.getState();
-        api.act(state?.paused || state?.hiddenPaused ? 'resume' : 'pause');
-      } else if (event.key === '1') api.act('speed', {value:1});
-      else if (event.key === '2') api.act('speed', {value:1.5});
-      else if (event.key === '3') api.act('speed', {value:3});
-      else if (event.key === '4') api.act('speed', {value:10});
-      else if (event.key === 'Escape') {
-        if (api.getUI().mergePreview) api.act('mergeCancel');
-        else api.act('cancelPlacement');
-      }
-      refresh();
-    });
-    root.addEventListener('click', event => {
-      const node = event.target.closest('[data-action]');
-      if (!node || !root.contains(node)) return;
-      api.act(node.dataset.action, payloadFrom(node, root));
-      refresh();
-    });
-  }
   const frame = now => {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
@@ -971,15 +623,6 @@ async function mount() {
     }
     try { draw(); } catch (error) { console.error(error); }
     try { shell?.render?.(); } catch (error) { console.error(error); }
-    const statusNode = root.querySelector('#status');
-    if (statusNode && !shell) {
-      const live = api.getState();
-      const profile = api.getProfile();
-      const language = profile.settings.language === 'zh' ? 'zh' : 'en';
-      const online = api.integration();
-      const ready = Object.values(online.engine.present).filter(Boolean).length;
-      statusNode.textContent = statusLine(api, live, language, ready, online);
-    }
     refresh();
     requestAnimationFrame(frame);
   };

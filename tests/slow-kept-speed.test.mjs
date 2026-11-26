@@ -122,8 +122,8 @@ function attackValue(language) {
 }
 
 test('a selected bolt names the interval beside its attack speed', () => {
-  assert.equal(attackValue('en'), 'Attack speed 1.43/s · Interval 0.7s');
-  assert.equal(attackValue('zh'), '攻速 1.43/秒 · 间隔 0.7 秒');
+  assert.equal(attackValue('en'), 'Attack speed 1.47/s · Interval 0.68s');
+  assert.equal(attackValue('zh'), '攻速 1.47/秒 · 间隔 0.68 秒');
 });
 
 function projectileValue(language) {
@@ -170,8 +170,8 @@ function splashValue(language) {
 }
 
 test('a selected Cinder shows splash radius in px', () => {
-  assert.equal(splashValue('en'), 'Splash 36 px around the enemy that was hit');
-  assert.equal(splashValue('zh'), '溅射 被命中的敌人周围 36 px');
+  assert.equal(splashValue('en'), 'Splash 42 px around the enemy that was hit');
+  assert.equal(splashValue('zh'), '溅射 被命中的敌人周围 42 px');
 });
 
 function damageValue(language) {
@@ -194,8 +194,8 @@ function damageValue(language) {
 }
 
 test('a selected bolt shows damage per shot', () => {
-  assert.equal(damageValue('en'), 'Damage 11 / shot');
-  assert.equal(damageValue('zh'), '伤害 11 / 发');
+  assert.equal(damageValue('en'), 'Damage 13 / shot');
+  assert.equal(damageValue('zh'), '伤害 13 / 发');
 });
 
 function burnRow(language) {
@@ -218,8 +218,8 @@ function burnRow(language) {
 }
 
 test('a selected Cinder shows burn as damage per second for a duration', () => {
-  assert.equal(burnRow('en'), 'Burn 4/s · 2.6s');
-  assert.equal(burnRow('zh'), '燃烧 4/秒 · 2.6 秒');
+  assert.equal(burnRow('en'), 'Burn 5/s · 2.8s');
+  assert.equal(burnRow('zh'), '燃烧 5/秒 · 2.8 秒');
 });
 
 function poisonRow(language) {
@@ -242,8 +242,8 @@ function poisonRow(language) {
 }
 
 test('a selected Blight shows poison damage per second', () => {
-  assert.equal(poisonRow('en'), 'Poison 2.4/s · Stacks 3 · 4s');
-  assert.equal(poisonRow('zh'), '毒素 2.4/秒 · 层数 3 · 4 秒');
+  assert.equal(poisonRow('en'), 'Poison 3.5/s · Stacks 4 · 4.5s');
+  assert.equal(poisonRow('zh'), '毒素 3.5/秒 · 层数 4 · 4.5 秒');
 });
 
 function rangeRow(language, rank) {
@@ -266,9 +266,9 @@ function rangeRow(language, rank) {
 }
 
 test('a selected rank-2 bolt shows range in px', () => {
-  assert.equal(rangeRow('en', 2), 'Range 278 px');
-  assert.equal(rangeRow('zh', 2), '射程 278 px');
-  assert.equal(rangeRow('en', 1), 'Range 260 px');
+  assert.equal(rangeRow('en', 2), 'Range 311 px');
+  assert.equal(rangeRow('zh', 2), '射程 311 px');
+  assert.equal(rangeRow('en', 1), 'Range 295 px');
 });
 
 function chainRow(language) {
@@ -291,8 +291,8 @@ function chainRow(language) {
 }
 
 test('a selected Arc shows the chain jump in px', () => {
-  assert.equal(chainRow('en'), 'Chain 2 · 80 px from the previous enemy');
-  assert.equal(chainRow('zh'), '连锁 2 · 距上一名敌人 80 px');
+  assert.equal(chainRow('en'), 'Chain 2 · 92 px from the previous enemy');
+  assert.equal(chainRow('zh'), '连锁 2 · 距上一名敌人 92 px');
 });
 
 function critRow(language) {
@@ -315,8 +315,8 @@ function critRow(language) {
 }
 
 test('a selected bolt separates crit chance from the damage multiplier', () => {
-  assert.equal(critRow('en'), 'Crit 15% chance · ×1.85');
-  assert.equal(critRow('zh'), '暴击 15% 几率 · ×1.85');
+  assert.equal(critRow('en'), 'Crit 16% chance · ×1.85');
+  assert.equal(critRow('zh'), '暴击 16% 几率 · ×1.85');
 });
 
 function heroPierce(language) {

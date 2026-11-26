@@ -21,7 +21,7 @@ test('the phone stats card stays centered and the wide card uses the side margin
   assert.match(side[0], /transform:\s*none/);
   assert.match(side[0], /min\(360px,\s*calc\(var\(--board-left\) - 24px\)\)/);
   assert.match(panel, /\.ff-build \.ff-slots:not\(\.ff-place-row\) \.btn\{[^}]*flex-direction:\s*column/);
-  assert.match(panel, /\.ff-build\.is-placing \.ff-place-row\{[^}]*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(panel,/class: 'grid ff-slots ff-place-row'/);
 });
 
 function makeNode(tag, wide) {

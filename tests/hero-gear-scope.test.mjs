@@ -130,7 +130,8 @@ test('Runner Charm on the starting profile lowers the hero interval and leaves a
   assert.equal(gearedBolt.type, 'bolt');
   assert.equal(plainBolt.rank, 1);
   assert.equal(gearedBolt.rank, 1);
-  assert.deepEqual(getUnitStats(gearedBolt, geared), getUnitStats(plainBolt, plain));
+  const base=getUnitStats(plainBolt,plain);
+  assert.deepEqual(getUnitStats(gearedBolt,geared),{...base,interval:base.interval/(1+haste)});
 });
 
 test('haste, crit chance, and range gear is present on equipment and permanent upgrades', () => {
@@ -138,7 +139,7 @@ test('haste, crit chance, and range gear is present on equipment and permanent u
   assert.ok(scoped.some(entry => entry.kind === 'equipment' && positiveBonus(entry.bonuses, 'haste')));
   assert.ok(scoped.some(entry => entry.kind === 'permanent' && positiveBonus(entry.bonuses, 'haste')));
   assert.ok(scoped.some(entry => positiveBonus(entry.bonuses, 'critChance')));
-  assert.ok(scoped.some(entry => positiveBonus(entry.bonuses, 'range')));
+  assert.ok(scoped.some(entry => positiveBonus(entry.bonuses, 'critKnockback')));
 });
 
 for (const entry of gearEntries()) {
@@ -147,8 +148,8 @@ for (const entry of gearEntries()) {
   test(`${entry.kind} ${entry.id} names the hero and keeps ${keys.join(', ')}`, () => {
     assert.equal(typeof entry.description?.en, 'string', `${entry.id} English description`);
     assert.equal(typeof entry.description?.zh, 'string', `${entry.id} Chinese description`);
-    assert.match(entry.description.en, /hero/i, `${entry.kind} ${entry.id} English`);
-    assert.ok(entry.description.zh.includes('英雄'), `${entry.kind} ${entry.id} Chinese`);
+    assert.match(entry.description.en, /team/i, `${entry.kind} ${entry.id} English`);
+    assert.ok(entry.description.zh.includes('全队'), `${entry.kind} ${entry.id} Chinese`);
     for (const key of keys) {
       const token = amountToken(key, entry.bonuses[key]);
       assert.ok(hasAmount(entry.description.en, token), `${entry.id} English keeps ${key} ${token}`);

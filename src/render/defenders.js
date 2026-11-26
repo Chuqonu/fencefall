@@ -79,7 +79,7 @@ const PALETTE = {
   m: '#d8c4a4'
 };
 
-const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
+const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't', harvest: 'b'};
 const BASE_SET = new Set(BASE_TYPES);
 
 const ALIASES = {
@@ -121,7 +121,12 @@ const ALIASES = {
   banner: 'support',
   buff: 'support',
   buffer: 'support',
-  healer: 'support'
+  healer: 'support',
+  harvest: 'harvest',
+  economy: 'harvest',
+  gleaner: 'harvest',
+  sunflower: 'harvest',
+  sungleaner: 'harvest'
 };
 
 /** Flavor ids used when a recipe id does not embed its parent names. RECIPES parents win. */
@@ -171,7 +176,8 @@ const TOWER_PAINTERS = {
   frost: paintFrost,
   lightning: paintLightning,
   poison: paintPoison,
-  support: paintSupport
+  support: paintSupport,
+  harvest: paintHarvest
 };
 
 const HYBRID_PAINTERS = {
@@ -1021,6 +1027,92 @@ function paintSupport(p, rank) {
   p.px(24, 28, p.frame === 0 ? 'E' : 'D');
   if (rank >= 3) p.hline(15, 6, 16, 'H');
   if (rank >= 4) p.px(13, 1, 'W');
+}
+
+function paintHarvest(p, rank) {
+  const sway = [0, 0, 1, 0][p.frame];
+  const pulse = p.frame % 2 === 0;
+  const cx = 20 + sway;
+  const cy = 12;
+
+  // Carved bronze & wood planter basin resting on the plinth
+  p.fill(14, 26, 12, 5, 'R');
+  p.fill(15, 26, 10, 4, 'r');
+  p.hline(13, 25, 14, rank >= 2 ? 'H' : 'Y');
+  p.hline(14, 26, 12, 'B');
+  p.px(15, 27, 'Y');
+  p.px(24, 27, 'R');
+  if (rank >= 2) {
+    p.hline(15, 28, 10, 'b');
+    p.px(19, 28, 'h');
+    p.px(20, 28, 'h');
+  }
+
+  // Living emerald stalk & curling twin leaves
+  p.vline(19 + sway, 17, 9, 'g');
+  p.vline(20 + sway, 17, 9, 'G');
+  p.px(19 + sway, 19, 'Q');
+  // Left curling leaf
+  p.hline(12, 22, 7, 'g');
+  p.hline(11, 23, 6, 'G');
+  p.hline(13, 21, 5, 'Q');
+  p.px(11, 22, 'Q');
+  // Right curling leaf
+  p.hline(21, 21, 7, 'g');
+  p.hline(22, 22, 7, 'G');
+  p.hline(22, 20, 5, 'Q');
+  p.px(28, 21, 'Q');
+
+  // Rank 3+ twin side sun-buds blooming off the leaves
+  if (rank >= 3) {
+    for (const bx of [10, 29]) {
+      p.fill(bx - 1, 17, 3, 3, 'A');
+      p.px(bx, 18, pulse ? 'W' : 'h');
+      p.px(bx, 16, 'Z');
+      p.px(bx, 20, 'g');
+    }
+  }
+
+  // Radiant golden solar petal ring (8 petals around the blossom)
+  const petals = [
+    [0, -7, 3, 3], [0, 5, 3, 3],
+    [-7, -1, 3, 3], [5, -1, 3, 3],
+    [-5, -5, 3, 3], [3, -5, 3, 3],
+    [-5, 3, 3, 3], [3, 3, 3, 3]
+  ];
+  for (let i = 0; i < petals.length; i++) {
+    const [dx, dy, pw, ph] = petals[i];
+    const outer = (i + p.frame) % 2 === 0 ? 'Z' : 'A';
+    const tip = (i + p.frame) % 2 === 0 ? 'h' : 'b';
+    p.fill(cx + dx - 1, cy + dy, pw, ph, outer);
+    p.px(cx + dx, cy + dy + 1, tip);
+  }
+  // Cardinal sunlit petal tips
+  p.px(cx, cy - 8, pulse ? 'W' : 'h');
+  p.px(cx, cy + 8, 'A');
+  p.px(cx - 8, cy, pulse ? 'h' : 'Z');
+  p.px(cx + 8, cy, pulse ? 'h' : 'Z');
+
+  // Warm solar core & luminous heart
+  oval(p, cx, cy, 4.5, 4.5, 'B');
+  oval(p, cx, cy, 3.3, 3.3, 'u');
+  oval(p, cx, cy, 2.2, 2.2, pulse ? 'a' : 'A');
+  p.px(cx, cy, pulse ? 'W' : 'h');
+  p.px(cx - 1, cy - 1, 'h');
+  p.px(cx + 1, cy + 1, 'b');
+
+  // Rising golden pollen / repair motes
+  const lift = p.frame % 3;
+  p.px(cx - 5, 4 - (lift & 1), 'h');
+  p.px(cx + 5, 5 - ((lift + 1) & 1), rank >= 2 ? 'q' : 'Z');
+  if (rank >= 4) {
+    // Gilded solar crown halo rays
+    p.px(cx - 6, cy - 7, 'W');
+    p.px(cx + 6, cy - 7, 'W');
+    p.px(cx, 1, 'W');
+    p.px(cx - 9, cy - 2, 'h');
+    p.px(cx + 9, cy - 2, 'h');
+  }
 }
 
 function paintCinderQuarrel(p, rank) {

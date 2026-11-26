@@ -9,7 +9,7 @@ import {spawnEnemy} from '../src/systems/movement.js';
 import {updateCombat} from '../src/systems/combat.js';
 import {applyHeroUpgrade} from '../src/systems/hero.js';
 
-const STATUS_TAGS = ['poison', 'burn', 'slow'];
+const STATUS_TAGS = ['burn', 'burn', 'slow'];
 
 function heroOnSlot2(state) {
   const hero = state.slots[2].unit;
@@ -57,7 +57,7 @@ function assertHeroBeforeStatus(tags) {
   const heroAt = tags.indexOf('hero');
   assert.ok(heroAt >= 0, 'hero tag');
   assert.equal(tags[0], 'hero', 'hero is the first tag');
-  assert.ok(tags.includes('poison'), 'poison tag');
+  assert.ok(tags.includes('burn'), 'poison tag');
   for (const status of STATUS_TAGS) {
     const at = tags.indexOf(status);
     if (at === -1) continue;
@@ -65,18 +65,18 @@ function assertHeroBeforeStatus(tags) {
   }
 }
 
-test('a poisoned hero shot lists hero before poison', () => {
+test('a burning hero shot lists hero before poison', () => {
   const state = createRun({seed: 41, difficulty: 'normal', runId: 'hero-shot-tag'});
   const hero = heroOnSlot2(state);
-  assert.equal(applyHeroUpgrade(state, 'barbed').ok, true);
-  assert.equal(hero.upgrades.barbed, 1);
+  assert.equal(applyHeroUpgrade(state, 'shrapnel').ok, true);
+  assert.equal(hero.upgrades.shrapnel, 1);
   assert.equal(state.slots[2].unit, hero);
 
   const enemy = spawnInFront(state, state.slots[2]);
   const projectile = fireOne(state, hero);
   assert.equal(projectile.targetId, enemy.id);
   assert.equal(projectile.towerType, 'hero');
-  assert.ok(projectile.effects.poison && projectile.effects.poison.dps > 0, 'poison effect on the hero shot');
+  assert.ok(projectile.effects.burn && projectile.effects.burn.dps > 0, 'poison effect on the hero shot');
   assertHeroBeforeStatus(projectile.tags);
   assert.equal(state.slots[2].unit, hero);
 });

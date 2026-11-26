@@ -36,14 +36,14 @@
  * hero_protected, occupied, replace_not_offered, draft_missing, plus any
  * reason returned by applyHeroUpgrade.
  */
-import {HERO_UPGRADES, applyHeroUpgrade} from './hero.js';
+import {HERO_UPGRADES, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
 import {TOWERS} from '../data/towers.js';
 import {BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
 
 /** XP required to open the next draft after `opened` drafts have already been granted. */
 export function draftXpCost(opened) {
   const n = Number.isFinite(opened) ? Math.max(0, Math.floor(opened)) : 0;
-  return 8 + 4 * n + Math.floor((n * n) / 8);
+  return 6 + 4*n;
 }
 
 export function generateDraft(state) {
@@ -75,7 +75,34 @@ export function generateDraft(state) {
   }
   picked = picked.slice(0, 3);
   if (picked.length !== 3) return picked;
-  return shuffle(state, preferHeroWhenCovered(state, preferMissingType(state, picked), heroIds));
+  picked=preferHeroWhenCovered(state,preferMissingType(state,picked),heroIds);
+  if (state.draftLevel<4 && countEmpty(state) && !state.slots.some(s=>s.unit?.type==='harvest') &&
+      !picked.some(c=>c.type==='harvest') && random(state)<0.35) {
+    const i=picked.findIndex(c=>c.kind==='tower');
+    if (i>=0) picked[i]=towerCard('harvest',false);
+  }
+  return shuffle(state,picked);
+}
+
+export function rerollCost(state) {
+  return state.freeRerollsLeft>0 ? 0 : Math.ceil((20+15*state.draftRerollsUsed)*(1-(state.systems.integration?.bonuses?.rerollDiscount||0)));
+}
+export function rerollDraft(state) {
+  if (state?.phase!=='draft' || !state.draft || state.draftRerollsUsed>=3) return fail('unavailable');
+  const cost=rerollCost(state);
+  if (state.energy<cost) return fail('unavailable');
+  const before=state.draft.options.map(c=>c.id).sort().join('|');
+  let cards;
+  for (let i=0;i<8;i++) {
+    cards=generateDraft(state);
+    if (cards.map(c=>c.id).sort().join('|')!==before) break;
+  }
+  state.draft.options=cards;
+  state.energy-=cost;
+  if (!cost) state.freeRerollsLeft--;
+  state.draftRerollsUsed++;
+  emit(state,'draft_reroll',{cost,rerollsUsed:state.draftRerollsUsed});
+  return ok();
 }
 
 export function updateDrafts(state) {
@@ -95,7 +122,8 @@ export function updateDrafts(state) {
   state.xp = normalizeXp(state.xp - cost);
   const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
   state.draftLevel = opened + 1;
-  state.nextDraftXp = draftXpCost(state.draftLevel);
+  state.nextDraftXp = Math.ceil(draftXpCost(state.draftLevel)*(state.expedition==='watch'?1:0.75));
+  state.draftRerollsUsed = 0;
   state.pendingUnit = null;
   state.draft = {options};
   state.phase = 'draft';
@@ -338,58 +366,9 @@ function readLevel(hero, id) {
   return null;
 }
 
-function trialUpgrade(state, id) {
-  if (typeof applyHeroUpgrade !== 'function') return false;
-  let copy;
-  try {
-    copy = clone(state);
-  } catch {
-    return false;
-  }
-  copy.phase = 'draft';
-  copy.paused = false;
-  copy.hiddenPaused = false;
-  copy.draft = {
-    options: [
-      {id: `hero_upgrade:${id}`, kind: 'hero_upgrade', upgradeId: id, replace: false},
-      {id: 'tower:bolt', kind: 'tower', type: 'bolt', replace: false, rank: 1},
-      {id: 'tower:fire', kind: 'tower', type: 'fire', replace: false, rank: 1}
-    ]
-  };
-  try {
-    return applyHeroUpgrade(copy, id)?.ok === true;
-  } catch {
-    return false;
-  }
-}
-
 function availableUpgradeIds(state) {
   const hero = findHero(state);
-  if (!hero) return [];
-  const snapshot = {
-    rng: state.rng,
-    nextId: state.nextId,
-    xp: state.xp,
-    phase: state.phase,
-    draftLevel: state.draftLevel,
-    nextDraftXp: state.nextDraftXp,
-    upgrades: clone(hero.upgrades || {})
-  };
-  const ids = [];
-  for (const id of upgradeIds()) {
-    const cap = readCap(upgradeSpec(id));
-    const level = readLevel(hero, id);
-    if (level != null && cap != null && level >= cap) continue;
-    if (trialUpgrade(state, id)) ids.push(id);
-  }
-  state.rng = snapshot.rng;
-  state.nextId = snapshot.nextId;
-  state.xp = snapshot.xp;
-  state.phase = snapshot.phase;
-  state.draftLevel = snapshot.draftLevel;
-  state.nextDraftXp = snapshot.nextDraftXp;
-  if (JSON.stringify(hero.upgrades) !== JSON.stringify(snapshot.upgrades)) hero.upgrades = snapshot.upgrades;
-  return ids;
+  return hero ? availableHeroUpgradeIds(hero) : [];
 }
 
 function towerCard(type, replace) {

@@ -26,15 +26,15 @@
  */
 import { ARENA, slotGeometry } from '../shared.js';
 
-const MAX_PARTICLES = 140;
-const MAX_FLOATERS = 18;
-const MAX_RINGS = 16;
+const MAX_PARTICLES = 220;
+const MAX_FLOATERS = 28;
+const MAX_RINGS = 24;
 const SCAN_LIMIT = 400;
 
 const LIMITS = Object.freeze({
-  shot: 8,
-  hit: 12,
-  kill: 8,
+  shot: 10,
+  hit: 14,
+  kill: 10,
   fence_hit: 4,
   merge: 3,
   draft: 2,
@@ -47,6 +47,19 @@ const LIMITS = Object.freeze({
   split: 6,
   mend: 6,
   phase: 6,
+  fence_surge: 1,
+  corpse_explode: 4,
+  cloud_spawn: 4,
+  knockback: 6,
+  field_build: 3,
+  field_hit: 4,
+  field_destroy: 3,
+  field_repair: 4,
+  field_remove: 2,
+  energy_gain: 4,
+  wave_horde: 1,
+  draft_reroll: 1,
+  targeting_change: 1,
 });
 
 const PALETTES = Object.freeze({
@@ -67,6 +80,10 @@ const PALETTES = Object.freeze({
   draft: { core: '#fff6d4', hot: '#f0cb72', mid: '#d7a441', dim: '#6a4a16' },
   boss: { core: '#ffe8ff', hot: '#e2a0ea', mid: '#8d3eae', dim: '#3c1848' },
   heal: { core: '#f3fff8', hot: '#9be7c4', mid: '#3eae86', dim: '#145445' },
+  harvest: { core: '#fffbe0', hot: '#ffe066', mid: '#e8a832', dim: '#7a5214' },
+  surge: { core: '#ffffff', hot: '#9ef0ff', mid: '#4ac8f0', dim: '#185470' },
+  steam: { core: '#ffffff', hot: '#e6fbff', mid: '#ffaa5a', dim: '#3c7a90' },
+  catalyst: { core: '#ffffff', hot: '#e4ff7a', mid: '#b0ff3a', dim: '#3e6a14' },
 });
 
 const HYBRID_PALETTES = Object.freeze([
@@ -95,12 +112,17 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   heal: 'support',
   buff: 'support',
   hero: 'hero',
+  harvest: 'harvest',
+  spikes: 'bolt',
 });
 
 const FEEDBACK = new Set([
   'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
   'victory', 'defeat', 'ui', 'status', 'boss',
   'leap', 'split', 'mend', 'phase',
+  'fence_surge', 'corpse_explode', 'cloud_spawn', 'knockback',
+  'field_build', 'field_hit', 'field_destroy', 'field_repair', 'field_remove',
+  'energy_gain', 'wave_horde', 'draft_reroll', 'targeting_change',
 ]);
 
 // These need a finite x and y on the event. Slot fallback and extra fields are ignored.
@@ -519,6 +541,11 @@ export function describeFeedback(event) {
     approach: type === 'boss' && event.warning === true,
     execute: event.execute === true,
     ratio: readRatio(event),
+    reaction: typeof event.reaction === 'string' ? normName(event.reaction) : '',
+    radius: finite(event.radius),
+    source: typeof event.source === 'string' ? normName(event.source) : '',
+    amount: finite(event.amount),
+    fieldKind: typeof event.kind === 'string' ? normName(event.kind) : '',
   };
 }
 
@@ -905,7 +932,7 @@ export function createEffects() {
     if (recent) {
       recent.amount = (recent.amount || 0) + amount;
       const merged = formatDamage(recent.amount);
-      if (merged) recent.text = channel === 'heal' ? `+${merged}` : merged;
+      if (merged) recent.text = (channel === 'heal' || channel === 'energy') ? `+${merged}` : merged;
       recent.life = recent.maxLife;
       recent.scale = Math.max(recent.scale, scale);
       return;
@@ -1031,6 +1058,15 @@ export function createEffects() {
     if (desc.crit) {
       pushFlash(point.x, point.y, 0.36);
       pushRing(point.x, point.y, 13, 34, '#ffe56a', 0.34, 2);
+    }
+    if (desc.reaction === 'steam') {
+      pushRing(point.x, point.y, 14, 42, PALETTES.steam.hot, 0.36, 2);
+      pushRing(point.x, point.y, 8, 28, PALETTES.steam.mid, 0.28, 1);
+      burst(point.x, point.y, 7, 46, -42, true, PALETTES.steam.hot, 0.34, seed + 11, 2);
+    } else if (desc.reaction === 'catalyst') {
+      pushRing(point.x, point.y, 12, 46, PALETTES.catalyst.hot, 0.36, 2);
+      pushPlus(point.x, point.y, 5, PALETTES.catalyst.hot, '#ffffff', 0.26);
+      burst(point.x, point.y, 7, 64, 0, false, PALETTES.catalyst.mid, 0.3, seed + 13, 2);
     }
     showNumber(desc, point.x, point.y, seed, palette);
     if (desc.stacks >= 2) pushPips(point.x + 8, point.y + 8, Math.min(4, desc.stacks), palette.mid, 0.36);
@@ -1208,6 +1244,131 @@ export function createEffects() {
     burst(point.x, point.y, 6, 40, 0, false, PALETTES.boss.mid, 0.3, seed, 2);
   }
 
+  function spawnFenceSurge(desc, seed) {
+    const y = desc.y != null ? desc.y : ARENA.fenceY;
+    pushParticle({ kind: 'glowline', y: y - 4, color: PALETTES.surge.hot, broken: false, life: 0.65, maxLife: 0.65, motionOnly: false });
+    pushParticle({ kind: 'glowline', y: y - 8, color: PALETTES.draft.hot, broken: false, life: 0.48, maxLife: 0.48, motionOnly: false });
+    for (let i = 0; i < 4; i++) {
+      const rx = 54 + i * 84;
+      pushRing(rx, y - 6, 12, 85, i % 2 ? PALETTES.surge.hot : PALETTES.draft.hot, 0.48, 2);
+    }
+    for (let i = 0; i < 14; i++) {
+      const sx = 24 + rand01(seed + i * 17) * (ARENA.width - 48);
+      pushParticle({
+        kind: 'mote',
+        x: sx,
+        y: y - 4,
+        vx: (rand01(seed + i * 7) - 0.5) * 28,
+        vy: -(85 + rand01(seed + i * 11) * 95),
+        size: 2,
+        color: i % 2 ? PALETTES.surge.core : PALETTES.draft.hot,
+        life: 0.46,
+        maxLife: 0.46,
+        motionOnly: true,
+      });
+    }
+  }
+
+  function spawnCorpseExplode(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(18, Math.min(68, desc.radius || 46));
+    pushRing(point.x, point.y, Math.round(r * 0.45), r * 1.4, PALETTES.fire.hot, 0.38, 2);
+    pushRing(point.x, point.y, Math.round(r * 0.25), r * 1.1, PALETTES.poison.hot, 0.32, 1);
+    pushFlash(point.x, point.y, 0.26);
+    burst(point.x, point.y, 10, 82, 30, false, PALETTES.fire.mid, 0.36, seed, 2);
+    burst(point.x, point.y, 6, 62, 18, false, PALETTES.poison.hot, 0.34, seed + 23, 2);
+  }
+
+  function spawnCloudSpawn(desc) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(12, Math.min(54, desc.radius || 32));
+    pushRing(point.x, point.y, Math.round(r * 0.55), r * 0.7, PALETTES.poison.hot, 0.34, 1, 0.5);
+  }
+
+  function spawnKnockback(desc) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushStreak(point.x, point.y + 4, 0, -1, 9, PALETTES.ui, false, 0.18);
+  }
+
+  function spawnFieldBuild(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const col = desc.fieldKind === 'flare' ? PALETTES.draft : desc.fieldKind === 'spikes' ? PALETTES.ui : PALETTES.fence;
+    pushRing(point.x, point.y, 10, 38, col.hot, 0.34, 2);
+    pushPlus(point.x, point.y, 4, col.hot, col.core, 0.22);
+    burst(point.x, point.y, 8, 52, 48, true, col.hot, 0.32, seed, 2);
+  }
+
+  function spawnFieldHit(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushPlus(point.x, point.y - 4, 3, PALETTES.fence.hot, PALETTES.fence.core, 0.16);
+    burst(point.x, point.y - 4, 4, 42, 70, true, PALETTES.fence.mid, 0.24, seed, 2);
+  }
+
+  function spawnFieldDestroy(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 10, 44, PALETTES.defeat.hot, 0.36, 2);
+    burst(point.x, point.y, 12, 68, 85, true, PALETTES.fence.hot, 0.42, seed, 2);
+    burst(point.x, point.y, 5, 48, 40, false, PALETTES.defeat.mid, 0.3, seed + 19, 2);
+  }
+
+  function spawnFieldRepair(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 9, 24, PALETTES.heal.hot, 0.34, 1);
+    for (let i = 0; i < 4; i++) {
+      pushParticle({
+        kind: 'mote',
+        x: point.x + (i - 1.5) * 7,
+        y: point.y + 4,
+        vx: 0,
+        vy: -(22 + i * 4),
+        size: 2,
+        color: i % 2 ? PALETTES.heal.core : PALETTES.heal.hot,
+        life: 0.42,
+        maxLife: 0.42,
+        motionOnly: true,
+      });
+    }
+    const text = formatDamage(desc.amount);
+    if (text) pushFloater(point.x, point.y, `+${text}`, PALETTES.heal.hot, 2, false, 'heal', 0.56, seed);
+  }
+
+  function spawnFieldRemove(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y, 8, 28, PALETTES.draft.hot, 0.28, 1);
+    burst(point.x, point.y, 5, 40, -18, true, PALETTES.draft.hot, 0.28, seed, 2);
+  }
+
+  function spawnEnergyGain(desc, seed) {
+    if (desc.source !== 'harvest') return;
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushRing(point.x, point.y - 6, 7, 26, PALETTES.harvest.hot, 0.38, 1, 0.72);
+    for (let i = 0; i < 5; i++) {
+      pushParticle({
+        kind: 'mote',
+        x: point.x + (rand01(seed + i * 7) - 0.5) * 16,
+        y: point.y - 6,
+        vx: (rand01(seed + i * 13) - 0.5) * 14,
+        vy: -(24 + rand01(seed + i * 19) * 22),
+        size: 2,
+        color: i % 2 ? PALETTES.harvest.core : PALETTES.harvest.hot,
+        life: 0.48,
+        maxLife: 0.48,
+        motionOnly: true,
+      });
+    }
+    const text = formatDamage(desc.amount);
+    if (text) pushFloater(point.x, point.y - 6, `+${text}`, PALETTES.harvest.hot, 2, false, 'energy', 0.62, seed);
+  }
+
   function spawn(desc, index) {
     const seed = nextSeed(desc, index);
     switch (desc.type) {
@@ -1226,6 +1387,16 @@ export function createEffects() {
       case 'split': spawnSplit(desc, seed); break;
       case 'mend': spawnMend(desc); break;
       case 'phase': spawnPhase(desc); break;
+      case 'fence_surge': spawnFenceSurge(desc, seed); break;
+      case 'corpse_explode': spawnCorpseExplode(desc, seed); break;
+      case 'cloud_spawn': spawnCloudSpawn(desc); break;
+      case 'knockback': spawnKnockback(desc); break;
+      case 'field_build': spawnFieldBuild(desc, seed); break;
+      case 'field_hit': spawnFieldHit(desc, seed); break;
+      case 'field_destroy': spawnFieldDestroy(desc, seed); break;
+      case 'field_repair': spawnFieldRepair(desc, seed); break;
+      case 'field_remove': spawnFieldRemove(desc, seed); break;
+      case 'energy_gain': spawnEnergyGain(desc, seed); break;
       default: break;
     }
   }
