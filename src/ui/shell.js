@@ -1,5 +1,6 @@
 import {FIELD_UNITS} from '../data/field-units.js';
 import {fieldCost} from '../systems/field.js';
+import {superweaponCooldown} from '../systems/combat.js';
 import { ARENA, DIFFICULTIES, canPlan, hitFieldSlot, hitSlot, slotGeometry } from '../shared.js';
 import { previewMerge } from '../systems/merges.js';
 import { bossApproaching,getWaveInfo } from '../systems/waves.js';
@@ -10,6 +11,13 @@ import { formatNumber, localize } from '../i18n.js';
 
 const SPEEDS = [1, 1.5, 3, 10];
 const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
+const ARSENAL_SPECS = Object.freeze([
+  { id: 'napalm', labelKey: 'arsenalNapalm', accent: '#ff6c30' },
+  { id: 'armored_car', labelKey: 'arsenalCar', accent: '#f0cb72' },
+  { id: 'cryo_barrage', labelKey: 'arsenalCryo', accent: '#7ce8ff' },
+  { id: 'orbital_beam', labelKey: 'arsenalBeam', accent: '#54f0ff' },
+  { id: 'ricochet', labelKey: 'arsenalEm', accent: '#ffe14a' },
+]);
 
 /**
  * App shell and live HUD.
@@ -122,8 +130,23 @@ export function mountShell(root, api) {
   const stats = el('div', { class: 'hud-stats' });
   const energyValue = el('strong', { class: 'hud-chip hud-energy-chip', 'data-testid': 'hud-energy' });
   const surgeValue = el('strong', { class: 'hud-chip hud-surge-chip', 'data-testid': 'hud-surge' });
-  stats.append(energyValue, surgeValue);
+  const aegisValue = el('strong', { class: 'hud-chip hud-aegis-chip', 'data-testid': 'hud-wall-immunity', hidden: true });
+  stats.append(energyValue, surgeValue, aegisValue);
   stats.append(sortie, waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
+
+  const arsenalBar = el('div', { class: 'hud-arsenal', 'data-testid': 'hud-arsenal', hidden: true, 'aria-hidden': 'true' });
+  const arsenalItems = ARSENAL_SPECS.map((spec) => {
+    const label = el('span', { class: 'arsenal-label' });
+    const fill = el('span', { class: 'arsenal-fill' });
+    const pill = el('span', {
+      class: 'arsenal-pill',
+      'data-testid': `hud-arsenal-${spec.id}`,
+      style: `--arsenal-accent:${spec.accent}`,
+      hidden: true,
+    }, [label, el('span', { class: 'arsenal-track' }, [fill])]);
+    arsenalBar.append(pill);
+    return { ...spec, pill, label, fill };
+  });
 
   const pauseButton = controlButton('btn-pause', 'pause');
   const speedButtons = SPEEDS.map((value) => {
@@ -148,6 +171,7 @@ export function mountShell(root, api) {
   hudMain.append(
     el('div', { class: 'hud-meters' }, [fenceMeter, xpMeter]),
     stats,
+    arsenalBar,
     waveHint,
     message
   );
@@ -499,7 +523,32 @@ export function mountShell(root, api) {
       const maxCharges = Number.isFinite(state.surge?.maxCharges) ? state.surge.maxCharges : 0;
       setText(surgeValue, text('surge') + ' ' + charges + '/' + maxCharges);
       surgeValue.classList.toggle('is-empty', charges <= 0);
-      surgeValue.classList.toggle('is-active', (state.surge?.shieldTime || 0) > 0);
+      surgeValue.classList.toggle('is-active', (state.surge?.shieldTimer || state.surge?.shieldTime || 0) > 0);
+      const wallImmune = Number.isFinite(state.wallImmunity) ? Math.max(0, Math.floor(state.wallImmunity)) : 0;
+      aegisValue.hidden = wallImmune <= 0;
+      if (wallImmune > 0) setText(aegisValue, `${text('aegisChip')} ×${wallImmune}`);
+
+      const heroUnit = state.slots?.find((s) => s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero'))?.unit;
+      const upg = heroUnit?.upgrades && typeof heroUnit.upgrades === 'object' ? heroUnit.upgrades : {};
+      const timers = state.arsenal?.timers || {};
+      const swHaste = Number(state.systems?.integration?.bonuses?.superweaponHaste) || 0;
+      let anyArsenal = false;
+      for (const item of arsenalItems) {
+        const rank = Math.max(0, Math.floor(Number(upg[item.id]) || 0));
+        if (rank <= 0) {
+          item.pill.hidden = true;
+          continue;
+        }
+        anyArsenal = true;
+        item.pill.hidden = false;
+        const maxCd = superweaponCooldown(item.id, rank, swHaste);
+        const rem = Number.isFinite(timers[item.id]) ? Math.max(0, timers[item.id]) : 0;
+        const pct = maxCd > 0 ? clamp01(1 - rem / maxCd) : 1;
+        setText(item.label, `${text(item.labelKey)} Lv.${rank}`);
+        setWidth(item.fill, pct);
+        item.pill.classList.toggle('is-firing', pct >= 0.9 || rem <= 0.35);
+      }
+      arsenalBar.hidden = !anyArsenal;
       for (const b of fieldButtons) {
         const kind = b.dataset.kind;
         const cd = Math.ceil(state.fieldCooldowns?.[kind] || 0);
@@ -1023,8 +1072,9 @@ function structuralKey(state, profile, ui) {
     ui?.mergeFrom ?? '',
     ui?.mergePreview ? 1 : 0,
     message,
-    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',
+    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',state?.wallImmunity ?? '',
     ...Object.values(state?.fieldCooldowns || {}).map(Math.ceil),
+    ...ARSENAL_SPECS.map((spec) => Math.floor(finite(state?.arsenal?.timers?.[spec.id], 0) * 2)),
     playerHintKey(state?.director?.playerHint),
     playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',

@@ -178,15 +178,27 @@ function fenceRatio(state) {
 
 function woodKit(ratio) {
   if (ratio > FENCE_CRACKED) {
-    return { light: '#e6d2a4', mid: '#c4a06a', dark: '#8d6840', edge: '#4e3820', iron: '#d5dde0', ironDark: '#6e7c86', strap: '#9aa8ae' };
+    return {
+      light: '#e2ebf0', mid: '#92a4b0', dark: '#4f606c', edge: '#1e2830',
+      iron: '#eef5f8', ironDark: '#384650', strap: '#6f8290', hazard: '#f0cb72',
+    };
   }
   if (ratio > FENCE_FAILING) {
-    return { light: '#c4a882', mid: '#8d6a46', dark: '#5c4330', edge: '#2e2218', iron: '#b4bcc0', ironDark: '#556066', strap: '#7a868c' };
+    return {
+      light: '#c2cbd0', mid: '#74828a', dark: '#424d54', edge: '#1a2024',
+      iron: '#c6d0d4', ironDark: '#303a40', strap: '#5c6a72', hazard: '#d4a84e',
+    };
   }
   if (ratio > FENCE_RUIN) {
-    return { light: '#8a6850', mid: '#5c4034', dark: '#3a2822', edge: '#1a1210', iron: '#80888c', ironDark: '#3e484c', strap: '#5a6468' };
+    return {
+      light: '#8e847e', mid: '#5a504c', dark: '#362e2c', edge: '#161212',
+      iron: '#889094', ironDark: '#2a3034', strap: '#4a5256', hazard: '#9e7238',
+    };
   }
-  return { light: '#6a4038', mid: '#3a2420', dark: '#241614', edge: '#100c0a', iron: '#5c6064', ironDark: '#2a3034', strap: '#3a4044' };
+  return {
+    light: '#6e524c', mid: '#402c28', dark: '#261a18', edge: '#100c0a',
+    iron: '#5c6064', ironDark: '#22282c', strap: '#3a4044', hazard: '#72442e',
+  };
 }
 
 function paintSky(ctx) {
@@ -586,78 +598,105 @@ function drawGrass(ctx, time, reduced) {
 }
 
 function drawPicket(ctx, index, ratio, kit) {
-  const x = index * 12 + 2;
+  const x = index * 12;
   const broken = ratio <= breakAt(index);
-  const jog = (index % 3) * 2;
-  const top = 430 + jog;
+  const merlon = (index % 2) === 0;
+  const top = merlon ? 429 : 434;
   const base = 466;
   if (broken) {
     if (((index * 5 + 3) % 4) === 0 || (ratio <= FENCE_RUIN && (index % 2) === 0)) {
       ctx.fillStyle = kit.edge;
-      ctx.fillRect(x + 2, 462, 2, 3);
-      ctx.fillRect(x + 5, 460, 1, 4);
+      ctx.fillRect(x + 2, 461, 3, 4);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 7, 459, 1, 6);
       return false;
     }
-    const stump = (ratio <= FENCE_RUIN ? 4 + (index % 3) : 8 + (index % 5) * 3);
+    const stump = (ratio <= FENCE_RUIN ? 5 + (index % 3) : 9 + (index % 4) * 3);
     const y = base - stump;
     ctx.fillStyle = kit.edge;
-    ctx.fillRect(x, y, 8, stump);
+    ctx.fillRect(x + 1, y, 10, stump);
     ctx.fillStyle = kit.dark;
-    ctx.fillRect(x + 1, y + 2, 5, Math.max(0, stump - 2));
+    ctx.fillRect(x + 2, y + 2, 8, Math.max(0, stump - 2));
     ctx.fillStyle = kit.light;
-    ctx.fillRect(x + 1, y, 4, 1);
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 2, y + 1, 3, 1);
+    ctx.fillRect(x + 2, y, 6, 1);
+    // Exposed steel rebar prongs
+    ctx.fillStyle = kit.iron;
+    ctx.fillRect(x + 3, y - 3, 1, 3);
+    ctx.fillRect(x + 8, y - 2, 1, 2);
     return false;
   }
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 3, top, 2, 2);
-  ctx.fillRect(x + 2, top + 2, 4, 2);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 1, top + 4, 6, 2);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x, top + 6, 8, base - (top + 6));
+  // Fortified concrete-and-steel bastion armor block
   ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, top + 6, 1, base - (top + 6));
-  ctx.fillRect(x + 7, top + 6, 1, base - (top + 6));
+  ctx.fillRect(x, top, 12, base - top);
+  ctx.fillStyle = kit.dark;
+  ctx.fillRect(x + 1, top + 2, 10, base - (top + 2));
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(x + 1, top + 2, 10, 7);
+  // Bright beveled top armor lip
   ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 2, top + 8, 1, Math.max(0, base - (top + 10)));
+  ctx.fillRect(x + 1, top, 10, 2);
+  // Recessed firing slit on embrasure blocks
+  if (!merlon) {
+    ctx.fillStyle = '#0c1216';
+    ctx.fillRect(x + 3, top + 4, 6, 2);
+    ctx.fillStyle = kit.ironDark;
+    ctx.fillRect(x + 2, top + 3, 8, 1);
+  }
+  // Horizontal riveted steel reinforcement girder
   ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x - 2, 446, 12, 5);
+  ctx.fillRect(x, 446, 12, 6);
   ctx.fillStyle = kit.strap;
-  ctx.fillRect(x - 2, 447, 12, 2);
+  ctx.fillRect(x, 447, 12, 3);
   ctx.fillStyle = kit.iron;
-  ctx.fillRect(x + 3, 450, 2, 2);
+  ctx.fillRect(x, 447, 12, 1);
+  ctx.fillRect(x + 2, 449, 2, 1);
+  ctx.fillRect(x + 8, 449, 2, 1);
+  // Lower armor plate seams & corner bolts
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(x + 2, 454, 8, 10);
+  ctx.fillStyle = kit.iron;
+  ctx.fillRect(x + 2, 455, 1, 1);
+  ctx.fillRect(x + 9, 455, 1, 1);
+  ctx.fillRect(x + 2, 462, 1, 1);
+  ctx.fillRect(x + 9, 462, 1, 1);
   if (ratio <= crackAt(index)) {
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 3, top + 6, 1, 5);
-    ctx.fillRect(x + 2, top + 12, 1, 7);
-    ctx.fillRect(x + 3, top + 18, 1, 6);
+    ctx.fillStyle = '#121010';
+    ctx.fillRect(x + 5, top + 4, 1, 6);
+    ctx.fillRect(x + 4, top + 10, 1, 8);
+    ctx.fillRect(x + 6, top + 16, 1, 7);
     if (ratio <= (FENCE_CRACKED + FENCE_FAILING) / 2) {
-      ctx.fillRect(x + 5, top + 8, 1, 6);
-      ctx.fillRect(x + 4, top + 14, 1, 5);
+      ctx.fillRect(x + 8, top + 7, 1, 6);
+      ctx.fillRect(x + 7, top + 13, 1, 6);
     }
   }
   if (ratio <= FENCE_FAILING && (index % 3) === 0) {
-    ctx.fillStyle = '#2a1612';
-    ctx.fillRect(x + 1, 456, 6, 4);
+    ctx.fillStyle = '#241410';
+    ctx.fillRect(x + 2, 455, 8, 5);
+    ctx.fillStyle = '#e25822';
+    ctx.fillRect(x + 4, 457, 2, 1);
   }
   return true;
 }
 
 function drawWire(ctx, intact, kit, ratio) {
-  ctx.fillStyle = kit.ironDark;
+  // Razor-wire concertina coils along the upper parapet
   for (let i = 0; i < PICKETS; i++) {
-    const x = i * 12 + 2;
-    const top = 430 + (i % 3) * 2;
+    const x = i * 12;
+    const top = (i % 2) === 0 ? 429 : 434;
     if (intact[i]) {
-      ctx.fillRect(x + 2, 426, 5, 1);
-      ctx.fillRect(x + 3, 426, 1, top - 426);
-      ctx.fillRect(x + 2, top - 1, 1, 1);
-      ctx.fillRect(x + 4, top - 1, 1, 1);
-      if (intact[i + 1]) ctx.fillRect(x + 7, 426, 7, 1);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 1, 425, 10, 1);
+      ctx.fillRect(x + 5, 425, 1, top - 425);
+      ctx.fillStyle = kit.iron;
+      ctx.fillRect(x + 3, 424, 2, 1);
+      ctx.fillRect(x + 8, 426, 2, 1);
+      if (intact[i + 1]) {
+        ctx.fillStyle = kit.ironDark;
+        ctx.fillRect(x + 10, 425, 4, 1);
+      }
     } else if (ratio > FENCE_RUIN) {
-      ctx.fillRect(x + 1, 436 + (i % 3) * 2, 6, 1);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 2, 437 + (i % 3) * 2, 7, 1);
     }
   }
 }
@@ -671,29 +710,33 @@ function postFalls(x, ratio) {
 function drawPost(ctx, x, ratio, kit) {
   if (postFalls(x, ratio)) {
     ctx.fillStyle = kit.dark;
-    ctx.fillRect(x, 462, 12, 4);
-    ctx.fillRect(x + 3, 458, 5, 4);
+    ctx.fillRect(x, 461, 12, 5);
+    ctx.fillRect(x + 3, 457, 6, 4);
     ctx.fillStyle = kit.edge;
     ctx.fillRect(x + 1, 465, 10, 2);
     return;
   }
+  // Heavy armored steel buttress pylon
   ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, 418, 8, 52);
+  ctx.fillRect(x, 417, 10, 53);
   ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, 420, 6, 48);
+  ctx.fillRect(x + 1, 419, 8, 49);
   ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 422, 3, 44);
+  ctx.fillRect(x + 2, 421, 5, 45);
+  // Beveled steel turret cap & twin rivets
   ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 418, 8, 3);
-  ctx.fillRect(x, 446, 8, 4);
+  ctx.fillRect(x, 417, 10, 3);
+  ctx.fillRect(x + 1, 446, 8, 5);
+  ctx.fillStyle = kit.hazard;
+  ctx.fillRect(x + 2, 423, 6, 2);
   ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x + 1, 447, 6, 1);
+  ctx.fillRect(x + 1, 448, 8, 1);
   if (ratio <= FENCE_CRACKED) {
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 3, 430, 1, 12);
+    ctx.fillStyle = '#141010';
+    ctx.fillRect(x + 4, 429, 1, 13);
     if (ratio <= FENCE_FAILING) {
-      ctx.fillRect(x + 4, 434, 1, 10);
-      ctx.fillRect(x + 2, 438, 1, 6);
+      ctx.fillRect(x + 6, 433, 1, 11);
+      ctx.fillRect(x + 3, 438, 1, 6);
     }
   }
 }
@@ -726,28 +769,66 @@ function shiftFenceArt(ctx, draw) {
 
 function drawSleeper(ctx, ratio, kit) {
   const y = SLEEPER_ART_Y;
+  // Heavy armored steel base sill with hazard caution chevrons
   ctx.fillStyle = kit.edge;
   ctx.fillRect(0, y, W, 6);
   ctx.fillStyle = kit.dark;
   ctx.fillRect(0, y + 1, W, 4);
   ctx.fillStyle = kit.mid;
   ctx.fillRect(0, y + 1, W, 2);
+  // Bright full-width bastion top rail (stays brightest full-width horizontal band)
   ctx.fillStyle = kit.light;
   ctx.fillRect(0, y, W, 1);
+  // Caution hazard stripe blocks along the lower steel footing
+  for (let x = 6; x < W - 6; x += 16) {
+    ctx.fillStyle = kit.hazard;
+    ctx.fillRect(x, y + 2, 6, 2);
+  }
   if (ratio <= FENCE_FAILING) {
     for (let i = 0; i < PICKETS; i++) {
       if (ratio > breakAt(i)) continue;
-      ctx.fillStyle = '#1a1612';
-      ctx.fillRect(i * 12 + 4, y + 1, 6, 4);
+      ctx.fillStyle = '#181412';
+      ctx.fillRect(i * 12 + 3, y + 1, 7, 4);
     }
   }
-  for (let x = 8; x < W; x += 12) {
+  for (let x = 14; x < W; x += 16) {
     ctx.fillStyle = kit.iron;
     ctx.fillRect(x, y + 2, 1, 2);
   }
 }
 
-function drawFence(ctx, ratio) {
+function drawWallImmunity(ctx, count, time, reduced) {
+  if (!(count > 0)) return;
+  const base = readAlpha(ctx);
+  const pulse = reduced ? 0.85 : (0.7 + 0.3 * Math.sin(time * 6.5));
+  shiftFenceArt(ctx, () => {
+    // Luminous cyan Aegis energy rim across the center bastion parapet (strictly inside [60..300])
+    ctx.globalAlpha = base * 0.55 * pulse;
+    ctx.fillStyle = '#70e8ff';
+    ctx.fillRect(62, 427, 236, 2);
+    ctx.globalAlpha = base * 0.9 * pulse;
+    ctx.fillStyle = '#d8fbff';
+    ctx.fillRect(68, 428, 224, 1);
+    // Shield charge pips centered cleanly above the bastion rail
+    const pips = Math.min(8, Math.floor(count));
+    const step = 10;
+    const total = pips * step - 4;
+    const startX = Math.round(W / 2 - total / 2);
+    ctx.globalAlpha = base;
+    for (let i = 0; i < pips; i++) {
+      const px = startX + i * step;
+      ctx.fillStyle = '#0c1b22';
+      ctx.fillRect(px - 1, 439, 8, 6);
+      ctx.fillStyle = '#4ad8f8';
+      ctx.fillRect(px, 440, 6, 4);
+      ctx.fillStyle = '#e6fcff';
+      ctx.fillRect(px + 1, 441, 4, 2);
+    }
+  });
+  ctx.globalAlpha = base;
+}
+
+function drawFence(ctx, ratio, wallImmunity = 0, time = 0, reduced = false) {
   shiftFenceArt(ctx, () => {
     const kit = woodKit(ratio);
     const intact = new Array(PICKETS);
@@ -757,6 +838,7 @@ function drawFence(ctx, ratio) {
     for (const x of POSTS) drawPost(ctx, x, ratio, kit);
     drawRubble(ctx, kit, ratio);
   });
+  if (wallImmunity > 0) drawWallImmunity(ctx, wallImmunity, time, reduced);
 }
 
 function drawBanner(ctx, ratio, time, reduced, phase) {
@@ -990,7 +1072,7 @@ export function drawWorld(ctx, state, options) {
     drawStars(ctx, time, reduced);
     drawMist(ctx, time, reduced);
     drawGrass(ctx, time, reduced);
-    drawFence(ctx, ratio);
+    drawFence(ctx, ratio, Number(state?.wallImmunity) || 0, time, reduced);
     drawFenceTorches(ctx, ratio, time, reduced);
     drawBanner(ctx, ratio, time, reduced, phase);
     drawEmbers(ctx, ratio, time, reduced);

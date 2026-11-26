@@ -514,8 +514,15 @@ function drawProjectile(ctx, projectile, target, reduced) {
   const kind = ink.kind;
   const color = ink.color;
   const accent = ink.accent;
+  const tags = Array.isArray(projectile.tags) ? projectile.tags : [];
+  const isSplit = tags.includes('split');
+  const isCryoBarrage = tags.includes('cryo_barrage');
   let dx = finite(projectile.vx) ?? 0;
   let dy = finite(projectile.vy) ?? 0;
+  if (dx === 0 && dy === 0 && finite(projectile.dirx) != null && finite(projectile.diry) != null) {
+    dx = projectile.dirx;
+    dy = projectile.diry;
+  }
   if (dx === 0 && dy === 0 && target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
     dx = target.x - projectile.x;
     dy = target.y - projectile.y;
@@ -526,13 +533,65 @@ function drawProjectile(ctx, projectile, target, reduced) {
   const uy = dy / mag;
   const px = -uy;
   const py = ux;
-  const crit = !!projectile.crit || (Array.isArray(projectile.tags) && projectile.tags.includes('crit'));
-  const length = reduced ? 4 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
+  const crit = !!projectile.crit || tags.includes('crit');
+  const length = reduced ? 4 : isCryoBarrage ? 13 : isSplit ? 8 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
   const life = finite(projectile.life);
   const faded = life != null && life < 0.35;
   const at = (along, across) => [x + ux * along + px * across, y + uy * along + py * across];
   ctx.save();
   if (faded) ctx.globalAlpha = Math.max(0.3, life / 0.35);
+
+  if (isCryoBarrage) {
+    // Piercing Glacial Barrage ice lance (bold 3px crystalline shaft)
+    const baseAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = baseAlpha * 0.34;
+    ctx.fillStyle = '#5ee0ff';
+    ctx.fillRect(x - 4, y - 4, 9, 9);
+    ctx.globalAlpha = baseAlpha;
+    for (let i = length; i >= 1; i--) {
+      const [tx, ty] = at(-i, 0);
+      plot(ctx, tx, ty, i <= 5 ? '#f4fdff' : i <= 9 ? '#82e6ff' : '#2a7aa0');
+      if (i <= 7) {
+        const [s1x, s1y] = at(-i, 1);
+        const [s2x, s2y] = at(-i, -1);
+        plot(ctx, s1x, s1y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
+        plot(ctx, s2x, s2y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
+      }
+    }
+    const [tipX, tipY] = at(3, 0);
+    const [midX, midY] = at(1, 0);
+    plot(ctx, tipX, tipY, '#ffffff');
+    plot(ctx, midX, midY, '#ffffff');
+    plot(ctx, x, y, '#ffffff');
+    for (const across of [-2, 2]) {
+      const [wx, wy] = at(-1, across);
+      plot(ctx, wx, wy, '#9beeff');
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (isSplit) {
+    // Blazing gold-crimson shrapnel sub-bolt
+    const baseAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = baseAlpha * 0.3;
+    ctx.fillStyle = '#ff9838';
+    ctx.fillRect(x - 3, y - 3, 7, 7);
+    ctx.globalAlpha = baseAlpha;
+    for (let i = length; i >= 1; i--) {
+      const [tx, ty] = at(-i, 0);
+      plot(ctx, tx, ty, i <= 3 ? '#fff5be' : i <= 6 ? '#ffb43a' : '#c84826');
+    }
+    const [tipX, tipY] = at(2, 0);
+    plot(ctx, tipX, tipY, '#ffffff');
+    plot(ctx, x, y, '#ffe56a');
+    for (const across of [-1, 1]) {
+      const [sx, sy] = at(0, across);
+      plot(ctx, sx, sy, '#ff7832');
+    }
+    ctx.restore();
+    return;
+  }
 
   // Subtle luminous elemental halo so projectiles read crisply over dense hordes
   const baseAlpha = ctx.globalAlpha;
@@ -649,7 +708,7 @@ function drawProjectile(ctx, projectile, target, reduced) {
 
 function cloudColor(cloud) {
   const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
-  if (kind.includes('fire') || kind.includes('burn')) return '#e25a2a';
+  if (kind.includes('napalm') || kind.includes('shrapnel') || kind.includes('fire') || kind.includes('burn')) return '#ff5a20';
   if (kind.includes('poison') || kind.includes('toxin') || kind.includes('miasma')) return '#6aaa3a';
   if (kind.includes('frost') || kind.includes('ice') || kind.includes('slow')) return '#8fd0e0';
   if (kind.includes('light')) return '#ffe14a';
@@ -662,6 +721,8 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const radius = finite(cloud.radius) ?? finite(cloud.range);
   if (x == null || y == null || radius == null || radius <= 0) return;
   const r = clamp(radius, 2, 120);
+  const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
+  const isFireSea = kind.includes('napalm') || kind.includes('shrapnel');
   const color = cloudColor(cloud);
   const seed = hashInt(index * 97 + Math.round(x) * 13 + Math.round(y) * 29);
   let fade = 1;
@@ -669,6 +730,51 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const duration = finite(cloud.duration);
   if (remaining != null && duration != null && duration > 0) fade = clamp(remaining / duration, 0, 1);
   ctx.save();
+  if (isFireSea) {
+    // Roaring Napalm / Thermobaric Fire Sea
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    const flicker = reduced ? 0.85 : (0.76 + 0.24 * Math.sin(time * 14 + index));
+    ctx.globalAlpha = 0.24 * fade * flicker;
+    ctx.fillStyle = '#d82e12';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.28 * fade * flicker;
+    ctx.fillStyle = '#ff7b24';
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(4, r * 0.68), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.56 * fade;
+    ctx.strokeStyle = '#ff9d3b';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash?.([4, 3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash?.([]);
+    // Flickering pixel flame tongues + golden hot embers
+    const step = r > 44 ? 9 : 7;
+    const frame = reduced ? 0 : Math.floor(time * 11);
+    for (let py = -r + 4; py <= r - 4; py += step) {
+      for (let px = -r + 4; px <= r - 4; px += step) {
+        if (px * px + py * py > (r - 4) * (r - 4)) continue;
+        const h = hashInt(seed + px * 7 + py * 19);
+        if ((h & 3) !== 0) continue;
+        const bob = reduced ? 2 : ((frame + (h & 7)) % 5);
+        const fx = Math.round(x + px);
+        const fy = Math.round(y + py);
+        ctx.globalAlpha = 0.72 * fade;
+        ctx.fillStyle = '#ff541a';
+        ctx.fillRect(fx - 1, fy - 2 - bob, 3, 4 + (bob & 1));
+        ctx.globalAlpha = 0.9 * fade;
+        ctx.fillStyle = (h & 8) ? '#ffe878' : '#ffb842';
+        ctx.fillRect(fx, fy - 1 - bob, 1, 2);
+      }
+    }
+    ctx.restore();
+    return;
+  }
   // Soft translucent ground hazard zone
   ctx.globalAlpha = 0.16 * fade;
   ctx.fillStyle = color;
@@ -697,6 +803,133 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
       const rise = reduced ? 0 : ((drift + (h & 7)) % 5);
       ctx.fillRect(Math.round(x + px), Math.round(y + py - rise), 2, 2);
     }
+  }
+  ctx.restore();
+}
+
+function drawSweepers(ctx, state, time, reduced) {
+  const list = state.arsenal?.sweepers;
+  if (!Array.isArray(list) || !list.length) return;
+  const treadTick = reduced ? 0 : (Math.floor(time * 24) & 3);
+  ctx.save();
+  for (let i = 0; i < list.length; i++) {
+    const sw = list[i];
+    if (!sw || !Number.isFinite(sw.x) || !Number.isFinite(sw.y)) continue;
+    const cx = Math.round(sw.x);
+    const cy = Math.round(sw.y);
+    const hw = Math.min(24, Math.max(18, Math.round((sw.halfWidth || 34) * 0.62)));
+    // Twin golden headlight cones sweeping ahead of the plow
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#ffe98a';
+    ctx.fillRect(cx - hw + 2, cy - 36, 7, 16);
+    ctx.fillRect(cx + hw - 9, cy - 36, 7, 16);
+    ctx.globalAlpha = 0.1;
+    ctx.fillRect(cx - hw, cy - 48, 11, 14);
+    ctx.fillRect(cx + hw - 11, cy - 48, 11, 14);
+    ctx.globalAlpha = 1;
+    // Heavy contact drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    ctx.fillRect(cx - hw - 1, cy - 16, hw * 2 + 2, 38);
+    // Left & right armored rubber treads with animated cleats
+    ctx.fillStyle = '#141a1e';
+    ctx.fillRect(cx - hw, cy - 12, 5, 30);
+    ctx.fillRect(cx + hw - 5, cy - 12, 5, 30);
+    ctx.fillStyle = '#48565e';
+    for (let ty = -10 + treadTick; ty < 16; ty += 5) {
+      ctx.fillRect(cx - hw + 1, cy + ty, 3, 2);
+      ctx.fillRect(cx + hw - 4, cy + ty, 3, 2);
+    }
+    // Main armored steel truck chassis
+    const bw = (hw - 4) * 2;
+    ctx.fillStyle = '#1b242a';
+    ctx.fillRect(cx - hw + 4, cy - 15, bw, 33);
+    ctx.fillStyle = '#3a4c58';
+    ctx.fillRect(cx - hw + 5, cy - 14, bw - 2, 31);
+    // Steel hood & rear cargo armor deck
+    ctx.fillStyle = '#5a707e';
+    ctx.fillRect(cx - hw + 6, cy - 13, bw - 4, 10);
+    ctx.fillRect(cx - hw + 6, cy + 5, bw - 4, 10);
+    // Armored cyan slit windshield
+    ctx.fillStyle = '#142028';
+    ctx.fillRect(cx - hw + 7, cy - 5, bw - 6, 5);
+    ctx.fillStyle = '#7ce6ff';
+    ctx.fillRect(cx - hw + 8, cy - 4, bw - 8, 3);
+    ctx.fillStyle = '#e8fbff';
+    ctx.fillRect(cx - hw + 9, cy - 4, 4, 1);
+    // Roof turret hatch & amber beacon
+    ctx.fillStyle = '#243038';
+    ctx.fillRect(cx - 5, cy + 2, 10, 8);
+    ctx.fillStyle = '#8aa0ac';
+    ctx.fillRect(cx - 4, cy + 3, 8, 6);
+    ctx.fillStyle = (treadTick & 1) ? '#ff5a3c' : '#ffe56a';
+    ctx.fillRect(cx - 1, cy + 5, 2, 2);
+    // Heavy V-shaped front steel ram-plow with hazard stripes
+    ctx.fillStyle = '#222c32';
+    ctx.fillRect(cx - hw - 3, cy - 21, hw * 2 + 6, 7);
+    ctx.fillStyle = '#cedbe2';
+    ctx.fillRect(cx - hw - 2, cy - 20, hw * 2 + 4, 3);
+    ctx.fillStyle = '#f0cb72';
+    for (let sx = -hw; sx <= hw - 4; sx += 8) {
+      ctx.fillRect(cx + sx, cy - 17, 4, 2);
+    }
+    // Headlights on bumper
+    ctx.fillStyle = '#fff9d6';
+    ctx.fillRect(cx - hw + 4, cy - 16, 3, 2);
+    ctx.fillRect(cx + hw - 7, cy - 16, 3, 2);
+    // Exhaust puffs behind rear wheels
+    if (!reduced) {
+      const puff = (Math.floor(time * 16) + i * 3) % 8;
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = '#a8b8c0';
+      ctx.fillRect(cx - hw + 6, cy + 19 + puff, 3, 3);
+      ctx.fillRect(cx + hw - 9, cy + 21 + (7 - puff), 3, 3);
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+
+function drawBeams(ctx, state, time, reduced) {
+  const list = state.arsenal?.beams;
+  if (!Array.isArray(list) || !list.length) return;
+  ctx.save();
+  for (let i = 0; i < list.length; i++) {
+    const beam = list[i];
+    if (!beam || !Number.isFinite(beam.x) || !(beam.life > 0)) continue;
+    const maxLife = beam.maxLife > 0 ? beam.maxLife : 0.65;
+    const ratio = clamp(beam.life / maxLife, 0, 1);
+    const pulse = reduced ? 1 : (0.85 + 0.15 * Math.sin(time * 42 + i));
+    const width = Math.max(12, Math.round((beam.width || 36) * (0.45 + 0.55 * ratio)));
+    const cx = Math.round(beam.x);
+    const bottom = ARENA.fenceY - 6;
+    // Outer electric cyan plasma halo
+    ctx.globalAlpha = 0.26 * ratio * pulse;
+    ctx.fillStyle = '#38d8ff';
+    ctx.fillRect(cx - Math.round(width * 0.72), 0, Math.round(width * 1.44), bottom);
+    // Main high-energy laser column
+    ctx.globalAlpha = 0.64 * ratio * pulse;
+    ctx.fillStyle = '#8ef0ff';
+    ctx.fillRect(cx - Math.round(width * 0.42), 0, Math.round(width * 0.84), bottom);
+    // Blinding white-hot beam core
+    const coreW = Math.max(4, Math.round(width * 0.22));
+    ctx.globalAlpha = 0.94 * ratio;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - Math.round(coreW / 2), 0, coreW, bottom);
+    // Animated descending energy scan bars
+    if (!reduced) {
+      const scan = Math.floor((time * 460 + i * 73) % 72);
+      ctx.globalAlpha = 0.75 * ratio;
+      ctx.fillStyle = '#e0fbff';
+      for (let sy = scan; sy < bottom; sy += 72) {
+        ctx.fillRect(cx - Math.round(width * 0.55), sy, Math.round(width * 1.1), 3);
+      }
+    }
+    // Ground scorch flare at the base of the beam
+    ctx.globalAlpha = 0.78 * ratio;
+    ctx.fillStyle = '#c8f8ff';
+    ctx.fillRect(cx - Math.round(width * 0.65), bottom - 4, Math.round(width * 1.3), 5);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - Math.round(width * 0.35), bottom - 3, Math.round(width * 0.7), 3);
   }
   ctx.restore();
 }
@@ -1242,6 +1475,10 @@ export function createRenderer(canvas) {
   const shots = [];
   const slotCues = [];
   let fenceAt = null;
+  let wallImmuneAt = null;
+  let heroShotAt = null;
+  let heroShotX = ARENA.width / 2;
+  let heroShotY = ARENA.frontY - 12;
   let shakeAt = null;
   let shakeAmp = 0;
   let hordeAt = null;
@@ -1263,6 +1500,8 @@ export function createRenderer(canvas) {
     shots.length = 0;
     slotCues.length = 0;
     fenceAt = null;
+    wallImmuneAt = null;
+    heroShotAt = null;
     shakeAt = null;
     shakeAmp = 0;
     hordeAt = null;
@@ -1291,17 +1530,37 @@ export function createRenderer(canvas) {
           targetId: idOf(event.targetId, event.enemyId, typeof event.target === 'string' ? event.target : null),
         });
       } else if (type === 'shot') {
+        const sx = finite(event.x);
+        const sy = finite(event.y);
         pushCapped(shots, {
           at,
-          x: finite(event.x),
-          y: finite(event.y),
+          x: sx,
+          y: sy,
           sourceId: idOf(event.sourceId, event.unitId, typeof event.source === 'string' ? event.source : null),
         });
+        if (event.towerType === 'hero' || (Array.isArray(event.tags) && event.tags.includes('hero'))) {
+          heroShotAt = at;
+          if (sx != null && sy != null) {
+            heroShotX = sx;
+            heroShotY = sy - 14;
+          }
+        }
       } else if (type === 'fence_hit') {
         fenceAt = at;
         triggerShake(at, 1.5);
+      } else if (type === 'wall_immune') {
+        wallImmuneAt = at;
+        triggerShake(at, 1.6);
       } else if (type === 'fence_surge') {
         triggerShake(at, 4);
+      } else if (type === 'napalm_blast') {
+        triggerShake(at, 3.2);
+      } else if (type === 'orbital_beam') {
+        triggerShake(at, 3.0);
+      } else if (type === 'armored_car') {
+        triggerShake(at, 2.2);
+      } else if (type === 'em_strike') {
+        triggerShake(at, 1.8);
       } else if (type === 'boss_enrage' || type === 'field_destroy') {
         triggerShake(at, 2.5);
       } else if (type === 'corpse_explode') {
@@ -1573,6 +1832,10 @@ export function createRenderer(canvas) {
         drawBannerHaste(ctx, enemies, anchors);
         drawMendLinks(ctx, enemies, anchors);
       });
+
+      // Armored Sweeper Trucks barreling through the zombie lines
+      drawSweepers(ctx, state, visualTime, reduced);
+
       const hushed = boardHushed(enemies);
       const mergeable = mergeableSlotIndexes(state);
 
@@ -1592,6 +1855,24 @@ export function createRenderer(canvas) {
         drawTargetingPip(ctx, slotBox(slot, index), unit);
       }
 
+      // Punchy Hero rifle muzzle flash star on every burst
+      const muzzleStr = heroShotAt != null ? cueStrength(heroShotAt, now, reduced ? 55 : 95) : 0;
+      if (muzzleStr > 0) {
+        const mx = Math.round(heroShotX);
+        const my = Math.round(heroShotY);
+        ctx.save();
+        ctx.globalAlpha = 0.88 * muzzleStr;
+        ctx.fillStyle = '#ff9838';
+        ctx.fillRect(mx - 6, my - 1, 13, 3);
+        ctx.fillRect(mx - 1, my - 6, 3, 13);
+        ctx.fillStyle = '#fff5be';
+        ctx.fillRect(mx - 4, my, 9, 1);
+        ctx.fillRect(mx, my - 4, 1, 9);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(mx - 1, my - 1, 3, 3);
+        ctx.restore();
+      }
+
       const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
       const visibleShots = [];
       const shotStart = Math.max(0, projectiles.length - MAX_PROJECTILES);
@@ -1608,6 +1889,9 @@ export function createRenderer(canvas) {
         if (projectile.targetId != null) targeted[projectile.targetId] = true;
         drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
       }
+
+      // Orbital Laser Beams slicing vertically across the horde
+      drawBeams(ctx, state, visualTime, reduced);
 
       if (showRange) drawRange(ctx, state, selected, true, warned, rangeCache);
 
@@ -1628,6 +1912,17 @@ export function createRenderer(canvas) {
       }
 
       drawSurgeOverlay(ctx, state, visualTime, reduced);
+      const aegisFlash = wallImmuneAt != null ? cueStrength(wallImmuneAt, now, reduced ? 120 : 240) : 0;
+      if (aegisFlash > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.52 * aegisFlash;
+        ctx.fillStyle = '#5ee8ff';
+        ctx.fillRect(0, ARENA.fenceY - 12, ARENA.width, 12);
+        ctx.globalAlpha = 0.92 * aegisFlash;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, ARENA.fenceY - 7, ARENA.width, 2);
+        ctx.restore();
+      }
       drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
 
       // Brief crimson edge horizon pulse when a horde wave surges in
@@ -1711,6 +2006,8 @@ export function createRenderer(canvas) {
     pruneList(shots, now);
     pruneList(slotCues, now);
     if (fenceAt != null && now - fenceAt > CUE_MS) fenceAt = null;
+    if (wallImmuneAt != null && now - wallImmuneAt > 260) wallImmuneAt = null;
+    if (heroShotAt != null && now - heroShotAt > 110) heroShotAt = null;
     if (shakeAt != null && now - shakeAt > 260) { shakeAt = null; shakeAmp = 0; }
     if (hordeAt != null && now - hordeAt > 1500) hordeAt = null;
 

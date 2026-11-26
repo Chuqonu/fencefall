@@ -18,7 +18,7 @@ import * as audioMod from './audio.js';
 import * as rendererMod from './render/renderer.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
+export const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'buyGem', 'equipGem', 'unequipGem', 'claimStarterPack', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
 
 const MODULES = {
   hero, merges, drafts, progression, storage, i18n, towers, recipes, waves,
@@ -299,6 +299,10 @@ export async function createController(options = {}) {
     if (action === 'buyEquipment') return profileAction('buyEquipment', payload.id);
     if (action === 'equip') return profileAction('equipItem', payload.id);
     if (action === 'upgradePermanent') return profileAction('purchasePermanent', payload.id);
+    if (action === 'buyGem') return profileAction('buyGem', payload.id);
+    if (action === 'equipGem') return profileAction('equipGem', payload.id);
+    if (action === 'unequipGem') return profileAction('unequipGem', payload.id);
+    if (action === 'claimStarterPack') return profileAction('claimStarterPack');
     if (action === 'exportSave') return exportCurrent();
     if (action === 'importSave') return importCurrent(payload.text);
     return {ok:false, reason:'unknown-action'};

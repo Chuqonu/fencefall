@@ -1,6 +1,6 @@
 // Fixed-step integration. Speed changes how many STEP updates run per wall
 // second; gameplay systems always receive STEP, never a scaled delta.
-import {STEP, clone, emit} from './shared.js';
+import {STEP, clone, emit, random} from './shared.js';
 import {updateField} from './systems/field.js';
 import {updateMovement} from './systems/movement.js';
 import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
@@ -8,10 +8,12 @@ import {updateStatuses} from './systems/status.js';
 import {updateWaves} from './systems/waves.js';
 import {updateDrafts} from './systems/drafts.js';
 import {getProfileBonuses} from './systems/progression.js';
+import {applyHeroUpgrade} from './systems/hero.js';
 
 export {createRun, createProfile} from './state.js';
 
 const ZERO_BONUSES = Object.freeze({damage:0, haste:0, range:0, critChance:0, fence:0, reward:0});
+const STARTER_EVOLUTIONS = Object.freeze(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 function requireFn(fn, name) {
   if (typeof fn !== 'function') throw new Error(`Fencefall core system missing: ${name}`);
@@ -30,7 +32,12 @@ requireFn(getProfileBonuses, 'getProfileBonuses');
 function sanitizeBonuses(value) {
   const out = {...ZERO_BONUSES};
   if (!value || typeof value !== 'object') return out;
-  for (const key of [...Object.keys(out),'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount','fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate']) {
+  for (const key of [
+    ...Object.keys(out),
+    'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount',
+    'fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate',
+    'openingDraft','heroPierce','wallImmunity','shredPercent','statusDamage','superweaponHaste','starterWeapon'
+  ]) {
     const number = Number(value[key]);
     if (Number.isFinite(number)) out[key] = number;
   }
@@ -50,6 +57,12 @@ export function applyProfileBonuses(state, bonuses) {
   state.energy=Math.min(state.maxEnergy,state.energy+(clean.energy||0));
   state.freeRerollsLeft=clean.freeRerolls || 0;
   state.surge.charges=state.surge.maxCharges=1+(clean.surgeCharges||0);
+  state.wallImmunity = Math.max(0, Math.floor(clean.wallImmunity || 0));
+  state.openingDraftPending = Math.max(0, Math.floor(clean.openingDraft || 0));
+  if ((clean.starterWeapon || 0) > 0) {
+    const pick = STARTER_EVOLUTIONS[Math.floor(random(state) * STARTER_EVOLUTIONS.length)];
+    applyHeroUpgrade(state, pick);
+  }
   state.initialized = true;
   return state;
 }

@@ -84,6 +84,12 @@ const CSS = `
 .ff-build.is-draft [data-meter="burn"] .ff-meter-fill{background:#e86a38}
 .ff-build.is-draft [data-meter="brittle"] .ff-meter-fill{background:#9fd7e8}
 .ff-build.is-draft [data-meter="fence"] .ff-meter-fill{background:#7dce92}
+.ff-build.is-draft [data-meter="split"] .ff-meter-fill{background:#ffb83e}
+.ff-build.is-draft [data-meter="chain"] .ff-meter-fill{background:#7ce6ff}
+.ff-build.is-draft [data-meter="napalm"] .ff-meter-fill{background:#ff5c28}
+.ff-build.is-draft [data-meter="armored_car"] .ff-meter-fill{background:#9ac4d6}
+.ff-build.is-draft [data-meter="cryo_barrage"] .ff-meter-fill{background:#70e2ff}
+.ff-build.is-draft [data-meter="orbital_beam"] .ff-meter-fill{background:#52f0ff}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-row{height:14px}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-track,.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-fill{height:14px}
 .ff-build.is-draft .ff-choice h3{font-size:15.5px;line-height:1.2;color:#f7f4ea}
@@ -1491,6 +1497,13 @@ function unitLead(stats, lang, tr, unit = null) {
 }
 
 function heroEffectLine(record, lang, tr) {
+  const id = record?.id;
+  if (id === 'split_shot') return lang === 'zh' ? '伤害 +3 · 子母分裂' : 'Split +2–4 · Dmg +3';
+  if (id === 'ricochet') return lang === 'zh' ? '伤害 +2 · 电弧+雷击' : 'EM Chain + Sky-Strike';
+  if (id === 'napalm') return lang === 'zh' ? '溅射 +24 · 自动火海' : 'Auto Napalm Fire Sea';
+  if (id === 'armored_car') return lang === 'zh' ? '栅栏 +60 · 自动装甲车' : 'Auto Armored Sweeper';
+  if (id === 'cryo_barrage') return lang === 'zh' ? '易伤 +10% · 自动冰柱' : 'Auto Glacial Barrage';
+  if (id === 'orbital_beam') return lang === 'zh' ? '暴倍 +0.25 · 自动激光' : 'Auto Orbital Laser';
   const effect = record?.effect;
   if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
   if (effect.multishot) return tr('multishot')+' +'+effect.multishot;
@@ -1688,8 +1701,14 @@ const ROLE_CUES = {
 };
 
 const METER_CAPTION = {
-  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco' },
-  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光' },
+  en: {
+    damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco',
+    split: 'Split', chain: 'EM', napalm: 'Fire', armored_car: 'Tank', cryo_barrage: 'Ice', orbital_beam: 'Beam',
+  },
+  zh: {
+    damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光',
+    split: '分裂', chain: '电磁', napalm: '火海', armored_car: '装甲', cryo_barrage: '冰柱', orbital_beam: '激光',
+  },
 };
 
 function fillPct(part, whole) {
@@ -1726,13 +1745,20 @@ function towerPowerBars(state, option) {
 }
 
 function heroPowerBars(option) {
-  const record = upgradeRecord(resolveUpgradeId(option));
+  const id = resolveUpgradeId(option);
+  const record = upgradeRecord(id);
   const effect = record?.effect || {};
   const cap = Number(record?.cap ?? option?.cap);
   const next = Number(option?.nextLevel);
   const progress = Number.isFinite(cap) && cap > 0 && Number.isFinite(next) ? next / cap : 0.75;
   const strong = Math.max(36, Math.min(100, Math.round(36 + 64 * progress)));
   const dim = 14;
+  if (id === 'split_shot') return [{ key: 'split', fill: strong }];
+  if (id === 'ricochet') return [{ key: 'chain', fill: strong }];
+  if (id === 'napalm') return [{ key: 'napalm', fill: strong }];
+  if (id === 'armored_car') return [{ key: 'armored_car', fill: strong }];
+  if (id === 'cryo_barrage') return [{ key: 'cryo_barrage', fill: strong }];
+  if (id === 'orbital_beam') return [{ key: 'orbital_beam', fill: strong }];
   if (effect.damageAdd) return threeBars(strong, dim, dim);
   if (effect.haste) return threeBars(dim, strong, dim);
   if (effect.range) return threeBars(dim, dim, strong);
@@ -1788,8 +1814,21 @@ function heroMarkLabel(effect, lang) {
   return value===badge?translate(lang,key):value;
 }
 
+const V3_HERO_CUES = {
+  split_shot: { glyph: '❖', color: '#ffb83e', en: 'Split', zh: '分裂' },
+  ricochet: { glyph: '↯', color: '#7ce6ff', en: 'EM', zh: '电磁' },
+  napalm: { glyph: '✹', color: '#ff6430', en: 'Napalm', zh: '火海' },
+  armored_car: { glyph: '▣', color: '#9ac4d6', en: 'Tank', zh: '装甲' },
+  cryo_barrage: { glyph: '❄', color: '#70e2ff', en: 'Glacial', zh: '冰柱' },
+  orbital_beam: { glyph: '┃', color: '#52f0ff', en: 'Laser', zh: '激光' },
+};
+
 function heroStatCue(option, lang) {
   const id = resolveUpgradeId(option);
+  if (V3_HERO_CUES[id]) {
+    const cue = V3_HERO_CUES[id];
+    return { glyph: cue.glyph, color: cue.color, label: lang === 'zh' ? cue.zh : cue.en };
+  }
   const record = upgradeRecord(id);
   const effect = record?.effect || {};
   const label = heroMarkLabel(effect, lang);
@@ -1830,7 +1869,13 @@ export function draftPower(state, option, language) {
 function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
-  const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
+  const isOpeningDrop = state.draft?.openingDrop === true;
+  const title = el('h2', {
+    id: titleId,
+    class: 'ff-title',
+    'data-testid': 'draft-title',
+    text: isOpeningDrop ? tr('openingDropTitle') : tr('chooseOneOfThree'),
+  });
   const fee = rerollCost(state);
   const energyNow = Number.isFinite(Number(state.energy)) ? Math.floor(Number(state.energy)) : 0;
   const rerollsUsed = Number(state.draftRerollsUsed) || 0;

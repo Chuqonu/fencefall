@@ -7,10 +7,13 @@ export function createRun({seed=123456,difficulty='normal',profile=createProfile
  const hp=DIFFICULTIES[difficulty].fence;
  const state={version:CONTRACT_VERSION,runId:id,seed:seed>>>0,rng:seed>>>0,nextId:1,time:0,tick:0,accumulator:0,phase:'playing',paused:false,hiddenPaused:false,speed:1,difficulty,expedition:isExpedition(expedition)?expedition:'watch',wave:0,waveTime:0,director:{nextWave:0,queue:[],done:false},kills:0,xp:0,nextDraftXp:6,draftLevel:0,fence:{hp,maxHp:hp},slots:Array.from({length:10},(_,i)=>({...slotGeometry(i),unit:null})),enemies:[],projectiles:[],clouds:[],events:[],draft:null,pendingUnit:null,profileSnapshot:clone(profile),settlement:null,stats:{damage:0,fenceDamage:0,merges:0,crits:0},initialized:false,endless:false,systems:{}};
  Object.assign(state, {
-   energy: state.expedition === 'watch' ? 45 : 60, maxEnergy:999,
+   energy: state.expedition === 'watch' ? 45 : state.expedition === 'frenzy' ? 75 : 60, maxEnergy:999,
    fieldSlots:Array.from({length:10}, (_,i)=>({...fieldSlotGeometry(i),unit:null})),
    fieldCooldowns:{bulwark:0, spikes:0, flare:0}, draftRerollsUsed:0, freeRerollsLeft:0,
-   surge:{charges:1, maxCharges:1, shieldTimer:0, cooldown:0, thresholdsUsed:[]}
+   surge:{charges:1, maxCharges:1, shieldTimer:0, cooldown:0, thresholdsUsed:[]},
+   wallImmunity:0,
+   openingDraftPending:0,
+   arsenal:{timers:{napalm:1.6, armored_car:2.4, cryo_barrage:2.0, orbital_beam:2.6, ricochet:2.2}, sweepers:[], beams:[]}
  });
  state.slots[2].unit=createUnit(state,'hero');
  return state;

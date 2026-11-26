@@ -60,6 +60,14 @@ const LIMITS = Object.freeze({
   wave_horde: 1,
   draft_reroll: 1,
   targeting_change: 1,
+  napalm_blast: 3,
+  armored_car: 2,
+  cryo_barrage: 2,
+  orbital_beam: 2,
+  em_strike: 3,
+  wall_immune: 3,
+  bullet_split: 8,
+  cryo_shatter: 6,
 });
 
 const PALETTES = Object.freeze({
@@ -84,6 +92,9 @@ const PALETTES = Object.freeze({
   surge: { core: '#ffffff', hot: '#9ef0ff', mid: '#4ac8f0', dim: '#185470' },
   steam: { core: '#ffffff', hot: '#e6fbff', mid: '#ffaa5a', dim: '#3c7a90' },
   catalyst: { core: '#ffffff', hot: '#e4ff7a', mid: '#b0ff3a', dim: '#3e6a14' },
+  napalm: { core: '#fff8d6', hot: '#ff9638', mid: '#e83814', dim: '#6a120a' },
+  orbital: { core: '#ffffff', hot: '#9ef4ff', mid: '#3ac8f8', dim: '#124a6e' },
+  aegis: { core: '#ffffff', hot: '#94f0ff', mid: '#46c6f0', dim: '#164d68' },
 });
 
 const HYBRID_PALETTES = Object.freeze([
@@ -101,10 +112,15 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   bolt: 'bolt',
   fire: 'fire',
   burn: 'fire',
+  napalm: 'fire',
+  shrapnel: 'fire',
   frost: 'frost',
   slow: 'frost',
+  cryo_barrage: 'frost',
   lightning: 'lightning',
   stun: 'lightning',
+  orbital_beam: 'lightning',
+  ricochet: 'lightning',
   brittle: 'brittle',
   poison: 'poison',
   support: 'support',
@@ -112,6 +128,8 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   heal: 'support',
   buff: 'support',
   hero: 'hero',
+  split_shot: 'hero',
+  armored_car: 'bolt',
   harvest: 'harvest',
   spikes: 'bolt',
 });
@@ -123,6 +141,8 @@ const FEEDBACK = new Set([
   'fence_surge', 'corpse_explode', 'cloud_spawn', 'knockback',
   'field_build', 'field_hit', 'field_destroy', 'field_repair', 'field_remove',
   'energy_gain', 'wave_horde', 'draft_reroll', 'targeting_change',
+  'napalm_blast', 'armored_car', 'cryo_barrage', 'orbital_beam',
+  'em_strike', 'wall_immune', 'bullet_split', 'cryo_shatter',
 ]);
 
 // These need a finite x and y on the event. Slot fallback and extra fields are ignored.
@@ -1369,6 +1389,85 @@ export function createEffects() {
     if (text) pushFloater(point.x, point.y - 6, `+${text}`, PALETTES.harvest.hot, 2, false, 'energy', 0.62, seed);
   }
 
+  function spawnNapalmBlast(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(24, Math.min(72, desc.radius || 58));
+    pushRing(point.x, point.y, Math.round(r * 0.45), r * 1.6, PALETTES.napalm.hot, 0.42, 2);
+    pushRing(point.x, point.y, Math.round(r * 0.25), r * 1.15, PALETTES.napalm.mid, 0.36, 2);
+    pushFlash(point.x, point.y, 0.32);
+    burst(point.x, point.y, 12, 92, -32, true, PALETTES.napalm.hot, 0.42, seed, 2);
+    burst(point.x, point.y, 6, 68, 22, false, PALETTES.napalm.mid, 0.34, seed + 17, 2);
+  }
+
+  function spawnArmoredCar(desc, seed) {
+    const point = visualPoint(desc) || { x: ARENA.width / 2, y: ARENA.fenceY - 12 };
+    pushRing(point.x, point.y, 12, 54, PALETTES.draft.hot, 0.36, 2);
+    pushPlus(point.x, point.y, 5, PALETTES.bolt.hot, '#ffffff', 0.24);
+    burst(point.x, point.y, 8, 66, 20, true, PALETTES.draft.hot, 0.34, seed, 2);
+  }
+
+  function spawnCryoBarrage(desc, seed) {
+    const point = visualPoint(desc) || { x: ARENA.width / 2, y: ARENA.fenceY - 12 };
+    pushRing(point.x, point.y, 14, 62, PALETTES.frost.hot, 0.34, 2);
+    pushPlus(point.x, point.y, 5, PALETTES.frost.core, '#ffffff', 0.22);
+    burst(point.x, point.y, 8, 74, -20, true, PALETTES.frost.hot, 0.34, seed, 2);
+  }
+
+  function spawnOrbitalBeam(desc, seed) {
+    const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
+    const y = desc.y != null ? desc.y : 220;
+    pushRing(x, y, 16, 72, PALETTES.orbital.hot, 0.42, 2);
+    pushRing(x, ARENA.fenceY - 10, 14, 58, PALETTES.orbital.core, 0.38, 2);
+    pushFlash(x, y, 0.3);
+    burst(x, y, 10, 88, 0, false, PALETTES.orbital.hot, 0.38, seed, 2);
+  }
+
+  function spawnEmStrike(desc, seed) {
+    const points = desc.points && desc.points.length
+      ? desc.points
+      : (desc.position ? [desc.position] : []);
+    if (!points.length) return;
+    const first = points[0];
+    // Jagged sky-to-ground lightning bolt descending onto the first zombie
+    pushArc(first.x + ((seed & 7) - 3) * 4, 4, first.x, first.y, '#ffffff', 0.28, 16, seed);
+    pushArc(first.x + ((seed & 7) - 3) * 4 + 2, 4, first.x, first.y, PALETTES.orbital.hot, 0.24, 14, seed + 5);
+    pushRing(first.x, first.y, 12, 48, PALETTES.orbital.hot, 0.34, 2);
+    pushFlash(first.x, first.y, 0.26);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      pushJump(kinkedJump(a.x, a.y, b.x, b.y), PALETTES.orbital, 0.26, { x: b.x, y: b.y, crit: i === 1 });
+      pushRing(b.x, b.y, 8, 34, PALETTES.lightning.hot, 0.28, 1);
+    }
+    burst(first.x, first.y, 7, 76, 0, false, PALETTES.orbital.hot, 0.3, seed + 13, 2);
+  }
+
+  function spawnWallImmune(desc, seed) {
+    const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
+    const y = ARENA.fenceY - 4;
+    pushParticle({ kind: 'glowline', y, color: PALETTES.aegis.hot, broken: false, life: 0.42, maxLife: 0.42, motionOnly: false });
+    pushRing(x, y, 12, 46, PALETTES.aegis.hot, 0.34, 2);
+    pushPlus(x, y - 4, 5, PALETTES.aegis.core, '#ffffff', 0.24);
+    burst(x, y - 2, 6, 56, -24, true, PALETTES.aegis.hot, 0.3, seed, 2);
+  }
+
+  function spawnBulletSplit(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushPlus(point.x, point.y, 3, PALETTES.bolt.hot, '#ffffff', 0.16);
+    burst(point.x, point.y, 4, 54, 0, false, PALETTES.bolt.hot, 0.18, seed, 1);
+  }
+
+  function spawnCryoShatter(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(16, Math.min(54, desc.radius || 40));
+    pushRing(point.x, point.y, Math.round(r * 0.45), r * 1.25, PALETTES.frost.hot, 0.34, 2);
+    pushPlus(point.x, point.y, 4, PALETTES.frost.core, '#ffffff', 0.22);
+    burst(point.x, point.y, 8, 72, 16, false, PALETTES.frost.hot, 0.32, seed, 2);
+  }
+
   function spawn(desc, index) {
     const seed = nextSeed(desc, index);
     switch (desc.type) {
@@ -1397,6 +1496,14 @@ export function createEffects() {
       case 'field_repair': spawnFieldRepair(desc, seed); break;
       case 'field_remove': spawnFieldRemove(desc, seed); break;
       case 'energy_gain': spawnEnergyGain(desc, seed); break;
+      case 'napalm_blast': spawnNapalmBlast(desc, seed); break;
+      case 'armored_car': spawnArmoredCar(desc, seed); break;
+      case 'cryo_barrage': spawnCryoBarrage(desc, seed); break;
+      case 'orbital_beam': spawnOrbitalBeam(desc, seed); break;
+      case 'em_strike': spawnEmStrike(desc, seed); break;
+      case 'wall_immune': spawnWallImmune(desc, seed); break;
+      case 'bullet_split': spawnBulletSplit(desc, seed); break;
+      case 'cryo_shatter': spawnCryoShatter(desc, seed); break;
       default: break;
     }
   }

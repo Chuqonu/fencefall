@@ -63,6 +63,14 @@ const AUDIO_LIMITS = Object.freeze({
   wave_horde: 1,
   draft_reroll: 1,
   targeting_change: 1,
+  napalm_blast: 1,
+  armored_car: 1,
+  cryo_barrage: 1,
+  orbital_beam: 1,
+  em_strike: 2,
+  wall_immune: 2,
+  bullet_split: 2,
+  cryo_shatter: 2,
 });
 
 const GAPS = Object.freeze({
@@ -88,24 +96,40 @@ const GAPS = Object.freeze({
   wave_horde: 0.6,
   draft_reroll: 0.12,
   targeting_change: 0.05,
+  napalm_blast: 0.22,
+  armored_car: 0.3,
+  cryo_barrage: 0.22,
+  orbital_beam: 0.28,
+  em_strike: 0.18,
+  wall_immune: 0.12,
+  bullet_split: 0.06,
+  cryo_shatter: 0.08,
 });
 
 const PRIORITY = Object.freeze({
   victory: 0,
   defeat: 1,
   fence_surge: 2,
+  orbital_beam: 2,
+  napalm_blast: 3,
+  armored_car: 3,
   merge: 3,
   draft: 4,
+  cryo_barrage: 4,
+  em_strike: 4,
+  wall_immune: 5,
   boss: 5,
   wave_horde: 5,
   fence_hit: 6,
   field_destroy: 6,
   corpse_explode: 7,
+  cryo_shatter: 7,
   kill: 7,
   field_build: 7,
   draft_reroll: 7,
   hit: 8,
   field_hit: 8,
+  bullet_split: 9,
   shot: 9,
   field_repair: 9,
   field_remove: 9,
@@ -674,6 +698,62 @@ export function createAudio(options) {
     return safe(() => tone({ freq: 980, dur: 0.032, type: 'triangle', gain: 0.15, slide: 180, delay }));
   }
 
+  function playNapalmBlast(delay) {
+    return safe(() => layers(
+      tone({ freq: 118, dur: 0.24, type: 'sawtooth', gain: 0.28, slide: -72, delay }),
+      noise({ dur: 0.22, gain: 0.26, band: 340, q: 0.55, delay }),
+      noise({ dur: 0.1, gain: 0.16, band: 1200, q: 0.9, delay: delay + 0.05 }),
+    ));
+  }
+
+  function playArmoredCar(delay) {
+    return safe(() => layers(
+      tone({ freq: 76, dur: 0.22, type: 'sawtooth', gain: 0.24, slide: 68, delay }),
+      noise({ dur: 0.18, gain: 0.2, band: 240, q: 0.7, delay }),
+    ));
+  }
+
+  function playCryoBarrage(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.14, gain: 0.2, band: 2600, q: 1.1, delay }),
+      tone({ freq: 1180, dur: 0.11, type: 'sine', gain: 0.22, slide: 460, delay }),
+      tone({ freq: 1640, dur: 0.09, type: 'triangle', gain: 0.16, slide: 320, delay: delay + 0.04 }),
+    ));
+  }
+
+  function playOrbitalBeam(delay) {
+    return safe(() => layers(
+      tone({ freq: 1420, dur: 0.24, type: 'sine', gain: 0.26, slide: -1120, delay }),
+      tone({ freq: 320, dur: 0.26, type: 'sawtooth', gain: 0.2, slide: -140, delay: delay + 0.02 }),
+      noise({ dur: 0.16, gain: 0.18, band: 1800, q: 1.2, delay }),
+    ));
+  }
+
+  function playEmStrike(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.09, gain: 0.24, band: 2400, q: 0.85, delay }),
+      tone({ freq: 1760, dur: 0.12, type: 'square', gain: 0.2, slide: -1380, delay }),
+    ));
+  }
+
+  function playWallImmune(delay) {
+    return safe(() => layers(
+      tone({ freq: 660, dur: 0.11, type: 'sine', gain: 0.24, slide: 330, delay }),
+      tone({ freq: 1320, dur: 0.09, type: 'triangle', gain: 0.18, slide: 220, delay: delay + 0.03 }),
+    ));
+  }
+
+  function playBulletSplit(delay) {
+    return safe(() => tone({ freq: 1320, dur: 0.03, type: 'triangle', gain: 0.11, slide: 420, delay }));
+  }
+
+  function playCryoShatter(delay) {
+    return safe(() => layers(
+      tone({ freq: 1560, dur: 0.07, type: 'sine', gain: 0.18, slide: 520, delay }),
+      noise({ dur: 0.07, gain: 0.16, band: 3100, q: 1.3, delay }),
+    ));
+  }
+
   function playLeap(delay) {
     return safe(() => tone({ freq: 480, dur: 0.046, type: 'triangle', gain: 0.18, slide: 260, delay }));
   }
@@ -766,6 +846,14 @@ export function createAudio(options) {
       case 'wave_horde': return playWaveHorde(delay);
       case 'draft_reroll': return playDraftReroll(delay);
       case 'targeting_change': return playTargetingChange(delay);
+      case 'napalm_blast': return playNapalmBlast(delay);
+      case 'armored_car': return playArmoredCar(delay);
+      case 'cryo_barrage': return playCryoBarrage(delay);
+      case 'orbital_beam': return playOrbitalBeam(delay);
+      case 'em_strike': return playEmStrike(delay);
+      case 'wall_immune': return playWallImmune(delay);
+      case 'bullet_split': return playBulletSplit(delay);
+      case 'cryo_shatter': return playCryoShatter(delay);
       default: return false;
     }
   }

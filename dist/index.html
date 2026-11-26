@@ -573,6 +573,73 @@ img, svg, video { max-width: 100%; height: auto; }
   opacity: 0.58;
 }
 
+.hud-aegis-chip {
+  background: rgba(12, 66, 86, 0.92);
+  border: 1px solid rgba(110, 232, 255, 0.78);
+  color: #dffaff;
+  box-shadow: 0 0 10px rgba(84, 224, 255, 0.35);
+}
+
+.hud-arsenal {
+  display: flex;
+  flex: 1 1 100%;
+  order: 2;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hud-arsenal::-webkit-scrollbar { display: none; }
+
+.arsenal-pill {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 52px;
+  padding: 2px 6px 3px;
+  border-radius: 7px;
+  background: rgba(11, 22, 28, 0.88);
+  border: 1px solid rgba(132, 174, 186, 0.38);
+  border-left: 3px solid var(--arsenal-accent, #f0cb72);
+  flex-shrink: 0;
+}
+
+.arsenal-pill.is-firing {
+  border-color: var(--arsenal-accent, #f0cb72);
+  background: rgba(34, 48, 56, 0.96);
+  box-shadow: 0 0 8px rgba(245, 210, 115, 0.38);
+}
+
+.arsenal-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #f4f1e6;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.arsenal-track {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.arsenal-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--arsenal-accent, #f0cb72);
+  transition: width 160ms linear;
+}
+
 .hud-sortie {
   background: rgba(30, 44, 50, 0.88);
   border: 1px solid rgba(200, 162, 90, 0.38);
@@ -1070,6 +1137,14 @@ const AUDIO_LIMITS = Object.freeze({
   wave_horde: 1,
   draft_reroll: 1,
   targeting_change: 1,
+  napalm_blast: 1,
+  armored_car: 1,
+  cryo_barrage: 1,
+  orbital_beam: 1,
+  em_strike: 2,
+  wall_immune: 2,
+  bullet_split: 2,
+  cryo_shatter: 2,
 });
 
 const GAPS = Object.freeze({
@@ -1095,24 +1170,40 @@ const GAPS = Object.freeze({
   wave_horde: 0.6,
   draft_reroll: 0.12,
   targeting_change: 0.05,
+  napalm_blast: 0.22,
+  armored_car: 0.3,
+  cryo_barrage: 0.22,
+  orbital_beam: 0.28,
+  em_strike: 0.18,
+  wall_immune: 0.12,
+  bullet_split: 0.06,
+  cryo_shatter: 0.08,
 });
 
 const PRIORITY = Object.freeze({
   victory: 0,
   defeat: 1,
   fence_surge: 2,
+  orbital_beam: 2,
+  napalm_blast: 3,
+  armored_car: 3,
   merge: 3,
   draft: 4,
+  cryo_barrage: 4,
+  em_strike: 4,
+  wall_immune: 5,
   boss: 5,
   wave_horde: 5,
   fence_hit: 6,
   field_destroy: 6,
   corpse_explode: 7,
+  cryo_shatter: 7,
   kill: 7,
   field_build: 7,
   draft_reroll: 7,
   hit: 8,
   field_hit: 8,
+  bullet_split: 9,
   shot: 9,
   field_repair: 9,
   field_remove: 9,
@@ -1681,6 +1772,62 @@ function createAudio(options) {
     return safe(() => tone({ freq: 980, dur: 0.032, type: 'triangle', gain: 0.15, slide: 180, delay }));
   }
 
+  function playNapalmBlast(delay) {
+    return safe(() => layers(
+      tone({ freq: 118, dur: 0.24, type: 'sawtooth', gain: 0.28, slide: -72, delay }),
+      noise({ dur: 0.22, gain: 0.26, band: 340, q: 0.55, delay }),
+      noise({ dur: 0.1, gain: 0.16, band: 1200, q: 0.9, delay: delay + 0.05 }),
+    ));
+  }
+
+  function playArmoredCar(delay) {
+    return safe(() => layers(
+      tone({ freq: 76, dur: 0.22, type: 'sawtooth', gain: 0.24, slide: 68, delay }),
+      noise({ dur: 0.18, gain: 0.2, band: 240, q: 0.7, delay }),
+    ));
+  }
+
+  function playCryoBarrage(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.14, gain: 0.2, band: 2600, q: 1.1, delay }),
+      tone({ freq: 1180, dur: 0.11, type: 'sine', gain: 0.22, slide: 460, delay }),
+      tone({ freq: 1640, dur: 0.09, type: 'triangle', gain: 0.16, slide: 320, delay: delay + 0.04 }),
+    ));
+  }
+
+  function playOrbitalBeam(delay) {
+    return safe(() => layers(
+      tone({ freq: 1420, dur: 0.24, type: 'sine', gain: 0.26, slide: -1120, delay }),
+      tone({ freq: 320, dur: 0.26, type: 'sawtooth', gain: 0.2, slide: -140, delay: delay + 0.02 }),
+      noise({ dur: 0.16, gain: 0.18, band: 1800, q: 1.2, delay }),
+    ));
+  }
+
+  function playEmStrike(delay) {
+    return safe(() => layers(
+      noise({ dur: 0.09, gain: 0.24, band: 2400, q: 0.85, delay }),
+      tone({ freq: 1760, dur: 0.12, type: 'square', gain: 0.2, slide: -1380, delay }),
+    ));
+  }
+
+  function playWallImmune(delay) {
+    return safe(() => layers(
+      tone({ freq: 660, dur: 0.11, type: 'sine', gain: 0.24, slide: 330, delay }),
+      tone({ freq: 1320, dur: 0.09, type: 'triangle', gain: 0.18, slide: 220, delay: delay + 0.03 }),
+    ));
+  }
+
+  function playBulletSplit(delay) {
+    return safe(() => tone({ freq: 1320, dur: 0.03, type: 'triangle', gain: 0.11, slide: 420, delay }));
+  }
+
+  function playCryoShatter(delay) {
+    return safe(() => layers(
+      tone({ freq: 1560, dur: 0.07, type: 'sine', gain: 0.18, slide: 520, delay }),
+      noise({ dur: 0.07, gain: 0.16, band: 3100, q: 1.3, delay }),
+    ));
+  }
+
   function playLeap(delay) {
     return safe(() => tone({ freq: 480, dur: 0.046, type: 'triangle', gain: 0.18, slide: 260, delay }));
   }
@@ -1773,6 +1920,14 @@ function createAudio(options) {
       case 'wave_horde': return playWaveHorde(delay);
       case 'draft_reroll': return playDraftReroll(delay);
       case 'targeting_change': return playTargetingChange(delay);
+      case 'napalm_blast': return playNapalmBlast(delay);
+      case 'armored_car': return playArmoredCar(delay);
+      case 'cryo_barrage': return playCryoBarrage(delay);
+      case 'orbital_beam': return playOrbitalBeam(delay);
+      case 'em_strike': return playEmStrike(delay);
+      case 'wall_immune': return playWallImmune(delay);
+      case 'bullet_split': return playBulletSplit(delay);
+      case 'cryo_shatter': return playCryoShatter(delay);
       default: return false;
     }
   }
@@ -1924,7 +2079,7 @@ const rendererMod = __ff_m17;
 
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
+const ACTIONS = Object.freeze(['start', 'resume', 'restart', 'abandon', 'pause', 'speed', 'language', 'sound', 'reducedMotion', 'screen', 'selectSlot', 'move', 'dragDrop', 'chooseDraft', 'place', 'cancelPlacement', 'mergePreview', 'mergeConfirm', 'mergeCancel', 'buyEquipment', 'equip', 'upgradePermanent', 'buyGem', 'equipGem', 'unequipGem', 'claimStarterPack', 'exportSave', 'importSave', 'hover', 'endless','deployField','removeField','setTargeting','rerollDraft','fieldKind','inspectField']);
 __ff_exports["ACTIONS"] = ACTIONS;
 
 
@@ -2207,6 +2362,10 @@ async function createController(options = {}) {
     if (action === 'buyEquipment') return profileAction('buyEquipment', payload.id);
     if (action === 'equip') return profileAction('equipItem', payload.id);
     if (action === 'upgradePermanent') return profileAction('purchasePermanent', payload.id);
+    if (action === 'buyGem') return profileAction('buyGem', payload.id);
+    if (action === 'equipGem') return profileAction('equipGem', payload.id);
+    if (action === 'unequipGem') return profileAction('unequipGem', payload.id);
+    if (action === 'claimStarterPack') return profileAction('claimStarterPack');
     if (action === 'exportSave') return exportCurrent();
     if (action === 'importSave') return importCurrent(payload.text);
     return {ok:false, reason:'unknown-action'};
@@ -2859,6 +3018,7 @@ __ff_factories["src/data/expeditions.js"] = function(__ff_exports, __ff_load) {
 __ff_exports["isExpedition"] = isExpedition;
 const EXPEDITION_ORDER = Object.freeze([
   'watch',
+  'frenzy',
   'wires',
   'plate',
   'dust',
@@ -2888,9 +3048,21 @@ const missions = [
   ['gauntlet','Mixed Gate','混合闸门','All roles, then a boss','全部角色，然后是首领','brute','boss']
 ];
 const pack=(kind,count,interval,healthScale=1)=>({kind,count,interval,healthScale});
-const phase=(id,from,until,every,name,groups)=>({id,from,until,every,name,groups});
-const EXPEDITIONS = {watch:{id:'watch',name:{en:'The Long Watch',zh:'长夜守望'},
-  minutes:7,focus:{en:'Full campaign',zh:'完整战役'},summary:{en:'Three flags and two bosses in a seven-minute watch.',zh:'七分钟守望，迎击三次旗帜大波与两名首领。'}}};
+const phase=(id,from,until,every,name,groups,horde=false)=>({id,from,until,every,name,groups,horde});
+const EXPEDITIONS = {
+  watch:{id:'watch',name:{en:'The Long Watch',zh:'长夜守望'},
+    minutes:7,focus:{en:'Full campaign',zh:'完整战役'},summary:{en:'Three flags and two bosses in a seven-minute watch.',zh:'七分钟守望，迎击三次旗帜大波与两名首领。'}},
+  frenzy:{id:'frenzy',name:{en:'Zombie Frenzy',zh:'尸潮狂欢'},
+    minutes:3,focus:{en:'Dense hordes · Rapid evolutions',zh:'密集割草 · 极速进化'},
+    summary:{en:'Massive waves from second one with fast XP drafts — build full-screen bullet hell and auto super-weapons fast.',zh:'开局即迎密集尸潮与极速选卡，三分钟爽快成型满屏弹幕与全自动超武。'},
+    phases:[
+      phase('frenzy-open',0.4,1.4,1,{en:'Zombie Frenzy',zh:'尸潮狂欢'},[pack('swarm',12,0.22,0.55),pack('shambler',5,0.55,0.45)]),
+      phase('frenzy-rush',12,56,9,{en:'Horde Tide',zh:'狂潮涌动'},[pack('swarm',20,0.26,0.7),pack('shambler',7,0.85,0.75),pack('runner',4,1.4,0.8)],true),
+      phase('frenzy-surge',58,118,9,{en:'Steel Clash',zh:'铁壁绞杀'},[pack('swarm',28,0.2,0.85),pack('splitter',3,1.8,0.9),pack('armored',3,2.2,1.1),pack('banner',1,0)],true),
+      phase('frenzy-storm',120,166,9,{en:'Crimson Storm',zh:'赤潮风暴'},[pack('swarm',34,0.16,0.95),pack('runner',8,0.75,0.95),pack('brute',2,2.8,1.15),pack('spitter',2,2.4,1)],true),
+      phase('frenzy-boss',168,169,1,{en:'Crown Siege',zh:'终局冠兽'},[pack('boss',1,0,0.65),pack('swarm',30,0.18,0.85),pack('warden',2,2.2,1)],true)
+    ]}
+};
 __ff_exports["EXPEDITIONS"] = EXPEDITIONS;
 
 for (const [id,en,zh,focusEn,focusZh,first,last] of missions) {
@@ -3339,10 +3511,12 @@ const __ff_m4 = __ff_load("src/systems/status.js");
 const __ff_m5 = __ff_load("src/systems/waves.js");
 const __ff_m6 = __ff_load("src/systems/drafts.js");
 const __ff_m7 = __ff_load("src/systems/progression.js");
-const __ff_m8 = __ff_load("src/state.js");
+const __ff_m8 = __ff_load("src/systems/hero.js");
+const __ff_m9 = __ff_load("src/state.js");
 const STEP = __ff_m0["STEP"];
 const clone = __ff_m0["clone"];
 const emit = __ff_m0["emit"];
+const random = __ff_m0["random"];
 const updateField = __ff_m1["updateField"];
 const updateMovement = __ff_m2["updateMovement"];
 const damageEnemy = __ff_m3["damageEnemy"];
@@ -3352,8 +3526,10 @@ const updateStatuses = __ff_m4["updateStatuses"];
 const updateWaves = __ff_m5["updateWaves"];
 const updateDrafts = __ff_m6["updateDrafts"];
 const getProfileBonuses = __ff_m7["getProfileBonuses"];
+const applyHeroUpgrade = __ff_m8["applyHeroUpgrade"];
 // Fixed-step integration. Speed changes how many STEP updates run per wall
 // second; gameplay systems always receive STEP, never a scaled delta.
+
 
 
 
@@ -3367,6 +3543,7 @@ Object.defineProperty(__ff_exports, "createRun", {enumerable:true, configurable:
 Object.defineProperty(__ff_exports, "createProfile", {enumerable:true, configurable:true, get(){return __ff_load("src/state.js")["createProfile"];}});
 
 const ZERO_BONUSES = Object.freeze({damage:0, haste:0, range:0, critChance:0, fence:0, reward:0});
+const STARTER_EVOLUTIONS = Object.freeze(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 function requireFn(fn, name) {
   if (typeof fn !== 'function') throw new Error(`Fencefall core system missing: ${name}`);
@@ -3385,7 +3562,12 @@ requireFn(getProfileBonuses, 'getProfileBonuses');
 function sanitizeBonuses(value) {
   const out = {...ZERO_BONUSES};
   if (!value || typeof value !== 'object') return out;
-  for (const key of [...Object.keys(out),'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount','fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate']) {
+  for (const key of [
+    ...Object.keys(out),
+    'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount',
+    'fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate',
+    'openingDraft','heroPierce','wallImmunity','shredPercent','statusDamage','superweaponHaste','starterWeapon'
+  ]) {
     const number = Number(value[key]);
     if (Number.isFinite(number)) out[key] = number;
   }
@@ -3405,6 +3587,12 @@ function applyProfileBonuses(state, bonuses) {
   state.energy=Math.min(state.maxEnergy,state.energy+(clean.energy||0));
   state.freeRerollsLeft=clean.freeRerolls || 0;
   state.surge.charges=state.surge.maxCharges=1+(clean.surgeCharges||0);
+  state.wallImmunity = Math.max(0, Math.floor(clean.wallImmunity || 0));
+  state.openingDraftPending = Math.max(0, Math.floor(clean.openingDraft || 0));
+  if ((clean.starterWeapon || 0) > 0) {
+    const pick = STARTER_EVOLUTIONS[Math.floor(random(state) * STARTER_EVOLUTIONS.length)];
+    applyHeroUpgrade(state, pick);
+  }
   state.initialized = true;
   return state;
 }
@@ -3603,6 +3791,38 @@ const ROWS = [
   ['multishot','Multishot','齐射'],['fence_focus','Fence focus','栅前集火'],['reveal','Reveal','显隐'],
   ['badge.execute','Execute','斩杀'],['badge.crit','Crit','暴击'],['badge.projectile','Projectile','投射'],
   ['badge.speed','Speed','攻速'],['badge.critDamage','Crit×','暴伤'],
+  ['badge.split','Split','分裂'],['badge.chain','EM','电磁'],['badge.napalm','Napalm','火海'],
+  ['badge.armored_car','Tank','装甲车'],['badge.cryo_barrage','Glacial','冰柱'],['badge.orbital_beam','Laser','激光'],
+  ['split_shot','Split Shrapnel','子母分裂弹'],
+  ['ricochet','EM Ricochet','电磁穿刺'],
+  ['napalm','Napalm Barrage','燃油弹火海'],
+  ['armored_car','Armored Sweeper','重装装甲车'],
+  ['cryo_barrage','Glacial Barrage','干冰连发柱'],
+  ['orbital_beam','Orbital Laser','高能射线'],
+  ['starterPackTitle','Vanguard Starter Supply','开荒爽玩补给包'],
+  ['starterPackDesc','Claim +180 Currency + free Opening Airdrop Gem (instant 3-choice boost every run) to skip early grind!','一键领取 180 货币 + 免费装备【空投先锋宝石】（每局开场即享免费三选一），直接跳过前期刮痧！'],
+  ['claimStarterPack','Claim Free Supply (+180 & Gem)','一键领取开荒豪礼（+180币 +空投宝石）'],
+  ['starterClaimed','Starter Supply Claimed · Opening Airdrop Gem Ready','开荒补给已领取 · 空投先锋宝石已就绪'],
+  ['gems','Tactical Core Gems','战术核心宝石'],
+  ['gemsIntro','Equip up to 3 core gems for dramatic BangBang-style build powers. Unequip or swap any time.','最多同时镶嵌 3 颗核心宝石，解锁城墙免疫、开局空投、贯穿、冰火共鸣与百分比斩杀！'],
+  ['gemSlots','Equipped Slots','已镶嵌槽位'],
+  ['gemSlotEmpty','Empty Socket','空宝石槽'],
+  ['gemTierEpic','Epic','史诗'],
+  ['gemTierLegend','Legend','传说'],
+  ['openingDraft','Opening Airdrop','开局空投'],
+  ['wallImmunity','Wall Immunity','城墙免疫'],
+  ['heroPierce','Hero Pierce','英雄穿透'],
+  ['statusDamage','Elemental Surge','异常增伤'],
+  ['shredPercent','Crit Max-HP Shred','暴击百分比斩杀'],
+  ['superweaponHaste','Auto-Arsenal Haste','超武冷却缩减'],
+  ['starterWeapon','Opening Evolution','开局随机超武'],
+  ['aegisChip','Aegis','免疫'],
+  ['openingDropTitle','Opening Airdrop · Choose 1 of 3','开局空投 · 免费三选一'],
+  ['arsenalNapalm','Napalm','火海'],
+  ['arsenalCar','Sweeper','装甲车'],
+  ['arsenalCryo','Glacial','冰柱'],
+  ['arsenalBeam','Laser','激光'],
+  ['arsenalEm','EM Strike','雷击'],
   ["teamDamage", "Team damage", "全队伤害"],
   ["teamHaste", "Team attack speed", "全队攻速"],
   ["teamCrit", "Team crit chance", "全队暴击率"],
@@ -5824,6 +6044,14 @@ const LIMITS = Object.freeze({
   wave_horde: 1,
   draft_reroll: 1,
   targeting_change: 1,
+  napalm_blast: 3,
+  armored_car: 2,
+  cryo_barrage: 2,
+  orbital_beam: 2,
+  em_strike: 3,
+  wall_immune: 3,
+  bullet_split: 8,
+  cryo_shatter: 6,
 });
 
 const PALETTES = Object.freeze({
@@ -5848,6 +6076,9 @@ const PALETTES = Object.freeze({
   surge: { core: '#ffffff', hot: '#9ef0ff', mid: '#4ac8f0', dim: '#185470' },
   steam: { core: '#ffffff', hot: '#e6fbff', mid: '#ffaa5a', dim: '#3c7a90' },
   catalyst: { core: '#ffffff', hot: '#e4ff7a', mid: '#b0ff3a', dim: '#3e6a14' },
+  napalm: { core: '#fff8d6', hot: '#ff9638', mid: '#e83814', dim: '#6a120a' },
+  orbital: { core: '#ffffff', hot: '#9ef4ff', mid: '#3ac8f8', dim: '#124a6e' },
+  aegis: { core: '#ffffff', hot: '#94f0ff', mid: '#46c6f0', dim: '#164d68' },
 });
 
 const HYBRID_PALETTES = Object.freeze([
@@ -5865,10 +6096,15 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   bolt: 'bolt',
   fire: 'fire',
   burn: 'fire',
+  napalm: 'fire',
+  shrapnel: 'fire',
   frost: 'frost',
   slow: 'frost',
+  cryo_barrage: 'frost',
   lightning: 'lightning',
   stun: 'lightning',
+  orbital_beam: 'lightning',
+  ricochet: 'lightning',
   brittle: 'brittle',
   poison: 'poison',
   support: 'support',
@@ -5876,6 +6112,8 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   heal: 'support',
   buff: 'support',
   hero: 'hero',
+  split_shot: 'hero',
+  armored_car: 'bolt',
   harvest: 'harvest',
   spikes: 'bolt',
 });
@@ -5887,6 +6125,8 @@ const FEEDBACK = new Set([
   'fence_surge', 'corpse_explode', 'cloud_spawn', 'knockback',
   'field_build', 'field_hit', 'field_destroy', 'field_repair', 'field_remove',
   'energy_gain', 'wave_horde', 'draft_reroll', 'targeting_change',
+  'napalm_blast', 'armored_car', 'cryo_barrage', 'orbital_beam',
+  'em_strike', 'wall_immune', 'bullet_split', 'cryo_shatter',
 ]);
 
 // These need a finite x and y on the event. Slot fallback and extra fields are ignored.
@@ -7133,6 +7373,85 @@ function createEffects() {
     if (text) pushFloater(point.x, point.y - 6, `+${text}`, PALETTES.harvest.hot, 2, false, 'energy', 0.62, seed);
   }
 
+  function spawnNapalmBlast(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(24, Math.min(72, desc.radius || 58));
+    pushRing(point.x, point.y, Math.round(r * 0.45), r * 1.6, PALETTES.napalm.hot, 0.42, 2);
+    pushRing(point.x, point.y, Math.round(r * 0.25), r * 1.15, PALETTES.napalm.mid, 0.36, 2);
+    pushFlash(point.x, point.y, 0.32);
+    burst(point.x, point.y, 12, 92, -32, true, PALETTES.napalm.hot, 0.42, seed, 2);
+    burst(point.x, point.y, 6, 68, 22, false, PALETTES.napalm.mid, 0.34, seed + 17, 2);
+  }
+
+  function spawnArmoredCar(desc, seed) {
+    const point = visualPoint(desc) || { x: ARENA.width / 2, y: ARENA.fenceY - 12 };
+    pushRing(point.x, point.y, 12, 54, PALETTES.draft.hot, 0.36, 2);
+    pushPlus(point.x, point.y, 5, PALETTES.bolt.hot, '#ffffff', 0.24);
+    burst(point.x, point.y, 8, 66, 20, true, PALETTES.draft.hot, 0.34, seed, 2);
+  }
+
+  function spawnCryoBarrage(desc, seed) {
+    const point = visualPoint(desc) || { x: ARENA.width / 2, y: ARENA.fenceY - 12 };
+    pushRing(point.x, point.y, 14, 62, PALETTES.frost.hot, 0.34, 2);
+    pushPlus(point.x, point.y, 5, PALETTES.frost.core, '#ffffff', 0.22);
+    burst(point.x, point.y, 8, 74, -20, true, PALETTES.frost.hot, 0.34, seed, 2);
+  }
+
+  function spawnOrbitalBeam(desc, seed) {
+    const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
+    const y = desc.y != null ? desc.y : 220;
+    pushRing(x, y, 16, 72, PALETTES.orbital.hot, 0.42, 2);
+    pushRing(x, ARENA.fenceY - 10, 14, 58, PALETTES.orbital.core, 0.38, 2);
+    pushFlash(x, y, 0.3);
+    burst(x, y, 10, 88, 0, false, PALETTES.orbital.hot, 0.38, seed, 2);
+  }
+
+  function spawnEmStrike(desc, seed) {
+    const points = desc.points && desc.points.length
+      ? desc.points
+      : (desc.position ? [desc.position] : []);
+    if (!points.length) return;
+    const first = points[0];
+    // Jagged sky-to-ground lightning bolt descending onto the first zombie
+    pushArc(first.x + ((seed & 7) - 3) * 4, 4, first.x, first.y, '#ffffff', 0.28, 16, seed);
+    pushArc(first.x + ((seed & 7) - 3) * 4 + 2, 4, first.x, first.y, PALETTES.orbital.hot, 0.24, 14, seed + 5);
+    pushRing(first.x, first.y, 12, 48, PALETTES.orbital.hot, 0.34, 2);
+    pushFlash(first.x, first.y, 0.26);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      pushJump(kinkedJump(a.x, a.y, b.x, b.y), PALETTES.orbital, 0.26, { x: b.x, y: b.y, crit: i === 1 });
+      pushRing(b.x, b.y, 8, 34, PALETTES.lightning.hot, 0.28, 1);
+    }
+    burst(first.x, first.y, 7, 76, 0, false, PALETTES.orbital.hot, 0.3, seed + 13, 2);
+  }
+
+  function spawnWallImmune(desc, seed) {
+    const x = desc.x != null ? desc.x : (desc.position ? desc.position.x : ARENA.width / 2);
+    const y = ARENA.fenceY - 4;
+    pushParticle({ kind: 'glowline', y, color: PALETTES.aegis.hot, broken: false, life: 0.42, maxLife: 0.42, motionOnly: false });
+    pushRing(x, y, 12, 46, PALETTES.aegis.hot, 0.34, 2);
+    pushPlus(x, y - 4, 5, PALETTES.aegis.core, '#ffffff', 0.24);
+    burst(x, y - 2, 6, 56, -24, true, PALETTES.aegis.hot, 0.3, seed, 2);
+  }
+
+  function spawnBulletSplit(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    pushPlus(point.x, point.y, 3, PALETTES.bolt.hot, '#ffffff', 0.16);
+    burst(point.x, point.y, 4, 54, 0, false, PALETTES.bolt.hot, 0.18, seed, 1);
+  }
+
+  function spawnCryoShatter(desc, seed) {
+    const point = visualPoint(desc);
+    if (!point) return;
+    const r = Math.max(16, Math.min(54, desc.radius || 40));
+    pushRing(point.x, point.y, Math.round(r * 0.45), r * 1.25, PALETTES.frost.hot, 0.34, 2);
+    pushPlus(point.x, point.y, 4, PALETTES.frost.core, '#ffffff', 0.22);
+    burst(point.x, point.y, 8, 72, 16, false, PALETTES.frost.hot, 0.32, seed, 2);
+  }
+
   function spawn(desc, index) {
     const seed = nextSeed(desc, index);
     switch (desc.type) {
@@ -7161,6 +7480,14 @@ function createEffects() {
       case 'field_repair': spawnFieldRepair(desc, seed); break;
       case 'field_remove': spawnFieldRemove(desc, seed); break;
       case 'energy_gain': spawnEnergyGain(desc, seed); break;
+      case 'napalm_blast': spawnNapalmBlast(desc, seed); break;
+      case 'armored_car': spawnArmoredCar(desc, seed); break;
+      case 'cryo_barrage': spawnCryoBarrage(desc, seed); break;
+      case 'orbital_beam': spawnOrbitalBeam(desc, seed); break;
+      case 'em_strike': spawnEmStrike(desc, seed); break;
+      case 'wall_immune': spawnWallImmune(desc, seed); break;
+      case 'bullet_split': spawnBulletSplit(desc, seed); break;
+      case 'cryo_shatter': spawnCryoShatter(desc, seed); break;
       default: break;
     }
   }
@@ -9302,8 +9629,15 @@ function drawProjectile(ctx, projectile, target, reduced) {
   const kind = ink.kind;
   const color = ink.color;
   const accent = ink.accent;
+  const tags = Array.isArray(projectile.tags) ? projectile.tags : [];
+  const isSplit = tags.includes('split');
+  const isCryoBarrage = tags.includes('cryo_barrage');
   let dx = finite(projectile.vx) ?? 0;
   let dy = finite(projectile.vy) ?? 0;
+  if (dx === 0 && dy === 0 && finite(projectile.dirx) != null && finite(projectile.diry) != null) {
+    dx = projectile.dirx;
+    dy = projectile.diry;
+  }
   if (dx === 0 && dy === 0 && target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
     dx = target.x - projectile.x;
     dy = target.y - projectile.y;
@@ -9314,13 +9648,65 @@ function drawProjectile(ctx, projectile, target, reduced) {
   const uy = dy / mag;
   const px = -uy;
   const py = ux;
-  const crit = !!projectile.crit || (Array.isArray(projectile.tags) && projectile.tags.includes('crit'));
-  const length = reduced ? 4 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
+  const crit = !!projectile.crit || tags.includes('crit');
+  const length = reduced ? 4 : isCryoBarrage ? 13 : isSplit ? 8 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
   const life = finite(projectile.life);
   const faded = life != null && life < 0.35;
   const at = (along, across) => [x + ux * along + px * across, y + uy * along + py * across];
   ctx.save();
   if (faded) ctx.globalAlpha = Math.max(0.3, life / 0.35);
+
+  if (isCryoBarrage) {
+    // Piercing Glacial Barrage ice lance (bold 3px crystalline shaft)
+    const baseAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = baseAlpha * 0.34;
+    ctx.fillStyle = '#5ee0ff';
+    ctx.fillRect(x - 4, y - 4, 9, 9);
+    ctx.globalAlpha = baseAlpha;
+    for (let i = length; i >= 1; i--) {
+      const [tx, ty] = at(-i, 0);
+      plot(ctx, tx, ty, i <= 5 ? '#f4fdff' : i <= 9 ? '#82e6ff' : '#2a7aa0');
+      if (i <= 7) {
+        const [s1x, s1y] = at(-i, 1);
+        const [s2x, s2y] = at(-i, -1);
+        plot(ctx, s1x, s1y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
+        plot(ctx, s2x, s2y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
+      }
+    }
+    const [tipX, tipY] = at(3, 0);
+    const [midX, midY] = at(1, 0);
+    plot(ctx, tipX, tipY, '#ffffff');
+    plot(ctx, midX, midY, '#ffffff');
+    plot(ctx, x, y, '#ffffff');
+    for (const across of [-2, 2]) {
+      const [wx, wy] = at(-1, across);
+      plot(ctx, wx, wy, '#9beeff');
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (isSplit) {
+    // Blazing gold-crimson shrapnel sub-bolt
+    const baseAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = baseAlpha * 0.3;
+    ctx.fillStyle = '#ff9838';
+    ctx.fillRect(x - 3, y - 3, 7, 7);
+    ctx.globalAlpha = baseAlpha;
+    for (let i = length; i >= 1; i--) {
+      const [tx, ty] = at(-i, 0);
+      plot(ctx, tx, ty, i <= 3 ? '#fff5be' : i <= 6 ? '#ffb43a' : '#c84826');
+    }
+    const [tipX, tipY] = at(2, 0);
+    plot(ctx, tipX, tipY, '#ffffff');
+    plot(ctx, x, y, '#ffe56a');
+    for (const across of [-1, 1]) {
+      const [sx, sy] = at(0, across);
+      plot(ctx, sx, sy, '#ff7832');
+    }
+    ctx.restore();
+    return;
+  }
 
   // Subtle luminous elemental halo so projectiles read crisply over dense hordes
   const baseAlpha = ctx.globalAlpha;
@@ -9437,7 +9823,7 @@ function drawProjectile(ctx, projectile, target, reduced) {
 
 function cloudColor(cloud) {
   const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
-  if (kind.includes('fire') || kind.includes('burn')) return '#e25a2a';
+  if (kind.includes('napalm') || kind.includes('shrapnel') || kind.includes('fire') || kind.includes('burn')) return '#ff5a20';
   if (kind.includes('poison') || kind.includes('toxin') || kind.includes('miasma')) return '#6aaa3a';
   if (kind.includes('frost') || kind.includes('ice') || kind.includes('slow')) return '#8fd0e0';
   if (kind.includes('light')) return '#ffe14a';
@@ -9450,6 +9836,8 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const radius = finite(cloud.radius) ?? finite(cloud.range);
   if (x == null || y == null || radius == null || radius <= 0) return;
   const r = clamp(radius, 2, 120);
+  const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
+  const isFireSea = kind.includes('napalm') || kind.includes('shrapnel');
   const color = cloudColor(cloud);
   const seed = hashInt(index * 97 + Math.round(x) * 13 + Math.round(y) * 29);
   let fade = 1;
@@ -9457,6 +9845,51 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const duration = finite(cloud.duration);
   if (remaining != null && duration != null && duration > 0) fade = clamp(remaining / duration, 0, 1);
   ctx.save();
+  if (isFireSea) {
+    // Roaring Napalm / Thermobaric Fire Sea
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    const flicker = reduced ? 0.85 : (0.76 + 0.24 * Math.sin(time * 14 + index));
+    ctx.globalAlpha = 0.24 * fade * flicker;
+    ctx.fillStyle = '#d82e12';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.28 * fade * flicker;
+    ctx.fillStyle = '#ff7b24';
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(4, r * 0.68), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.56 * fade;
+    ctx.strokeStyle = '#ff9d3b';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash?.([4, 3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash?.([]);
+    // Flickering pixel flame tongues + golden hot embers
+    const step = r > 44 ? 9 : 7;
+    const frame = reduced ? 0 : Math.floor(time * 11);
+    for (let py = -r + 4; py <= r - 4; py += step) {
+      for (let px = -r + 4; px <= r - 4; px += step) {
+        if (px * px + py * py > (r - 4) * (r - 4)) continue;
+        const h = hashInt(seed + px * 7 + py * 19);
+        if ((h & 3) !== 0) continue;
+        const bob = reduced ? 2 : ((frame + (h & 7)) % 5);
+        const fx = Math.round(x + px);
+        const fy = Math.round(y + py);
+        ctx.globalAlpha = 0.72 * fade;
+        ctx.fillStyle = '#ff541a';
+        ctx.fillRect(fx - 1, fy - 2 - bob, 3, 4 + (bob & 1));
+        ctx.globalAlpha = 0.9 * fade;
+        ctx.fillStyle = (h & 8) ? '#ffe878' : '#ffb842';
+        ctx.fillRect(fx, fy - 1 - bob, 1, 2);
+      }
+    }
+    ctx.restore();
+    return;
+  }
   // Soft translucent ground hazard zone
   ctx.globalAlpha = 0.16 * fade;
   ctx.fillStyle = color;
@@ -9485,6 +9918,133 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
       const rise = reduced ? 0 : ((drift + (h & 7)) % 5);
       ctx.fillRect(Math.round(x + px), Math.round(y + py - rise), 2, 2);
     }
+  }
+  ctx.restore();
+}
+
+function drawSweepers(ctx, state, time, reduced) {
+  const list = state.arsenal?.sweepers;
+  if (!Array.isArray(list) || !list.length) return;
+  const treadTick = reduced ? 0 : (Math.floor(time * 24) & 3);
+  ctx.save();
+  for (let i = 0; i < list.length; i++) {
+    const sw = list[i];
+    if (!sw || !Number.isFinite(sw.x) || !Number.isFinite(sw.y)) continue;
+    const cx = Math.round(sw.x);
+    const cy = Math.round(sw.y);
+    const hw = Math.min(24, Math.max(18, Math.round((sw.halfWidth || 34) * 0.62)));
+    // Twin golden headlight cones sweeping ahead of the plow
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#ffe98a';
+    ctx.fillRect(cx - hw + 2, cy - 36, 7, 16);
+    ctx.fillRect(cx + hw - 9, cy - 36, 7, 16);
+    ctx.globalAlpha = 0.1;
+    ctx.fillRect(cx - hw, cy - 48, 11, 14);
+    ctx.fillRect(cx + hw - 11, cy - 48, 11, 14);
+    ctx.globalAlpha = 1;
+    // Heavy contact drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    ctx.fillRect(cx - hw - 1, cy - 16, hw * 2 + 2, 38);
+    // Left & right armored rubber treads with animated cleats
+    ctx.fillStyle = '#141a1e';
+    ctx.fillRect(cx - hw, cy - 12, 5, 30);
+    ctx.fillRect(cx + hw - 5, cy - 12, 5, 30);
+    ctx.fillStyle = '#48565e';
+    for (let ty = -10 + treadTick; ty < 16; ty += 5) {
+      ctx.fillRect(cx - hw + 1, cy + ty, 3, 2);
+      ctx.fillRect(cx + hw - 4, cy + ty, 3, 2);
+    }
+    // Main armored steel truck chassis
+    const bw = (hw - 4) * 2;
+    ctx.fillStyle = '#1b242a';
+    ctx.fillRect(cx - hw + 4, cy - 15, bw, 33);
+    ctx.fillStyle = '#3a4c58';
+    ctx.fillRect(cx - hw + 5, cy - 14, bw - 2, 31);
+    // Steel hood & rear cargo armor deck
+    ctx.fillStyle = '#5a707e';
+    ctx.fillRect(cx - hw + 6, cy - 13, bw - 4, 10);
+    ctx.fillRect(cx - hw + 6, cy + 5, bw - 4, 10);
+    // Armored cyan slit windshield
+    ctx.fillStyle = '#142028';
+    ctx.fillRect(cx - hw + 7, cy - 5, bw - 6, 5);
+    ctx.fillStyle = '#7ce6ff';
+    ctx.fillRect(cx - hw + 8, cy - 4, bw - 8, 3);
+    ctx.fillStyle = '#e8fbff';
+    ctx.fillRect(cx - hw + 9, cy - 4, 4, 1);
+    // Roof turret hatch & amber beacon
+    ctx.fillStyle = '#243038';
+    ctx.fillRect(cx - 5, cy + 2, 10, 8);
+    ctx.fillStyle = '#8aa0ac';
+    ctx.fillRect(cx - 4, cy + 3, 8, 6);
+    ctx.fillStyle = (treadTick & 1) ? '#ff5a3c' : '#ffe56a';
+    ctx.fillRect(cx - 1, cy + 5, 2, 2);
+    // Heavy V-shaped front steel ram-plow with hazard stripes
+    ctx.fillStyle = '#222c32';
+    ctx.fillRect(cx - hw - 3, cy - 21, hw * 2 + 6, 7);
+    ctx.fillStyle = '#cedbe2';
+    ctx.fillRect(cx - hw - 2, cy - 20, hw * 2 + 4, 3);
+    ctx.fillStyle = '#f0cb72';
+    for (let sx = -hw; sx <= hw - 4; sx += 8) {
+      ctx.fillRect(cx + sx, cy - 17, 4, 2);
+    }
+    // Headlights on bumper
+    ctx.fillStyle = '#fff9d6';
+    ctx.fillRect(cx - hw + 4, cy - 16, 3, 2);
+    ctx.fillRect(cx + hw - 7, cy - 16, 3, 2);
+    // Exhaust puffs behind rear wheels
+    if (!reduced) {
+      const puff = (Math.floor(time * 16) + i * 3) % 8;
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = '#a8b8c0';
+      ctx.fillRect(cx - hw + 6, cy + 19 + puff, 3, 3);
+      ctx.fillRect(cx + hw - 9, cy + 21 + (7 - puff), 3, 3);
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+
+function drawBeams(ctx, state, time, reduced) {
+  const list = state.arsenal?.beams;
+  if (!Array.isArray(list) || !list.length) return;
+  ctx.save();
+  for (let i = 0; i < list.length; i++) {
+    const beam = list[i];
+    if (!beam || !Number.isFinite(beam.x) || !(beam.life > 0)) continue;
+    const maxLife = beam.maxLife > 0 ? beam.maxLife : 0.65;
+    const ratio = clamp(beam.life / maxLife, 0, 1);
+    const pulse = reduced ? 1 : (0.85 + 0.15 * Math.sin(time * 42 + i));
+    const width = Math.max(12, Math.round((beam.width || 36) * (0.45 + 0.55 * ratio)));
+    const cx = Math.round(beam.x);
+    const bottom = ARENA.fenceY - 6;
+    // Outer electric cyan plasma halo
+    ctx.globalAlpha = 0.26 * ratio * pulse;
+    ctx.fillStyle = '#38d8ff';
+    ctx.fillRect(cx - Math.round(width * 0.72), 0, Math.round(width * 1.44), bottom);
+    // Main high-energy laser column
+    ctx.globalAlpha = 0.64 * ratio * pulse;
+    ctx.fillStyle = '#8ef0ff';
+    ctx.fillRect(cx - Math.round(width * 0.42), 0, Math.round(width * 0.84), bottom);
+    // Blinding white-hot beam core
+    const coreW = Math.max(4, Math.round(width * 0.22));
+    ctx.globalAlpha = 0.94 * ratio;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - Math.round(coreW / 2), 0, coreW, bottom);
+    // Animated descending energy scan bars
+    if (!reduced) {
+      const scan = Math.floor((time * 460 + i * 73) % 72);
+      ctx.globalAlpha = 0.75 * ratio;
+      ctx.fillStyle = '#e0fbff';
+      for (let sy = scan; sy < bottom; sy += 72) {
+        ctx.fillRect(cx - Math.round(width * 0.55), sy, Math.round(width * 1.1), 3);
+      }
+    }
+    // Ground scorch flare at the base of the beam
+    ctx.globalAlpha = 0.78 * ratio;
+    ctx.fillStyle = '#c8f8ff';
+    ctx.fillRect(cx - Math.round(width * 0.65), bottom - 4, Math.round(width * 1.3), 5);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - Math.round(width * 0.35), bottom - 3, Math.round(width * 0.7), 3);
   }
   ctx.restore();
 }
@@ -10030,6 +10590,10 @@ function createRenderer(canvas) {
   const shots = [];
   const slotCues = [];
   let fenceAt = null;
+  let wallImmuneAt = null;
+  let heroShotAt = null;
+  let heroShotX = ARENA.width / 2;
+  let heroShotY = ARENA.frontY - 12;
   let shakeAt = null;
   let shakeAmp = 0;
   let hordeAt = null;
@@ -10051,6 +10615,8 @@ function createRenderer(canvas) {
     shots.length = 0;
     slotCues.length = 0;
     fenceAt = null;
+    wallImmuneAt = null;
+    heroShotAt = null;
     shakeAt = null;
     shakeAmp = 0;
     hordeAt = null;
@@ -10079,17 +10645,37 @@ function createRenderer(canvas) {
           targetId: idOf(event.targetId, event.enemyId, typeof event.target === 'string' ? event.target : null),
         });
       } else if (type === 'shot') {
+        const sx = finite(event.x);
+        const sy = finite(event.y);
         pushCapped(shots, {
           at,
-          x: finite(event.x),
-          y: finite(event.y),
+          x: sx,
+          y: sy,
           sourceId: idOf(event.sourceId, event.unitId, typeof event.source === 'string' ? event.source : null),
         });
+        if (event.towerType === 'hero' || (Array.isArray(event.tags) && event.tags.includes('hero'))) {
+          heroShotAt = at;
+          if (sx != null && sy != null) {
+            heroShotX = sx;
+            heroShotY = sy - 14;
+          }
+        }
       } else if (type === 'fence_hit') {
         fenceAt = at;
         triggerShake(at, 1.5);
+      } else if (type === 'wall_immune') {
+        wallImmuneAt = at;
+        triggerShake(at, 1.6);
       } else if (type === 'fence_surge') {
         triggerShake(at, 4);
+      } else if (type === 'napalm_blast') {
+        triggerShake(at, 3.2);
+      } else if (type === 'orbital_beam') {
+        triggerShake(at, 3.0);
+      } else if (type === 'armored_car') {
+        triggerShake(at, 2.2);
+      } else if (type === 'em_strike') {
+        triggerShake(at, 1.8);
       } else if (type === 'boss_enrage' || type === 'field_destroy') {
         triggerShake(at, 2.5);
       } else if (type === 'corpse_explode') {
@@ -10361,6 +10947,10 @@ function createRenderer(canvas) {
         drawBannerHaste(ctx, enemies, anchors);
         drawMendLinks(ctx, enemies, anchors);
       });
+
+      // Armored Sweeper Trucks barreling through the zombie lines
+      drawSweepers(ctx, state, visualTime, reduced);
+
       const hushed = boardHushed(enemies);
       const mergeable = mergeableSlotIndexes(state);
 
@@ -10380,6 +10970,24 @@ function createRenderer(canvas) {
         drawTargetingPip(ctx, slotBox(slot, index), unit);
       }
 
+      // Punchy Hero rifle muzzle flash star on every burst
+      const muzzleStr = heroShotAt != null ? cueStrength(heroShotAt, now, reduced ? 55 : 95) : 0;
+      if (muzzleStr > 0) {
+        const mx = Math.round(heroShotX);
+        const my = Math.round(heroShotY);
+        ctx.save();
+        ctx.globalAlpha = 0.88 * muzzleStr;
+        ctx.fillStyle = '#ff9838';
+        ctx.fillRect(mx - 6, my - 1, 13, 3);
+        ctx.fillRect(mx - 1, my - 6, 3, 13);
+        ctx.fillStyle = '#fff5be';
+        ctx.fillRect(mx - 4, my, 9, 1);
+        ctx.fillRect(mx, my - 4, 1, 9);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(mx - 1, my - 1, 3, 3);
+        ctx.restore();
+      }
+
       const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
       const visibleShots = [];
       const shotStart = Math.max(0, projectiles.length - MAX_PROJECTILES);
@@ -10396,6 +11004,9 @@ function createRenderer(canvas) {
         if (projectile.targetId != null) targeted[projectile.targetId] = true;
         drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
       }
+
+      // Orbital Laser Beams slicing vertically across the horde
+      drawBeams(ctx, state, visualTime, reduced);
 
       if (showRange) drawRange(ctx, state, selected, true, warned, rangeCache);
 
@@ -10416,6 +11027,17 @@ function createRenderer(canvas) {
       }
 
       drawSurgeOverlay(ctx, state, visualTime, reduced);
+      const aegisFlash = wallImmuneAt != null ? cueStrength(wallImmuneAt, now, reduced ? 120 : 240) : 0;
+      if (aegisFlash > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.52 * aegisFlash;
+        ctx.fillStyle = '#5ee8ff';
+        ctx.fillRect(0, ARENA.fenceY - 12, ARENA.width, 12);
+        ctx.globalAlpha = 0.92 * aegisFlash;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, ARENA.fenceY - 7, ARENA.width, 2);
+        ctx.restore();
+      }
       drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
 
       // Brief crimson edge horizon pulse when a horde wave surges in
@@ -10499,6 +11121,8 @@ function createRenderer(canvas) {
     pruneList(shots, now);
     pruneList(slotCues, now);
     if (fenceAt != null && now - fenceAt > CUE_MS) fenceAt = null;
+    if (wallImmuneAt != null && now - wallImmuneAt > 260) wallImmuneAt = null;
+    if (heroShotAt != null && now - heroShotAt > 110) heroShotAt = null;
     if (shakeAt != null && now - shakeAt > 260) { shakeAt = null; shakeAmp = 0; }
     if (hordeAt != null && now - hordeAt > 1500) hordeAt = null;
 
@@ -10757,15 +11381,27 @@ function fenceRatio(state) {
 
 function woodKit(ratio) {
   if (ratio > FENCE_CRACKED) {
-    return { light: '#e6d2a4', mid: '#c4a06a', dark: '#8d6840', edge: '#4e3820', iron: '#d5dde0', ironDark: '#6e7c86', strap: '#9aa8ae' };
+    return {
+      light: '#e2ebf0', mid: '#92a4b0', dark: '#4f606c', edge: '#1e2830',
+      iron: '#eef5f8', ironDark: '#384650', strap: '#6f8290', hazard: '#f0cb72',
+    };
   }
   if (ratio > FENCE_FAILING) {
-    return { light: '#c4a882', mid: '#8d6a46', dark: '#5c4330', edge: '#2e2218', iron: '#b4bcc0', ironDark: '#556066', strap: '#7a868c' };
+    return {
+      light: '#c2cbd0', mid: '#74828a', dark: '#424d54', edge: '#1a2024',
+      iron: '#c6d0d4', ironDark: '#303a40', strap: '#5c6a72', hazard: '#d4a84e',
+    };
   }
   if (ratio > FENCE_RUIN) {
-    return { light: '#8a6850', mid: '#5c4034', dark: '#3a2822', edge: '#1a1210', iron: '#80888c', ironDark: '#3e484c', strap: '#5a6468' };
+    return {
+      light: '#8e847e', mid: '#5a504c', dark: '#362e2c', edge: '#161212',
+      iron: '#889094', ironDark: '#2a3034', strap: '#4a5256', hazard: '#9e7238',
+    };
   }
-  return { light: '#6a4038', mid: '#3a2420', dark: '#241614', edge: '#100c0a', iron: '#5c6064', ironDark: '#2a3034', strap: '#3a4044' };
+  return {
+    light: '#6e524c', mid: '#402c28', dark: '#261a18', edge: '#100c0a',
+    iron: '#5c6064', ironDark: '#22282c', strap: '#3a4044', hazard: '#72442e',
+  };
 }
 
 function paintSky(ctx) {
@@ -11165,78 +11801,105 @@ function drawGrass(ctx, time, reduced) {
 }
 
 function drawPicket(ctx, index, ratio, kit) {
-  const x = index * 12 + 2;
+  const x = index * 12;
   const broken = ratio <= breakAt(index);
-  const jog = (index % 3) * 2;
-  const top = 430 + jog;
+  const merlon = (index % 2) === 0;
+  const top = merlon ? 429 : 434;
   const base = 466;
   if (broken) {
     if (((index * 5 + 3) % 4) === 0 || (ratio <= FENCE_RUIN && (index % 2) === 0)) {
       ctx.fillStyle = kit.edge;
-      ctx.fillRect(x + 2, 462, 2, 3);
-      ctx.fillRect(x + 5, 460, 1, 4);
+      ctx.fillRect(x + 2, 461, 3, 4);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 7, 459, 1, 6);
       return false;
     }
-    const stump = (ratio <= FENCE_RUIN ? 4 + (index % 3) : 8 + (index % 5) * 3);
+    const stump = (ratio <= FENCE_RUIN ? 5 + (index % 3) : 9 + (index % 4) * 3);
     const y = base - stump;
     ctx.fillStyle = kit.edge;
-    ctx.fillRect(x, y, 8, stump);
+    ctx.fillRect(x + 1, y, 10, stump);
     ctx.fillStyle = kit.dark;
-    ctx.fillRect(x + 1, y + 2, 5, Math.max(0, stump - 2));
+    ctx.fillRect(x + 2, y + 2, 8, Math.max(0, stump - 2));
     ctx.fillStyle = kit.light;
-    ctx.fillRect(x + 1, y, 4, 1);
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 2, y + 1, 3, 1);
+    ctx.fillRect(x + 2, y, 6, 1);
+    // Exposed steel rebar prongs
+    ctx.fillStyle = kit.iron;
+    ctx.fillRect(x + 3, y - 3, 1, 3);
+    ctx.fillRect(x + 8, y - 2, 1, 2);
     return false;
   }
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 3, top, 2, 2);
-  ctx.fillRect(x + 2, top + 2, 4, 2);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 1, top + 4, 6, 2);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x, top + 6, 8, base - (top + 6));
+  // Fortified concrete-and-steel bastion armor block
   ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, top + 6, 1, base - (top + 6));
-  ctx.fillRect(x + 7, top + 6, 1, base - (top + 6));
+  ctx.fillRect(x, top, 12, base - top);
+  ctx.fillStyle = kit.dark;
+  ctx.fillRect(x + 1, top + 2, 10, base - (top + 2));
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(x + 1, top + 2, 10, 7);
+  // Bright beveled top armor lip
   ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 2, top + 8, 1, Math.max(0, base - (top + 10)));
+  ctx.fillRect(x + 1, top, 10, 2);
+  // Recessed firing slit on embrasure blocks
+  if (!merlon) {
+    ctx.fillStyle = '#0c1216';
+    ctx.fillRect(x + 3, top + 4, 6, 2);
+    ctx.fillStyle = kit.ironDark;
+    ctx.fillRect(x + 2, top + 3, 8, 1);
+  }
+  // Horizontal riveted steel reinforcement girder
   ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x - 2, 446, 12, 5);
+  ctx.fillRect(x, 446, 12, 6);
   ctx.fillStyle = kit.strap;
-  ctx.fillRect(x - 2, 447, 12, 2);
+  ctx.fillRect(x, 447, 12, 3);
   ctx.fillStyle = kit.iron;
-  ctx.fillRect(x + 3, 450, 2, 2);
+  ctx.fillRect(x, 447, 12, 1);
+  ctx.fillRect(x + 2, 449, 2, 1);
+  ctx.fillRect(x + 8, 449, 2, 1);
+  // Lower armor plate seams & corner bolts
+  ctx.fillStyle = kit.mid;
+  ctx.fillRect(x + 2, 454, 8, 10);
+  ctx.fillStyle = kit.iron;
+  ctx.fillRect(x + 2, 455, 1, 1);
+  ctx.fillRect(x + 9, 455, 1, 1);
+  ctx.fillRect(x + 2, 462, 1, 1);
+  ctx.fillRect(x + 9, 462, 1, 1);
   if (ratio <= crackAt(index)) {
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 3, top + 6, 1, 5);
-    ctx.fillRect(x + 2, top + 12, 1, 7);
-    ctx.fillRect(x + 3, top + 18, 1, 6);
+    ctx.fillStyle = '#121010';
+    ctx.fillRect(x + 5, top + 4, 1, 6);
+    ctx.fillRect(x + 4, top + 10, 1, 8);
+    ctx.fillRect(x + 6, top + 16, 1, 7);
     if (ratio <= (FENCE_CRACKED + FENCE_FAILING) / 2) {
-      ctx.fillRect(x + 5, top + 8, 1, 6);
-      ctx.fillRect(x + 4, top + 14, 1, 5);
+      ctx.fillRect(x + 8, top + 7, 1, 6);
+      ctx.fillRect(x + 7, top + 13, 1, 6);
     }
   }
   if (ratio <= FENCE_FAILING && (index % 3) === 0) {
-    ctx.fillStyle = '#2a1612';
-    ctx.fillRect(x + 1, 456, 6, 4);
+    ctx.fillStyle = '#241410';
+    ctx.fillRect(x + 2, 455, 8, 5);
+    ctx.fillStyle = '#e25822';
+    ctx.fillRect(x + 4, 457, 2, 1);
   }
   return true;
 }
 
 function drawWire(ctx, intact, kit, ratio) {
-  ctx.fillStyle = kit.ironDark;
+  // Razor-wire concertina coils along the upper parapet
   for (let i = 0; i < PICKETS; i++) {
-    const x = i * 12 + 2;
-    const top = 430 + (i % 3) * 2;
+    const x = i * 12;
+    const top = (i % 2) === 0 ? 429 : 434;
     if (intact[i]) {
-      ctx.fillRect(x + 2, 426, 5, 1);
-      ctx.fillRect(x + 3, 426, 1, top - 426);
-      ctx.fillRect(x + 2, top - 1, 1, 1);
-      ctx.fillRect(x + 4, top - 1, 1, 1);
-      if (intact[i + 1]) ctx.fillRect(x + 7, 426, 7, 1);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 1, 425, 10, 1);
+      ctx.fillRect(x + 5, 425, 1, top - 425);
+      ctx.fillStyle = kit.iron;
+      ctx.fillRect(x + 3, 424, 2, 1);
+      ctx.fillRect(x + 8, 426, 2, 1);
+      if (intact[i + 1]) {
+        ctx.fillStyle = kit.ironDark;
+        ctx.fillRect(x + 10, 425, 4, 1);
+      }
     } else if (ratio > FENCE_RUIN) {
-      ctx.fillRect(x + 1, 436 + (i % 3) * 2, 6, 1);
+      ctx.fillStyle = kit.ironDark;
+      ctx.fillRect(x + 2, 437 + (i % 3) * 2, 7, 1);
     }
   }
 }
@@ -11250,29 +11913,33 @@ function postFalls(x, ratio) {
 function drawPost(ctx, x, ratio, kit) {
   if (postFalls(x, ratio)) {
     ctx.fillStyle = kit.dark;
-    ctx.fillRect(x, 462, 12, 4);
-    ctx.fillRect(x + 3, 458, 5, 4);
+    ctx.fillRect(x, 461, 12, 5);
+    ctx.fillRect(x + 3, 457, 6, 4);
     ctx.fillStyle = kit.edge;
     ctx.fillRect(x + 1, 465, 10, 2);
     return;
   }
+  // Heavy armored steel buttress pylon
   ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, 418, 8, 52);
+  ctx.fillRect(x, 417, 10, 53);
   ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, 420, 6, 48);
+  ctx.fillRect(x + 1, 419, 8, 49);
   ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 422, 3, 44);
+  ctx.fillRect(x + 2, 421, 5, 45);
+  // Beveled steel turret cap & twin rivets
   ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 418, 8, 3);
-  ctx.fillRect(x, 446, 8, 4);
+  ctx.fillRect(x, 417, 10, 3);
+  ctx.fillRect(x + 1, 446, 8, 5);
+  ctx.fillStyle = kit.hazard;
+  ctx.fillRect(x + 2, 423, 6, 2);
   ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x + 1, 447, 6, 1);
+  ctx.fillRect(x + 1, 448, 8, 1);
   if (ratio <= FENCE_CRACKED) {
-    ctx.fillStyle = '#1a100c';
-    ctx.fillRect(x + 3, 430, 1, 12);
+    ctx.fillStyle = '#141010';
+    ctx.fillRect(x + 4, 429, 1, 13);
     if (ratio <= FENCE_FAILING) {
-      ctx.fillRect(x + 4, 434, 1, 10);
-      ctx.fillRect(x + 2, 438, 1, 6);
+      ctx.fillRect(x + 6, 433, 1, 11);
+      ctx.fillRect(x + 3, 438, 1, 6);
     }
   }
 }
@@ -11305,28 +11972,66 @@ function shiftFenceArt(ctx, draw) {
 
 function drawSleeper(ctx, ratio, kit) {
   const y = SLEEPER_ART_Y;
+  // Heavy armored steel base sill with hazard caution chevrons
   ctx.fillStyle = kit.edge;
   ctx.fillRect(0, y, W, 6);
   ctx.fillStyle = kit.dark;
   ctx.fillRect(0, y + 1, W, 4);
   ctx.fillStyle = kit.mid;
   ctx.fillRect(0, y + 1, W, 2);
+  // Bright full-width bastion top rail (stays brightest full-width horizontal band)
   ctx.fillStyle = kit.light;
   ctx.fillRect(0, y, W, 1);
+  // Caution hazard stripe blocks along the lower steel footing
+  for (let x = 6; x < W - 6; x += 16) {
+    ctx.fillStyle = kit.hazard;
+    ctx.fillRect(x, y + 2, 6, 2);
+  }
   if (ratio <= FENCE_FAILING) {
     for (let i = 0; i < PICKETS; i++) {
       if (ratio > breakAt(i)) continue;
-      ctx.fillStyle = '#1a1612';
-      ctx.fillRect(i * 12 + 4, y + 1, 6, 4);
+      ctx.fillStyle = '#181412';
+      ctx.fillRect(i * 12 + 3, y + 1, 7, 4);
     }
   }
-  for (let x = 8; x < W; x += 12) {
+  for (let x = 14; x < W; x += 16) {
     ctx.fillStyle = kit.iron;
     ctx.fillRect(x, y + 2, 1, 2);
   }
 }
 
-function drawFence(ctx, ratio) {
+function drawWallImmunity(ctx, count, time, reduced) {
+  if (!(count > 0)) return;
+  const base = readAlpha(ctx);
+  const pulse = reduced ? 0.85 : (0.7 + 0.3 * Math.sin(time * 6.5));
+  shiftFenceArt(ctx, () => {
+    // Luminous cyan Aegis energy rim across the center bastion parapet (strictly inside [60..300])
+    ctx.globalAlpha = base * 0.55 * pulse;
+    ctx.fillStyle = '#70e8ff';
+    ctx.fillRect(62, 427, 236, 2);
+    ctx.globalAlpha = base * 0.9 * pulse;
+    ctx.fillStyle = '#d8fbff';
+    ctx.fillRect(68, 428, 224, 1);
+    // Shield charge pips centered cleanly above the bastion rail
+    const pips = Math.min(8, Math.floor(count));
+    const step = 10;
+    const total = pips * step - 4;
+    const startX = Math.round(W / 2 - total / 2);
+    ctx.globalAlpha = base;
+    for (let i = 0; i < pips; i++) {
+      const px = startX + i * step;
+      ctx.fillStyle = '#0c1b22';
+      ctx.fillRect(px - 1, 439, 8, 6);
+      ctx.fillStyle = '#4ad8f8';
+      ctx.fillRect(px, 440, 6, 4);
+      ctx.fillStyle = '#e6fcff';
+      ctx.fillRect(px + 1, 441, 4, 2);
+    }
+  });
+  ctx.globalAlpha = base;
+}
+
+function drawFence(ctx, ratio, wallImmunity = 0, time = 0, reduced = false) {
   shiftFenceArt(ctx, () => {
     const kit = woodKit(ratio);
     const intact = new Array(PICKETS);
@@ -11336,6 +12041,7 @@ function drawFence(ctx, ratio) {
     for (const x of POSTS) drawPost(ctx, x, ratio, kit);
     drawRubble(ctx, kit, ratio);
   });
+  if (wallImmunity > 0) drawWallImmunity(ctx, wallImmunity, time, reduced);
 }
 
 function drawBanner(ctx, ratio, time, reduced, phase) {
@@ -11569,7 +12275,7 @@ function drawWorld(ctx, state, options) {
     drawStars(ctx, time, reduced);
     drawMist(ctx, time, reduced);
     drawGrass(ctx, time, reduced);
-    drawFence(ctx, ratio);
+    drawFence(ctx, ratio, Number(state?.wallImmunity) || 0, time, reduced);
     drawFenceTorches(ctx, ratio, time, reduced);
     drawBanner(ctx, ratio, time, reduced, phase);
     drawEmbers(ctx, ratio, time, reduced);
@@ -12860,10 +13566,13 @@ function createRun({seed=123456,difficulty='normal',profile=createProfile(),runI
  const hp=DIFFICULTIES[difficulty].fence;
  const state={version:CONTRACT_VERSION,runId:id,seed:seed>>>0,rng:seed>>>0,nextId:1,time:0,tick:0,accumulator:0,phase:'playing',paused:false,hiddenPaused:false,speed:1,difficulty,expedition:isExpedition(expedition)?expedition:'watch',wave:0,waveTime:0,director:{nextWave:0,queue:[],done:false},kills:0,xp:0,nextDraftXp:6,draftLevel:0,fence:{hp,maxHp:hp},slots:Array.from({length:10},(_,i)=>({...slotGeometry(i),unit:null})),enemies:[],projectiles:[],clouds:[],events:[],draft:null,pendingUnit:null,profileSnapshot:clone(profile),settlement:null,stats:{damage:0,fenceDamage:0,merges:0,crits:0},initialized:false,endless:false,systems:{}};
  Object.assign(state, {
-   energy: state.expedition === 'watch' ? 45 : 60, maxEnergy:999,
+   energy: state.expedition === 'watch' ? 45 : state.expedition === 'frenzy' ? 75 : 60, maxEnergy:999,
    fieldSlots:Array.from({length:10}, (_,i)=>({...fieldSlotGeometry(i),unit:null})),
    fieldCooldowns:{bulwark:0, spikes:0, flare:0}, draftRerollsUsed:0, freeRerollsLeft:0,
-   surge:{charges:1, maxCharges:1, shieldTimer:0, cooldown:0, thresholdsUsed:[]}
+   surge:{charges:1, maxCharges:1, shieldTimer:0, cooldown:0, thresholdsUsed:[]},
+   wallImmunity:0,
+   openingDraftPending:0,
+   arsenal:{timers:{napalm:1.6, armored_car:2.4, cryo_barrage:2.0, orbital_beam:2.6, ricochet:2.2}, sweepers:[], beams:[]}
  });
  state.slots[2].unit=createUnit(state,'hero');
  return state;
@@ -13933,6 +14642,7 @@ __ff_exports["selectTarget"] = selectTarget;
 __ff_exports["damageEnemy"] = damageEnemy;
 __ff_exports["killEnemy"] = killEnemy;
 __ff_exports["updateClouds"] = updateClouds;
+__ff_exports["superweaponCooldown"] = superweaponCooldown;
 __ff_exports["updateCombat"] = updateCombat;
 const __ff_m0 = __ff_load("src/systems/field.js");
 const __ff_m1 = __ff_load("src/shared.js");
@@ -14314,6 +15024,18 @@ function killEnemy(state, enemy, sourceId, options = {}) {
       damageEnemy(state,other,damage,{sourceId:mark.sourceId,type:'corpse_explode',towerType:'blight',fromExplode:true});
     }
   }
+  const heroUnit = state.slots?.find(s => s?.unit?.kind === 'hero')?.unit;
+  const frostRank = heroUnit?.upgrades?.frostbite || 0;
+  if (frostRank >= 2 && !options.fromShatter && (enemy.statuses || []).some(s => (s.type === 'slow' || s.type === 'brittle') && s.remaining > 0)) {
+    const radius = 52 + 8 * (frostRank - 2);
+    const dmg = 16 * frostRank;
+    emit(state, 'cryo_shatter', {x: enemy.x, y: enemy.y, radius, damage: dmg});
+    for (const other of state.enemies) {
+      if (!isLiving(other) || other.id === enemy.id || distance(other, enemy) > radius) continue;
+      applyStatus(other, {type: 'slow', power: 0.68, remaining: 1.8, sourceId: heroUnit.id});
+      damageEnemy(state, other, dmg, {sourceId: heroUnit.id, type: 'cryo_shatter', towerType: 'frost', fromShatter: true});
+    }
+  }
   releaseSplit(state, enemy);
   return true;
 }
@@ -14481,9 +15203,17 @@ function impact(state,projectile,enemy,type) {
     amount *= 1 + effects.poisonDetonate*stacks;
     reaction = 'catalyst';
   }
+  const bonuses = state.systems?.integration?.bonuses;
+  if ((bonuses?.statusDamage || 0) > 0 && active.some(s => s.type === 'burn' || s.type === 'slow' || s.type === 'brittle' || s.type === 'poison')) {
+    amount *= 1 + bonuses.statusDamage;
+  }
+  const isCrit = type !== 'splash' && !!projectile.crit;
+  if (isCrit && (bonuses?.shredPercent || 0) > 0 && Number.isFinite(enemy.maxHp) && enemy.maxHp > 0) {
+    amount += Math.min(enemy.kind === 'boss' ? 180 : 120, enemy.maxHp * bonuses.shredPercent);
+  }
   if (effects?.corpseExplode) enemy.corpseExplode = {...effects.corpseExplode,sourceId,poison:effects.poison};
   damageEnemy(state,enemy,amount,{sourceId,towerType,type,armorPen:effects?.armorPen,reaction,
-    crit:type!=='splash' && !!projectile.crit,execute:executeApplies(projectile,enemy)});
+    crit:isCrit,execute:executeApplies(projectile,enemy)});
   applyPayload(enemy,projectile);
   if (reaction==='steam' && isLiving(enemy)) applyStatus(enemy,{type:'brittle',power:0.2,remaining:2.6,sourceId});
   const push = (effects?.knockback || 0) + (projectile.crit && enemy.kind!=='boss' ? effects?.critKnockback || 0 : 0);
@@ -14491,14 +15221,17 @@ function impact(state,projectile,enemy,type) {
 }
 
 const MAX_CLOUDS = 24;
+function addCloud(state, cloud) {
+  if (!Array.isArray(state.clouds)) state.clouds = [];
+  if (state.clouds.length >= MAX_CLOUDS) state.clouds.shift();
+  state.clouds.push(cloud);
+  emit(state, 'cloud_spawn', {id: cloud.id, kind: cloud.kind, x: cloud.x, y: cloud.y, radius: cloud.radius, duration: cloud.duration});
+}
 function spawnCloud(state,projectile,enemy) {
   const spec = projectile.effects?.cloud;
   if (!spec) return;
-  const cloud = {...spec,id:uid(state,'c'),kind:projectile.towerType,sourceId:projectile.sourceId,
-    x:enemy.x,y:enemy.y,remaining:spec.duration,tickTimer:0};
-  if (state.clouds.length>=MAX_CLOUDS) state.clouds.shift();
-  state.clouds.push(cloud);
-  emit(state,'cloud_spawn',{id:cloud.id,kind:cloud.kind,x:cloud.x,y:cloud.y,radius:cloud.radius,duration:cloud.duration});
+  addCloud(state, {...spec, id: uid(state, 'c'), kind: projectile.towerType || 'fire', sourceId: projectile.sourceId || 'u1',
+    x: clamp(enemy.x, 12, ARENA.width - 12), y: clamp(enemy.y, 12, ARENA.fenceY - 6), remaining: spec.duration, tickTimer: 0});
 }
 function updateClouds(state,dt) {
   if (!state.clouds?.length) return;
@@ -14527,6 +15260,49 @@ function applySplash(state, projectile, primary) {
   }
 }
 
+function spawnSplitShrapnel(state, projectile, point, hitEnemyId) {
+  const count = Math.min(5, Math.floor(finite(projectile.effects?.split, 0)));
+  if (count <= 0 || projectile.isSplitChild) return;
+  const subDmg = Math.max(2, finite(projectile.damage, 0) * 0.58);
+  const spreadStep = count > 1 ? (Math.PI * 0.62) / (count - 1) : 0;
+  const baseAngle = Math.atan2(projectile.diry || -1, projectile.dirx || 0) - (spreadStep * (count - 1)) / 2;
+  for (let i = 0; i < count; i++) {
+    const angle = baseAngle + spreadStep * i;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    state.projectiles.push({
+      id: uid(state, 'p'),
+      sourceId: projectile.sourceId,
+      targetId: null,
+      x: clamp(point.x + dx * 8, -40, ARENA.width + 40),
+      y: clamp(point.y + dy * 8, -40, ARENA.fenceY + 20),
+      speed: 620,
+      damage: subDmg,
+      crit: projectile.crit,
+      critMultiplier: projectile.critMultiplier,
+      critChance: 0,
+      tags: ['hero', 'split', 'pierce'],
+      splash: 0,
+      chain: 0,
+      chainRange: 70,
+      pierce: 1,
+      visited: [hitEnemyId],
+      life: 0.72,
+      dirx: dx,
+      diry: dy,
+      aimx: null,
+      aimy: null,
+      towerType: 'hero',
+      rank: projectile.rank || 1,
+      effects: {armorPen: projectile.effects?.armorPen || 0},
+      mechanics: [],
+      impactType: null,
+      isSplitChild: true
+    });
+  }
+  emit(state, 'bullet_split', {x: point.x, y: point.y, count});
+}
+
 function rollChainCrit(state, projectile) {
   const chance = finite(projectile.critChance, 0);
   if (!(chance > 0)) return;
@@ -14550,7 +15326,19 @@ function resolveHit(state, projectile, enemy) {
     }
   }
   spawnCloud(state,projectile,point);
+  if (!projectile.isSplitChild && projectile.towerType === 'hero' && (projectile.effects?.shrapnelRank || 0) >= 2 && attack === 'projectile') {
+    const sr = projectile.effects.shrapnelRank;
+    addCloud(state, {
+      id: uid(state, 'c'), kind: 'shrapnel', sourceId: projectile.sourceId || 'u1',
+      x: clamp(point.x, 12, ARENA.width - 12), y: clamp(point.y, 12, ARENA.fenceY - 8),
+      radius: 30 + 6 * sr, duration: 2.0, remaining: 2.0, tick: 0.45, tickTimer: 0,
+      dps: 5 * sr, burn: {dps: 4 * sr, duration: 2.0}
+    });
+  }
   applySplash(state, projectile, point);
+  if (!projectile.isSplitChild && attack === 'projectile' && (projectile.effects?.split || 0) > 0) {
+    spawnSplitShrapnel(state, projectile, point, enemy.id);
+  }
 
   if (Math.floor(finite(projectile.pierce, 0)) > 0) {
     projectile.pierce = Math.max(0, Math.floor(projectile.pierce) - 1);
@@ -14698,7 +15486,7 @@ function buildEffects(stats) {
   if (stats.stun && Number.isFinite(stats.stun.duration)) {
     effects.stun = {duration: Math.max(0, stats.stun.duration)};
   }
-  for (const key of ['armorPen','knockback','critKnockback','cloud','corpseExplode','thermalShock','poisonDetonate','revealRadius']) {
+  for (const key of ['armorPen','knockback','critKnockback','cloud','corpseExplode','thermalShock','poisonDetonate','revealRadius','split','shrapnelRank','frostbiteRank']) {
     if (stats[key]) effects[key] = stats[key];
   }
   return effects;
@@ -14911,6 +15699,15 @@ function biteFence(state, amount, x, sourceId, enemyKind) {
   const fence = state.fence;
   if (!fence || !(fence.hp > 0) || !(amount > 0) || !Number.isFinite(amount)) return 0;
   if (state.surge.shieldTimer>0) return 0;
+  if ((state.wallImmunity || 0) > 0) {
+    state.wallImmunity = Math.max(0, Math.floor(state.wallImmunity) - 1);
+    emitEvent(state, 'wall_immune', {x: Number.isFinite(x) ? x : ARENA.width / 2, y: ARENA.fenceY, remaining: state.wallImmunity});
+    for (const e of state.enemies) {
+      if (!isLiving(e) || e.y < ARENA.fenceY - 120) continue;
+      pushEnemy(state, e, e.kind === 'boss' ? 18 : 64);
+    }
+    return 0;
+  }
   const previous=fence.hp;
   const applied = Math.min(fence.hp, amount);
   const maxHp = Number.isFinite(fence.maxHp) ? fence.maxHp : fence.hp;
@@ -15168,6 +15965,298 @@ function combatStats(unit,state) {
   combatStatsCache.set(unit,{rank:unit.rank,type:unit.type,levels,bonuses,stats});
   return stats;
 }
+const SW_BASE_CD = Object.freeze({
+  napalm: [7.2, 5.8, 4.6],
+  armored_car: [9.4, 7.6, 6.0],
+  cryo_barrage: [7.6, 6.2, 4.9],
+  orbital_beam: [8.2, 6.7, 5.3],
+  ricochet: [7.4, 6.0, 4.8],
+});
+
+function superweaponCooldown(id, rank, haste = 0) {
+  const table = SW_BASE_CD[id];
+  if (!table) return 8;
+  const idx = clamp(Math.floor(rank || 1) - 1, 0, table.length - 1);
+  return table[idx] / (1 + Math.max(0, finite(haste, 0)));
+}
+
+function ensureArsenal(state) {
+  if (!state.arsenal || typeof state.arsenal !== 'object') {
+    state.arsenal = {
+      timers: {napalm: 1.6, armored_car: 2.4, cryo_barrage: 2.0, orbital_beam: 2.6, ricochet: 2.2},
+      sweepers: [],
+      beams: [],
+    };
+  }
+  if (!state.arsenal.timers || typeof state.arsenal.timers !== 'object') {
+    state.arsenal.timers = {napalm: 1.6, armored_car: 2.4, cryo_barrage: 2.0, orbital_beam: 2.6, ricochet: 2.2};
+  }
+  if (!Array.isArray(state.arsenal.sweepers)) state.arsenal.sweepers = [];
+  if (!Array.isArray(state.arsenal.beams)) state.arsenal.beams = [];
+  return state.arsenal;
+}
+
+function densestEnemy(state, minY = 30) {
+  let best = null;
+  let bestScore = -1;
+  for (const e of state.enemies) {
+    if (!isTargetable(e) || e.y < minY) continue;
+    let score = 1;
+    for (const o of state.enemies) {
+      if (!isTargetable(o) || o.id === e.id) continue;
+      if (distance(e, o) <= 74) score += 1;
+    }
+    score += e.y / 640;
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function densestLaneX(state) {
+  const lanes = [54, 117, 180, 243, 306];
+  let bestX = 180;
+  let bestScore = 0;
+  for (const lx of lanes) {
+    let score = 0;
+    for (const e of state.enemies) {
+      if (!isLiving(e) || e.y < 16) continue;
+      if (Math.abs(e.x - lx) <= 42) score += 1 + (e.y / 520);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = lx;
+    }
+  }
+  return bestScore > 0 ? bestX : null;
+}
+
+function priorityColumnTarget(state) {
+  let best = null;
+  let bestScore = -1;
+  for (const e of state.enemies) {
+    if (!isTargetable(e) || e.y < 24) continue;
+    const score = (e.kind === 'boss' ? 5000 : 0) + (ENEMIES[e.kind]?.priority ? 800 : 0) + finite(e.hp, 0) + e.y * 0.6;
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function updateSuperweapons(state, dt, heroEntry) {
+  const hero = heroEntry?.unit;
+  const upgrades = hero?.upgrades || {};
+  const napalmRank = Math.floor(finite(upgrades.napalm, 0));
+  const carRank = Math.floor(finite(upgrades.armored_car, 0));
+  const cryoRank = Math.floor(finite(upgrades.cryo_barrage, 0));
+  const beamRank = Math.floor(finite(upgrades.orbital_beam, 0));
+  const emRank = Math.floor(finite(upgrades.ricochet, 0));
+  const existingSweepers = state.arsenal?.sweepers?.length || 0;
+  const existingBeams = state.arsenal?.beams?.length || 0;
+  if (!napalmRank && !carRank && !cryoRank && !beamRank && !emRank && !existingSweepers && !existingBeams) return;
+
+  const arsenal = ensureArsenal(state);
+  const haste = finite(state.systems?.integration?.bonuses?.superweaponHaste, 0);
+  const recharge = defenderRecharge(state);
+  const heroDmg = Math.max(12, finite(heroEntry?.stats?.damage, 14));
+  const heroId = hero?.id || 'u1';
+  const heroSlot = heroEntry?.slot || {x: ARENA.width / 2, y: ARENA.frontY};
+
+  // Step active Armored Sweeper trucks rolling up the field
+  const keptSweepers = [];
+  for (const sw of arsenal.sweepers) {
+    sw.y -= sw.speed * dt;
+    if (!Array.isArray(sw.hitIds)) sw.hitIds = [];
+    for (const enemy of state.enemies) {
+      if (!isLiving(enemy) || sw.hitIds.includes(enemy.id)) continue;
+      const rad = finite(enemy.radius, 12);
+      if (Math.abs(enemy.x - sw.x) <= sw.halfWidth + rad && Math.abs(enemy.y - sw.y) <= 24 + rad) {
+        sw.hitIds.push(enemy.id);
+        damageEnemy(state, enemy, sw.damage, {sourceId: heroId, towerType: 'armored_car', type: 'armored_car', crit: true, armorPen: 0.4});
+        if (isLiving(enemy)) {
+          pushEnemy(state, enemy, enemy.kind === 'boss' ? 24 : sw.knockback);
+          if (enemy.kind !== 'boss') applyStatus(enemy, {type: 'stun', power: 1, remaining: 0.75, sourceId: heroId});
+        }
+      }
+    }
+    if (sw.y > -32) keptSweepers.push(sw);
+  }
+  arsenal.sweepers = keptSweepers;
+
+  // Step active Orbital Laser Beam visuals
+  for (const beam of arsenal.beams) beam.life -= dt;
+  arsenal.beams = arsenal.beams.filter(b => b.life > 1e-6);
+
+  // 1. Napalm Airstrike (Fire Sea)
+  if (napalmRank > 0) {
+    arsenal.timers.napalm = finite(arsenal.timers.napalm, 1.6) - dt * recharge;
+    if (arsenal.timers.napalm <= 1e-9) {
+      const target = densestEnemy(state, 40);
+      if (target) {
+        arsenal.timers.napalm = superweaponCooldown('napalm', napalmRank, haste);
+        const cx = clamp(target.x, 26, ARENA.width - 26);
+        const cy = clamp(target.y, 44, ARENA.fenceY - 22);
+        const blastRadius = 58 + 10 * napalmRank;
+        const blastDmg = heroDmg * (2.0 + 0.75 * napalmRank);
+        emitEvent(state, 'napalm_blast', {x: cx, y: cy, radius: blastRadius, damage: blastDmg, rank: napalmRank});
+        for (const e of state.enemies) {
+          if (!isLiving(e) || distance(e, {x: cx, y: cy}) > blastRadius) continue;
+          damageEnemy(state, e, blastDmg, {sourceId: heroId, towerType: 'napalm', type: 'napalm_blast', crit: napalmRank >= 2, armorPen: 0.25});
+          applyStatus(e, {type: 'burn', power: 6 * napalmRank, remaining: 3.4, sourceId: heroId, tickTimer: 0});
+        }
+        addCloud(state, {
+          id: uid(state, 'c'), kind: 'napalm', sourceId: heroId,
+          x: cx, y: cy, radius: 62 + 10 * napalmRank,
+          duration: 4.5, remaining: 4.5, tick: 0.4, tickTimer: 0,
+          dps: heroDmg * (0.55 + 0.22 * napalmRank),
+          burn: {dps: 6 * napalmRank, duration: 2.8}
+        });
+      } else {
+        arsenal.timers.napalm = 0.2;
+      }
+    }
+  }
+
+  // 2. Armored Sweeper Truck
+  if (carRank > 0) {
+    arsenal.timers.armored_car = finite(arsenal.timers.armored_car, 2.4) - dt * recharge;
+    if (arsenal.timers.armored_car <= 1e-9) {
+      const laneX = densestLaneX(state);
+      if (laneX != null) {
+        arsenal.timers.armored_car = superweaponCooldown('armored_car', carRank, haste);
+        const sweeper = {
+          id: uid(state, 'sw'),
+          x: laneX,
+          y: ARENA.fenceY - 6,
+          speed: 255,
+          halfWidth: 34,
+          damage: heroDmg * (2.6 + 1.0 * carRank),
+          knockback: 68 + 10 * carRank,
+          rank: carRank,
+          hitIds: [],
+        };
+        arsenal.sweepers.push(sweeper);
+        emitEvent(state, 'armored_car', {x: laneX, y: ARENA.fenceY - 12, rank: carRank});
+      } else {
+        arsenal.timers.armored_car = 0.25;
+      }
+    }
+  }
+
+  // 3. Glacial Barrage Fan (Cryo Shards)
+  if (cryoRank > 0) {
+    arsenal.timers.cryo_barrage = finite(arsenal.timers.cryo_barrage, 2.0) - dt * recharge;
+    if (arsenal.timers.cryo_barrage <= 1e-9) {
+      const anyFoe = state.enemies.some(e => isTargetable(e) && e.y >= 20);
+      if (anyFoe) {
+        arsenal.timers.cryo_barrage = superweaponCooldown('cryo_barrage', cryoRank, haste);
+        const count = 3 + 2 * cryoRank;
+        const spread = Math.PI * 0.68;
+        const dmg = heroDmg * (1.15 + 0.38 * cryoRank);
+        for (let i = 0; i < count; i++) {
+          const angle = -Math.PI / 2 - spread / 2 + (spread * i) / (count - 1);
+          const dx = Math.cos(angle);
+          const dy = Math.sin(angle);
+          state.projectiles.push({
+            id: uid(state, 'p'),
+            sourceId: heroId,
+            targetId: null,
+            x: heroSlot.x + dx * 12,
+            y: ARENA.fenceY - 8,
+            speed: 480,
+            damage: dmg,
+            crit: false,
+            critMultiplier: 1,
+            critChance: 0,
+            tags: ['frost', 'cryo_barrage', 'pierce'],
+            splash: 0,
+            chain: 0,
+            chainRange: 70,
+            pierce: 4 + cryoRank,
+            visited: [],
+            life: 1.4,
+            dirx: dx,
+            diry: dy,
+            aimx: null,
+            aimy: null,
+            towerType: 'frost',
+            rank: cryoRank,
+            effects: {
+              slow: {factor: 0.46, duration: 2.8},
+              brittle: {power: 0.14 * cryoRank, duration: 3.0},
+              knockback: 22,
+              armorPen: 0.25,
+            },
+            mechanics: [],
+            impactType: null,
+            isSplitChild: true,
+          });
+        }
+        emitEvent(state, 'cryo_barrage', {x: heroSlot.x, y: ARENA.fenceY - 12, count, rank: cryoRank});
+      } else {
+        arsenal.timers.cryo_barrage = 0.2;
+      }
+    }
+  }
+
+  // 4. Orbital Laser Beam
+  if (beamRank > 0) {
+    arsenal.timers.orbital_beam = finite(arsenal.timers.orbital_beam, 2.6) - dt * recharge;
+    if (arsenal.timers.orbital_beam <= 1e-9) {
+      const target = priorityColumnTarget(state);
+      if (target) {
+        arsenal.timers.orbital_beam = superweaponCooldown('orbital_beam', beamRank, haste);
+        const bx = clamp(target.x, 22, ARENA.width - 22);
+        const width = 30 + 8 * beamRank;
+        const dmg = heroDmg * (2.5 + 0.95 * beamRank) * (1 + 0.25 * beamRank);
+        arsenal.beams.push({id: uid(state, 'bm'), x: bx, width, life: 0.65, maxLife: 0.65, rank: beamRank});
+        emitEvent(state, 'orbital_beam', {x: bx, y: target.y, width, damage: dmg, rank: beamRank});
+        for (const e of state.enemies) {
+          if (!isTargetable(e) || e.y < -12) continue;
+          if (Math.abs(e.x - bx) <= width / 2 + finite(e.radius, 12)) {
+            damageEnemy(state, e, dmg, {sourceId: heroId, towerType: 'orbital_beam', type: 'orbital_beam', crit: true, armorPen: 0.65});
+            applyStatus(e, {type: 'burn', power: 5 * beamRank, remaining: 2.2, sourceId: heroId, tickTimer: 0});
+          }
+        }
+      } else {
+        arsenal.timers.orbital_beam = 0.2;
+      }
+    }
+  }
+
+  // 5. EM Sky-Strike (from EM Ricochet)
+  if (emRank > 0) {
+    arsenal.timers.ricochet = finite(arsenal.timers.ricochet, 2.2) - dt * recharge;
+    if (arsenal.timers.ricochet <= 1e-9) {
+      const first = selectTarget(state, {x: ARENA.width / 2, y: ARENA.fenceY}, 520, 'priority');
+      if (first) {
+        arsenal.timers.ricochet = superweaponCooldown('ricochet', emRank, haste);
+        const maxTargets = 3 + emRank;
+        const dmg = heroDmg * (1.45 + 0.45 * emRank);
+        const hitIds = [];
+        const points = [];
+        let curr = first;
+        for (let step = 0; step < maxTargets && curr; step++) {
+          hitIds.push(curr.id);
+          points.push({x: curr.x, y: curr.y});
+          damageEnemy(state, curr, dmg, {sourceId: heroId, towerType: 'lightning', type: 'em_strike', crit: step === 0, armorPen: 0.35});
+          if (isLiving(curr) && curr.kind !== 'boss') {
+            applyStatus(curr, {type: 'stun', power: 1, remaining: 0.55, sourceId: heroId});
+          }
+          curr = nearestEnemy(state, curr, 130, hitIds);
+        }
+        emitEvent(state, 'em_strike', {x: points[0].x, y: points[0].y, points, rank: emRank});
+      } else {
+        arsenal.timers.ricochet = 0.2;
+      }
+    }
+  }
+}
+
 function updateCombat(state, dt) {
   if (simulationFrozen(state)) return state;
   if (!Number.isFinite(dt) || dt <= 0) return state;
@@ -15183,16 +16272,20 @@ function updateCombat(state, dt) {
   updateWards(state);
 
   const roster = [];
+  let heroEntry = null;
   for (const slot of state.slots) {
     if (!slot?.unit || slot.unit.type==='harvest') continue;
     const stats = combatStats(slot.unit,state);
     if (!stats || typeof stats !== 'object') continue;
-    roster.push({slot, unit: slot.unit, stats});
+    const entry = {slot, unit: slot.unit, stats};
+    roster.push(entry);
+    if (slot.unit.kind === 'hero' || slot.unit.type === 'hero') heroEntry = entry;
   }
   const aura = computeAura(roster);
   updateDefenders(state, dt, roster, aura);
   updateProjectiles(state, dt);
   updateClouds(state, dt);
+  updateSuperweapons(state, dt, heroEntry);
   updateMenders(state, dt);
   updateFenceAttacks(state, dt);
   updateCharges(state, dt);
@@ -15336,24 +16429,30 @@ function updateDrafts(state) {
   }
   if (state.settlement || defeatPending(state) || victoryPending(state)) return fail('not_playing');
   if (state.draft || state.pendingUnit) return fail('busy');
+  const freeOpening = (state.openingDraftPending || 0) > 0 && state.time >= 0.35;
   const cost = state.nextDraftXp;
-  if (!Number.isFinite(state.xp) || !Number.isFinite(cost) || cost <= 0 || state.xp < cost) {
+  if (!freeOpening && (!Number.isFinite(state.xp) || !Number.isFinite(cost) || cost <= 0 || state.xp < cost)) {
     return fail('not_ready');
   }
   const options = generateDraft(state);
   if (!Array.isArray(options) || options.length !== 3 || new Set(options.map(card => card.id)).size !== 3) {
     return fail('no_options');
   }
-  state.xp = normalizeXp(state.xp - cost);
-  const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
-  state.draftLevel = opened + 1;
-  state.nextDraftXp = Math.ceil(draftXpCost(state.draftLevel)*(state.expedition==='watch'?1:0.75));
+  if (freeOpening) {
+    state.openingDraftPending = Math.max(0, Math.floor(state.openingDraftPending) - 1);
+  } else {
+    state.xp = normalizeXp(state.xp - cost);
+    const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
+    state.draftLevel = opened + 1;
+    const pace = state.expedition === 'frenzy' ? 0.55 : state.expedition === 'watch' ? 1 : 0.75;
+    state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
+  }
   state.draftRerollsUsed = 0;
   state.pendingUnit = null;
-  state.draft = {options};
+  state.draft = freeOpening ? {options, openingDrop: true} : {options};
   state.phase = 'draft';
   if (!Array.isArray(state.events)) state.events = [];
-  emit(state, 'draft', {level: state.draftLevel, xp: state.xp, nextDraftXp: state.nextDraftXp});
+  emit(state, 'draft', {level: state.draftLevel, xp: state.xp, nextDraftXp: state.nextDraftXp, openingDrop: freeOpening});
   return ok();
 }
 
@@ -15954,11 +17053,17 @@ const HERO_UPGRADES = deepFreeze({
   volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
   strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
   cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
-  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级多贯穿一名敌人，并忽略 25% 护甲。',{pierce:1}),
-  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds.','爆炸弹溅射并灼烧敌群 2.6 秒。',{splash:30,burn:{dps:4,duration:2.6}}),
-  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take.','减速目标并使其受到更多伤害。',{brittle:{power:0.1,duration:2.6}}),
+  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级穿透 +1 名敌人，并忽略 25% 护甲。',{pierce:1}),
+  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds. Rank 2+ leaves scorch fire.','爆炸弹溅射并灼烧敌群 2.6 秒，2 级起留下灼烧火坑。',{splash:30,burn:{dps:4,duration:2.6}}),
+  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take. Rank 2+ shatters on death.','减速目标并使其易伤，2 级起击杀触发冰霜碎裂。',{brittle:{power:0.1,duration:2.6}}),
   focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80})
+  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80}),
+  split_shot:upgrade('split_shot',3,'Split Shrapnel','子母分裂弹','Gain 3 damage. Hits burst into 2/3/4 piercing shrapnel bolts.','伤害 +3，命中后向四周分裂出 2/3/4 发贯穿子母弹。',{damageAdd:3}),
+  ricochet:upgrade('ricochet',3,'EM Ricochet','电磁穿刺','Gain 2 damage. Shots chain to 2/3/4 foes and call periodic EM sky-strikes.','伤害 +2，子弹电弧弹射 2/3/4 名敌人，并周期降下自动雷击。',{damageAdd:2}),
+  napalm:upgrade('napalm',3,'Napalm Barrage','燃油弹火海','Gain 24 px blast radius and auto-lob Napalm canisters leaving a fire sea.','溅射范围 +24 像素，周期自动空投燃油弹形成大范围持续火海。',{splash:24}),
+  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 fence HP and periodically dispatch an Armored Sweeper truck up the densest lane.','栅栏生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
+  cryo_barrage:upgrade('cryo_barrage',3,'Glacial Barrage','干冰连发柱','Apply brittle (+10%/rank) and periodically launch a sweeping fan of 5/7/9 piercing ice shards.','附加易伤（+10%/级），周期自动齐射 5/7/9 道贯穿干冰柱击退尸潮。',{brittle:{power:0.1,duration:2.6}}),
+  orbital_beam:upgrade('orbital_beam',3,'Orbital Laser','高能射线','Gain +0.25x crit multiplier and periodically fire a vertical piercing laser beam.','暴击倍率 +0.25，周期自动发射纵贯战场的高能激光柱重创整列与首领。',{critMultiplier:0.25})
 });
 __ff_exports["HERO_UPGRADES"] = HERO_UPGRADES;
 
@@ -16029,24 +17134,46 @@ function availableHeroUpgradeIds(unit) {
  */
 function getHeroStats(unit, state) {
   const levels = upgradeLevels(unit);
-  const {strike,cadence,pierce,volley,shrapnel,frostbite,focus} = levels;
+  const {strike, cadence, pierce, volley, shrapnel, frostbite, focus, split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam} = levels;
   const bonus = readBonuses(state);
-  const stats = {...HERO_BASE, mechanics:[],
-    damage:round4((HERO_BASE.damage+5*strike)*(1+bonus.damage)),
-    interval:round4(HERO_BASE.interval/(1+0.14*cadence+bonus.haste)),
-    range:HERO_BASE.range+bonus.range,
-    critChance:round4(HERO_BASE.critChance+0.1*focus+bonus.critChance),
-    critMultiplier:round4(HERO_BASE.critMultiplier+0.3*focus),
-    fence:levels.bastion*80, pierce, armorPen:pierce*0.25, critKnockback:(strike ? 18 : 0)+(state?.systems?.integration?.bonuses?.critKnockback || getProfileBonuses(state?.profileSnapshot).critKnockback || 0), multishot:volley};
+  const rawBonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot) || {};
+  const extraPierce = Math.max(0, Math.floor(finiteOr(rawBonus.heroPierce, 0)));
+  const stats = {
+    ...HERO_BASE,
+    mechanics: [],
+    damage: round4((HERO_BASE.damage + 5 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage)),
+    interval: round4(HERO_BASE.interval / (1 + 0.14 * cadence + bonus.haste)),
+    range: HERO_BASE.range + bonus.range,
+    critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
+    critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
+    fence: levels.bastion * 80 + armored_car * 60,
+    pierce: pierce + extraPierce,
+    armorPen: pierce * 0.25,
+    critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
+    multishot: volley,
+    chain: ricochet ? 1 + ricochet : 0,
+    chainRange: ricochet ? 105 : HERO_BASE.chainRange,
+    split: split_shot ? 1 + split_shot : 0,
+    shrapnelRank: shrapnel,
+    frostbiteRank: frostbite,
+    shredPercent: Math.max(0, finiteOr(rawBonus.shredPercent, 0)),
+    statusDamage: Math.max(0, finiteOr(rawBonus.statusDamage, 0)),
+  };
   if (volley) stats.mechanics.push('multishot');
   if (focus >= 2) stats.mechanics.push('execute');
+  if (split_shot) stats.mechanics.push('split_shot');
+  if (ricochet) stats.mechanics.push('chain');
+  if (shrapnel || napalm) {
+    stats.splash = (shrapnel ? 20 + 10 * shrapnel : 0) + 24 * napalm;
+  }
   if (shrapnel) {
-    stats.splash = 20+10*shrapnel;
-    stats.burn = {dps:4*shrapnel,duration:2.6};
+    stats.burn = {dps: 4 * shrapnel, duration: 2.6};
   }
   if (frostbite) {
-    stats.slow = {factor:round4(0.82-0.06*frostbite),duration:2.2};
-    stats.brittle = {power:round4(0.1*frostbite),duration:2.6};
+    stats.slow = {factor: round4(0.82 - 0.06 * frostbite), duration: 2.2};
+  }
+  if (frostbite || cryo_barrage) {
+    stats.brittle = {power: round4(0.1 * frostbite + 0.1 * cryo_barrage), duration: 2.6};
   }
   return stats;
 }
@@ -16091,6 +17218,10 @@ function applyHeroUpgrade(state, id) {
         unit.maxHp += gain;
         unit.hp += gain;
       }
+    }
+    if (id === 'armored_car' && state.fence) {
+      state.fence.maxHp += 60;
+      state.fence.hp += 60;
     }
   } catch {
     return {ok: false, reason: 'invalid_state'};
@@ -16909,6 +18040,10 @@ function updateMovement(state, dt) {
 __ff_factories["src/systems/progression.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["getProfileBonuses"] = getProfileBonuses;
+__ff_exports["buyGem"] = buyGem;
+__ff_exports["equipGem"] = equipGem;
+__ff_exports["unequipGem"] = unequipGem;
+__ff_exports["claimStarterPack"] = claimStarterPack;
 __ff_exports["buyEquipment"] = buyEquipment;
 __ff_exports["equipItem"] = equipItem;
 __ff_exports["purchasePermanent"] = purchasePermanent;
@@ -17075,6 +18210,91 @@ function assertCatalog() {
 
 assertCatalog();
 
+const GEM_SLOTS = 3;
+__ff_exports["GEM_SLOTS"] = GEM_SLOTS;
+
+const GEM_ORDER = Object.freeze([
+  'gem_opening_drop',
+  'gem_aegis_wall',
+  'gem_pierce_core',
+  'gem_elemental',
+  'gem_shredder',
+  'gem_overdrive',
+]);
+__ff_exports["GEM_ORDER"] = GEM_ORDER;
+
+
+const GEMS = deepFreeze({
+  gem_opening_drop: {
+    id: 'gem_opening_drop',
+    cost: 25,
+    tier: 'epic',
+    name: {en: 'Opening Airdrop Gem', zh: '空投先锋宝石'},
+    description: {
+      en: 'Start every battle with 1 free instant 3-choice airdrop draft to power up right away.',
+      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞跳过前期刮痧。'
+    },
+    bonuses: {openingDraft: 1},
+  },
+  gem_aegis_wall: {
+    id: 'gem_aegis_wall',
+    cost: 40,
+    tier: 'epic',
+    name: {en: 'Aegis Bastion Gem', zh: '城墙免疫宝石'},
+    description: {
+      en: 'Negate the first 5 hits on the wall and knock back attackers with a shock pulse.',
+      zh: '城墙每局前 5 次受击完全免疫，并释放震荡波击退贴墙尸群。'
+    },
+    bonuses: {wallImmunity: 5},
+  },
+  gem_pierce_core: {
+    id: 'gem_pierce_core',
+    cost: 45,
+    tier: 'epic',
+    name: {en: 'Pierce Core Gem', zh: '贯穿核心宝石'},
+    description: {
+      en: 'Hero shots gain +1 pierce and +8% team damage for effortless horde clearing.',
+      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松贯穿整排尸潮。'
+    },
+    bonuses: {heroPierce: 1, damage: 0.08},
+  },
+  gem_elemental: {
+    id: 'gem_elemental',
+    cost: 55,
+    tier: 'legend',
+    name: {en: 'Elemental Surge Gem', zh: '冰火共鸣宝石'},
+    description: {
+      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned enemies.',
+      zh: '攻击处于燃烧、减速、易伤或中毒状态的敌人时，伤害额外 +25%。'
+    },
+    bonuses: {statusDamage: 0.25},
+  },
+  gem_shredder: {
+    id: 'gem_shredder',
+    cost: 65,
+    tier: 'legend',
+    name: {en: 'HP Shredder Gem', zh: '百分比斩杀宝石'},
+    description: {
+      en: 'Critical hits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
+      zh: '暴击附带目标 4% 最大生命额外伤害（对首领单次上限 180），专克重甲与首领。'
+    },
+    bonuses: {shredPercent: 0.04},
+  },
+  gem_overdrive: {
+    id: 'gem_overdrive',
+    cost: 75,
+    tier: 'legend',
+    name: {en: 'Overdrive Arsenal Gem', zh: '超武充能宝石'},
+    description: {
+      en: 'Auto super-weapons cycle 22% faster, start with 1 random evolution, and +25% Sun Gleaner yield.',
+      zh: '全自动超武冷却 -22%，开局额外赠送 1 项随机弹幕/超武进化，辉穗收益 +25%。'
+    },
+    bonuses: {superweaponHaste: 0.22, starterWeapon: 1, harvest: 0.25},
+  },
+});
+__ff_exports["GEMS"] = GEMS;
+
+
 const EQUIPMENT = deepFreeze(equipmentRecord);
 __ff_exports["EQUIPMENT"] = EQUIPMENT;
 
@@ -17098,6 +18318,10 @@ function currencyOf(profile) {
 
 function owns(profile, id) {
   return Array.isArray(profile.equipmentOwned) && profile.equipmentOwned.includes(id);
+}
+
+function ownsGem(profile, id) {
+  return Array.isArray(profile.gemsOwned) && profile.gemsOwned.includes(id);
 }
 
 function addSource(out,bonuses,times) {
@@ -17133,7 +18357,75 @@ function getProfileBonuses(profile) {
       if (level > 0) addSource(bonuses, spec.bonuses, level);
     }
   }
+  const gemsEquipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped : null;
+  if (gemsEquipped && gemsEquipped.length) {
+    const seenGems = new Set();
+    let count = 0;
+    for (const id of gemsEquipped) {
+      if (count >= GEM_SLOTS) break;
+      if (typeof id !== 'string' || seenGems.has(id) || !ownsGem(profile, id)) continue;
+      const gem = GEMS[id];
+      if (!gem) continue;
+      seenGems.add(id);
+      count += 1;
+      addSource(bonuses, gem.bonuses, 1);
+    }
+  }
   return bonuses;
+}
+
+function buyGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  const gem = typeof id === 'string' ? GEMS[id] : null;
+  if (!gem) return fail('unknownItem');
+  if (ownsGem(profile, id)) return fail('alreadyOwned');
+  const currency = currencyOf(profile);
+  if (currency == null) return fail('invalidProfile');
+  if (currency < gem.cost) return fail('insufficientCurrency');
+  profile.currency = currency - gem.cost;
+  profile.gemsOwned = (Array.isArray(profile.gemsOwned) ? profile.gemsOwned : []).concat(id);
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.slice() : [];
+  if (equipped.length < GEM_SLOTS && !equipped.includes(id)) {
+    equipped.push(id);
+    profile.gemsEquipped = equipped;
+  }
+  return {ok: true};
+}
+
+function equipGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  const gem = typeof id === 'string' ? GEMS[id] : null;
+  if (!gem) return fail('unknownItem');
+  if (!ownsGem(profile, id)) return fail('notOwned');
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.filter(g => ownsGem(profile, g) && GEMS[g]) : [];
+  if (equipped.includes(id)) return {ok: true};
+  if (equipped.length >= GEM_SLOTS) equipped.shift();
+  equipped.push(id);
+  profile.gemsEquipped = equipped;
+  return {ok: true};
+}
+
+function unequipGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  if (!Array.isArray(profile.gemsEquipped)) return {ok: true};
+  profile.gemsEquipped = profile.gemsEquipped.filter(g => g !== id);
+  return {ok: true};
+}
+
+function claimStarterPack(profile) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  if (profile.starterClaimed === true) return fail('alreadyOwned');
+  const currency = currencyOf(profile);
+  if (currency == null) return fail('invalidProfile');
+  profile.starterClaimed = true;
+  profile.currency = Math.min(PROGRESSION_RULES.maxCurrency, currency + 180);
+  const owned = Array.isArray(profile.gemsOwned) ? profile.gemsOwned.slice() : [];
+  if (!owned.includes('gem_opening_drop')) owned.push('gem_opening_drop');
+  profile.gemsOwned = owned;
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.slice() : [];
+  if (!equipped.includes('gem_opening_drop') && equipped.length < GEM_SLOTS) equipped.push('gem_opening_drop');
+  profile.gemsEquipped = equipped;
+  return {ok: true, bonus: 180, gem: 'gem_opening_drop'};
 }
 
 function buyEquipment(profile, id) {
@@ -18969,6 +20261,12 @@ const CSS = `
 .ff-build.is-draft [data-meter="burn"] .ff-meter-fill{background:#e86a38}
 .ff-build.is-draft [data-meter="brittle"] .ff-meter-fill{background:#9fd7e8}
 .ff-build.is-draft [data-meter="fence"] .ff-meter-fill{background:#7dce92}
+.ff-build.is-draft [data-meter="split"] .ff-meter-fill{background:#ffb83e}
+.ff-build.is-draft [data-meter="chain"] .ff-meter-fill{background:#7ce6ff}
+.ff-build.is-draft [data-meter="napalm"] .ff-meter-fill{background:#ff5c28}
+.ff-build.is-draft [data-meter="armored_car"] .ff-meter-fill{background:#9ac4d6}
+.ff-build.is-draft [data-meter="cryo_barrage"] .ff-meter-fill{background:#70e2ff}
+.ff-build.is-draft [data-meter="orbital_beam"] .ff-meter-fill{background:#52f0ff}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-row{height:14px}
 .ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-track,.ff-build.is-draft .ff-meter[data-bars="1"] .ff-meter-fill{height:14px}
 .ff-build.is-draft .ff-choice h3{font-size:15.5px;line-height:1.2;color:#f7f4ea}
@@ -20376,6 +21674,13 @@ function unitLead(stats, lang, tr, unit = null) {
 }
 
 function heroEffectLine(record, lang, tr) {
+  const id = record?.id;
+  if (id === 'split_shot') return lang === 'zh' ? '伤害 +3 · 子母分裂' : 'Split +2–4 · Dmg +3';
+  if (id === 'ricochet') return lang === 'zh' ? '伤害 +2 · 电弧+雷击' : 'EM Chain + Sky-Strike';
+  if (id === 'napalm') return lang === 'zh' ? '溅射 +24 · 自动火海' : 'Auto Napalm Fire Sea';
+  if (id === 'armored_car') return lang === 'zh' ? '栅栏 +60 · 自动装甲车' : 'Auto Armored Sweeper';
+  if (id === 'cryo_barrage') return lang === 'zh' ? '易伤 +10% · 自动冰柱' : 'Auto Glacial Barrage';
+  if (id === 'orbital_beam') return lang === 'zh' ? '暴倍 +0.25 · 自动激光' : 'Auto Orbital Laser';
   const effect = record?.effect;
   if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return '';
   if (effect.multishot) return tr('multishot')+' +'+effect.multishot;
@@ -20573,8 +21878,14 @@ const ROLE_CUES = {
 };
 
 const METER_CAPTION = {
-  en: { damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco' },
-  zh: { damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光' },
+  en: {
+    damage: 'Dmg', speed: 'Spd', range: 'Rng', crit: 'Crit', critDamage: 'C×', pierce: 'Pierce', poison: 'Tox', energy: 'Eco',
+    split: 'Split', chain: 'EM', napalm: 'Fire', armored_car: 'Tank', cryo_barrage: 'Ice', orbital_beam: 'Beam',
+  },
+  zh: {
+    damage: '伤', speed: '速', range: '距', crit: '暴', critDamage: '爆', pierce: '穿', poison: '毒', energy: '辉光',
+    split: '分裂', chain: '电磁', napalm: '火海', armored_car: '装甲', cryo_barrage: '冰柱', orbital_beam: '激光',
+  },
 };
 
 function fillPct(part, whole) {
@@ -20611,13 +21922,20 @@ function towerPowerBars(state, option) {
 }
 
 function heroPowerBars(option) {
-  const record = upgradeRecord(resolveUpgradeId(option));
+  const id = resolveUpgradeId(option);
+  const record = upgradeRecord(id);
   const effect = record?.effect || {};
   const cap = Number(record?.cap ?? option?.cap);
   const next = Number(option?.nextLevel);
   const progress = Number.isFinite(cap) && cap > 0 && Number.isFinite(next) ? next / cap : 0.75;
   const strong = Math.max(36, Math.min(100, Math.round(36 + 64 * progress)));
   const dim = 14;
+  if (id === 'split_shot') return [{ key: 'split', fill: strong }];
+  if (id === 'ricochet') return [{ key: 'chain', fill: strong }];
+  if (id === 'napalm') return [{ key: 'napalm', fill: strong }];
+  if (id === 'armored_car') return [{ key: 'armored_car', fill: strong }];
+  if (id === 'cryo_barrage') return [{ key: 'cryo_barrage', fill: strong }];
+  if (id === 'orbital_beam') return [{ key: 'orbital_beam', fill: strong }];
   if (effect.damageAdd) return threeBars(strong, dim, dim);
   if (effect.haste) return threeBars(dim, strong, dim);
   if (effect.range) return threeBars(dim, dim, strong);
@@ -20673,8 +21991,21 @@ function heroMarkLabel(effect, lang) {
   return value===badge?translate(lang,key):value;
 }
 
+const V3_HERO_CUES = {
+  split_shot: { glyph: '❖', color: '#ffb83e', en: 'Split', zh: '分裂' },
+  ricochet: { glyph: '↯', color: '#7ce6ff', en: 'EM', zh: '电磁' },
+  napalm: { glyph: '✹', color: '#ff6430', en: 'Napalm', zh: '火海' },
+  armored_car: { glyph: '▣', color: '#9ac4d6', en: 'Tank', zh: '装甲' },
+  cryo_barrage: { glyph: '❄', color: '#70e2ff', en: 'Glacial', zh: '冰柱' },
+  orbital_beam: { glyph: '┃', color: '#52f0ff', en: 'Laser', zh: '激光' },
+};
+
 function heroStatCue(option, lang) {
   const id = resolveUpgradeId(option);
+  if (V3_HERO_CUES[id]) {
+    const cue = V3_HERO_CUES[id];
+    return { glyph: cue.glyph, color: cue.color, label: lang === 'zh' ? cue.zh : cue.en };
+  }
   const record = upgradeRecord(id);
   const effect = record?.effect || {};
   const label = heroMarkLabel(effect, lang);
@@ -20715,7 +22046,13 @@ function draftPower(state, option, language) {
 function renderDraft(state, lang, tr, idSuffix) {
   const section = el('section', { 'data-testid': 'build-draft', 'data-compact': '1' });
   const titleId = `ff-draft-title-${idSuffix}`;
-  const title = el('h2', { id: titleId, class: 'ff-title', 'data-testid': 'draft-title', text: tr('chooseOneOfThree') });
+  const isOpeningDrop = state.draft?.openingDrop === true;
+  const title = el('h2', {
+    id: titleId,
+    class: 'ff-title',
+    'data-testid': 'draft-title',
+    text: isOpeningDrop ? tr('openingDropTitle') : tr('chooseOneOfThree'),
+  });
   const fee = rerollCost(state);
   const energyNow = Number.isFinite(Number(state.energy)) ? Math.floor(Number(state.energy)) : 0;
   const rerollsUsed = Number(state.draftRerollsUsed) || 0;
@@ -21534,6 +22871,83 @@ const MARKS = {
     L(27, 15, 22, 8, GOLD, 2.2),
     G('34,8 40,6 36,14', POISON),
   ],
+  split_shot: () => [
+    C(14, 22, 4.5, FIRE, GOLD, 1.8),
+    L(18, 22, 34, 22, GOLD, 2.3),
+    G('39,22 32,18.5 32,25.5', GOLD),
+    L(17, 18, 32, 9, CRIT, 2.1),
+    G('36,7 29,7.5 32.5,12.5', CRIT),
+    L(17, 26, 32, 35, CRIT, 2.1),
+    G('36,37 32.5,31.5 29,36.5', CRIT),
+  ],
+  ricochet: () => [
+    P('M7 33 L19 11 L26 25 L37 10', FROST, 2.5),
+    G('39,8 32,9 36,15', CHAIN),
+    C(19, 11, 2.6, CHAIN),
+    C(26, 25, 2.6, CHAIN),
+  ],
+  napalm: () => [
+    R(16, 6, 12, 11, PLATE, GOLD, 2),
+    L(16, 11, 28, 11, FIRE, 2.4),
+    flame(-7, 6, FIRE, 0.56),
+    flame(7, 6, GOLD, 0.52),
+    P('M7 36 Q22 30 37 36', FIRE, 2.4),
+  ],
+  armored_car: () => [
+    R(10, 14, 24, 21, '#32424c', MUTED, 2.5),
+    R(7, 16, 3.5, 16, PLATE, MUTED, 1),
+    R(33.5, 16, 3.5, 16, PLATE, MUTED, 1),
+    R(13, 18, 18, 5, FROST, INK, 1),
+    G('7,13 13,8 31,8 37,13 35,15 9,15', GOLD, INK, 1.1),
+    C(14, 14, 1.5, INK),
+    C(30, 14, 1.5, INK),
+  ],
+  cryo_barrage: () => [
+    G('22,6 25,18 22,36 19,18', FROST, INK, 1.1),
+    G('10,12 16,22 19,35 12,24', FROST),
+    G('34,12 32,24 25,35 28,22', FROST),
+    P('M9 36 Q22 30 35 36', PIERCE, 1.8),
+  ],
+  orbital_beam: () => [
+    R(19, 4, 6, 32, FROST, 'none', 1),
+    L(22, 4, 22, 36, INK, 2),
+    C(22, 34, 8, 'none', FROST, 1.8),
+    L(10, 34, 34, 34, GOLD, 1.8),
+  ],
+  gem_opening_drop: () => [
+    G('22,5 36,14 36,30 22,39 8,30 8,14', '#163544', GOLD, 2),
+    P('M14 20 A8 8 0 0 1 30 20', FROST, 2),
+    L(14, 20, 22, 27, MUTED, 1.5),
+    L(30, 20, 22, 27, MUTED, 1.5),
+    R(18, 27, 8, 6, GOLD, INK, 1),
+  ],
+  gem_aegis_wall: () => [
+    G('22,5 36,16 32,34 22,39 12,34 8,16', '#103444', FROST, 2.2),
+    P('M14 25 V17 H18 V20 H21 V17 H23 V20 H26 V17 H30 V25 Z', INK, 1.5, FROST),
+    L(13, 28, 31, 28, GOLD, 2),
+  ],
+  gem_pierce_core: () => [
+    G('15,7 29,7 37,15 37,29 29,37 15,37 7,29 7,15', '#36161c', CRIT, 2),
+    L(6, 36, 36, 8, PIERCE, 2.6),
+    G('38,6 30,8 35,14', INK),
+    C(22, 22, 3.2, GOLD),
+  ],
+  gem_elemental: () => [
+    G('22,6 36,22 22,38 8,22', PLATE, GOLD, 2),
+    G('22,9 11,22 22,35', FIRE),
+    G('22,9 33,22 22,35', FROST),
+    L(22, 9, 22, 35, INK, 1.4),
+  ],
+  gem_shredder: () => [
+    G('22,5 35,22 22,39 9,22', '#3a1418', FIRE, 2.2),
+    P('M14 14 L30 30 M30 14 L14 30', GOLD, 2.4),
+    C(22, 22, 3, INK),
+  ],
+  gem_overdrive: () => [
+    G('22,5 35,13 35,31 22,39 9,31 9,13', '#16382c', GOLD, 2),
+    C(22, 22, 8.5, 'none', POISON, 2),
+    G('24,12 17,23 22,23 20,32 28,21 23,21', GOLD),
+  ],
   bolt: () => [
     G('22,5 32,18 26,18 26,34 18,34 18,18 12,18', BOLT),
     L(16, 37, 28, 37, BOLT, 2.4),
@@ -21833,6 +23247,9 @@ const defeatAdvice = __ff_m0["defeatAdvice"];
 const armoryNextLine = __ff_m0["armoryNextLine"];
 const EQUIPMENT = __ff_m1["EQUIPMENT"];
 const PERMANENT_UPGRADES = __ff_m1["PERMANENT_UPGRADES"];
+const GEMS = __ff_m1["GEMS"];
+const GEM_ORDER = __ff_m1["GEM_ORDER"];
+const GEM_SLOTS = __ff_m1["GEM_SLOTS"];
 const getProfileBonuses = __ff_m1["getProfileBonuses"];
 const nextArmoryBuy = __ff_m1["nextArmoryBuy"];
 const TOWERS = __ff_m2["TOWERS"];
@@ -21873,9 +23290,9 @@ const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality','economy'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
-const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage']);
+const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage','statusDamage','shredPercent','superweaponHaste']);
 const PIXEL_KEYS = new Set(['range']);
-const FLAT_KEYS = new Set(['fence', 'vitality']);
+const FLAT_KEYS = new Set(['fence', 'vitality', 'openingDraft', 'wallImmunity', 'heroPierce', 'starterWeapon']);
 
 const local = {
   difficulty: null,
@@ -21905,9 +23322,17 @@ const META_CSS = `
 .meta-brand-zh,.meta-gold{color:#f2ce74;font-weight:650}
 .meta-panel .muted{color:#a1b6bc}
 .meta-panel .badge{display:inline-flex;align-items:center;align-self:flex-start;min-height:26px;padding:2px 9px;border-radius:999px;background:rgba(42,68,62,.85);border:1px solid rgba(240,203,114,.32);color:#f3d27d;font-size:.8rem;line-height:1.3}
+.meta-panel .badge-epic{background:rgba(40,46,84,.88);border-color:rgba(156,168,255,.55);color:#d0d8ff}
+.meta-panel .badge-legend{background:rgba(92,48,18,.9);border-color:rgba(255,190,82,.72);color:#ffe294}
 .meta-panel .panel,.meta-panel .card{min-width:0}
 .meta-panel .card{background:linear-gradient(180deg,rgba(24,41,48,.94) 0%,rgba(16,28,34,.96) 100%);border:1px solid rgba(114,154,164,.32);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px;box-shadow:0 8px 22px rgba(0,0,0,.24)}
 .meta-panel .card[data-equipped="true"]{border-color:rgba(240,203,114,.58);box-shadow:0 8px 22px rgba(0,0,0,.26),inset 0 0 0 1px rgba(240,203,114,.22)}
+.meta-panel .meta-starter-card{background:linear-gradient(135deg,rgba(78,54,18,.94) 0%,rgba(28,44,48,.96) 65%,rgba(18,52,66,.94) 100%);border:1px solid rgba(245,204,96,.72);box-shadow:0 10px 26px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,232,148,.18)}
+.meta-panel .meta-starter-card h3{color:#ffe694}
+.meta-panel .meta-gem-sockets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.meta-panel .meta-gem-socket{min-height:46px;padding:8px 10px;border-radius:11px;border:1px dashed rgba(132,174,186,.45);background:rgba(10,20,26,.76);display:flex;flex-direction:column;justify-content:center;gap:2px;font-size:.82rem}
+.meta-panel .meta-gem-socket.is-filled{border-style:solid;border-color:rgba(122,226,255,.68);background:linear-gradient(180deg,rgba(22,56,70,.92) 0%,rgba(14,34,44,.95) 100%);box-shadow:0 0 12px rgba(100,218,255,.2)}
+.meta-panel .meta-gem-socket b{color:#eef8fc;font-size:.86rem}
 .meta-panel .meta-result-card.is-victory{border-color:rgba(130,214,164,.62);border-top:3px solid #7dcea0}
 .meta-panel .meta-result-card.is-defeat{border-color:rgba(229,112,92,.58);border-top:3px solid #e15b4a}
 .meta-panel .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
@@ -21965,7 +23390,7 @@ const META_CSS = `
 .meta-slot{min-height:44px;border:1px solid #597278;background:#1f3440;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
 .meta-slot-hero{background:linear-gradient(180deg,#68522a 0%,#4e3c1e 100%);border-color:#f0cb72;color:#f7dfa0;font-weight:700}
 .meta-mini{font-size:.88rem}
-@media (max-width:340px){.meta-panel .meta-nav,.meta-bonus-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:340px){.meta-panel .meta-nav,.meta-bonus-grid,.meta-panel .meta-gem-sockets{grid-template-columns:minmax(0,1fr)}}
 @media (min-width:400px){.meta-panel .meta-diffs{grid-template-columns:1fr 1fr}}
 @media (min-width:560px){.meta-panel .meta-cards{grid-template-columns:1fr 1fr}}
 @media (min-width:640px){
@@ -22096,6 +23521,8 @@ function renderMenu(ctx, root) {
     }
   }
   body.append(actions);
+  const starterOnMenu = starterPackCard(ctx);
+  if (starterOnMenu) body.append(starterOnMenu);
   body.append(newRunForm(ctx, !live));
   if (run) body.append(runCard(ctx));
   if (api.getUI?.().message==='legacyRunReset') body.append(note(ctx,t(api,'legacyRunReset'),'meta-note'));
@@ -22118,6 +23545,131 @@ function renderMenu(ctx, root) {
   body.append(h(doc, 'p', {className: 'muted meta-mini', text: `${t(api, 'version')} ${CONTRACT_VERSION}`}));
 }
 
+function starterPackCard(ctx) {
+  const {doc, api, lang, profile} = ctx;
+  if (profile.starterClaimed) return null;
+  const card = h(doc, 'section', {className: 'card meta-starter-card', 'data-testid': 'starter-pack-card'});
+  card.append(catalogHead(
+    ctx,
+    'gem_opening_drop',
+    tx(api, lang, 'starterPackTitle', 'Vanguard Starter Supply', '开荒爽玩补给包'),
+    tx(api, lang, 'starterPackDesc',
+      'Claim +180 Currency + free Opening Airdrop Gem (instant 3-choice boost every run) to skip early grind!',
+      '一键领取 180 货币 + 免费装备【空投先锋宝石】（每局开场即享免费三选一），直接跳过前期刮痧！')
+  ));
+  const claimBtn = button(ctx, {
+    action: 'claimStarterPack',
+    testid: 'btn-claim-starter',
+    label: tx(api, lang, 'claimStarterPack', 'Claim Free Supply (+180 & Gem)', '一键领取开荒豪礼（+180币 +空投宝石）'),
+    primary: true
+  });
+  listen(claimBtn, () => noteResult(ctx, act(ctx, 'claimStarterPack'), 'starterClaimed'));
+  card.append(claimBtn);
+  return card;
+}
+
+function renderGemSection(ctx) {
+  const {doc, api, lang, profile} = ctx;
+  const section = h(doc, 'section', {className: 'meta-stack', 'data-testid': 'armory-gems'});
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped : [];
+  section.append(h(doc, 'h3', {
+    text: `${tx(api, lang, 'gems', 'Tactical Core Gems', '战术核心宝石')} (${equipped.length}/${GEM_SLOTS})`
+  }));
+  section.append(h(doc, 'p', {
+    className: 'muted',
+    text: tx(api, lang, 'gemsIntro',
+      'Equip up to 3 core gems for dramatic BangBang-style build powers. Unequip or swap any time.',
+      '最多同时镶嵌 3 颗核心宝石，解锁城墙免疫、开局空投、贯穿、冰火共鸣与百分比斩杀！')
+  }));
+
+  const sockets = h(doc, 'div', {className: 'meta-gem-sockets', 'data-testid': 'gem-sockets'});
+  for (let i = 0; i < GEM_SLOTS; i++) {
+    const gemId = equipped[i] || null;
+    const gem = gemId ? GEMS[gemId] : null;
+    const box = h(doc, 'div', {
+      className: `meta-gem-socket${gem ? ' is-filled' : ''}`,
+      'data-testid': `gem-socket-${i}`
+    });
+    box.append(
+      h(doc, 'span', {className: 'muted', text: `#${i + 1}`}),
+      h(doc, 'b', {text: gem ? entryName(gem, lang, gem.id) : tx(api, lang, 'gemSlotEmpty', 'Empty Socket', '空宝石槽')})
+    );
+    sockets.append(box);
+  }
+  section.append(sockets);
+
+  const grid = h(doc, 'div', {className: 'grid meta-cards'});
+  for (const id of GEM_ORDER) {
+    const gem = GEMS[id];
+    if (!gem) continue;
+    grid.append(gemCard(ctx, gem));
+  }
+  section.append(grid);
+  return section;
+}
+
+function gemCard(ctx, gem) {
+  const {doc, api, lang, profile} = ctx;
+  const owned = Array.isArray(profile.gemsOwned) && profile.gemsOwned.includes(gem.id);
+  const equipped = Array.isArray(profile.gemsEquipped) && profile.gemsEquipped.includes(gem.id);
+  const cost = Number.isFinite(gem.cost) ? gem.cost : 0;
+  const afford = profile.currency >= cost;
+  const card = h(doc, 'article', {className: 'card', 'data-testid': `gem-card-${cssId(gem.id)}`});
+  card.setAttribute('data-owned', owned ? 'true' : 'false');
+  card.setAttribute('data-equipped', equipped ? 'true' : 'false');
+  card.setAttribute('data-cost', String(cost));
+  card.append(catalogHead(ctx, gem.id, entryName(gem, lang, gem.id), entryDesc(gem, lang)));
+
+  const badges = h(doc, 'div', {className: 'meta-badges'});
+  const tierBadge = badge(ctx, gem.tier === 'legend'
+    ? tx(api, lang, 'gemTierLegend', 'Legend', '传说')
+    : tx(api, lang, 'gemTierEpic', 'Epic', '史诗'));
+  tierBadge.className = `badge ${gem.tier === 'legend' ? 'badge-legend' : 'badge-epic'}`;
+  badges.append(tierBadge);
+  if (equipped) badges.append(badge(ctx, t(api, 'equipped')));
+  else if (owned) badges.append(badge(ctx, t(api, 'owned')));
+  card.append(badges);
+
+  for (const [key, value] of bonusEntries(gem.bonuses)) {
+    card.append(line(ctx, profileBonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+  }
+
+  if (!owned) {
+    const buy = button(ctx, {
+      action: 'buyGem',
+      testid: `buy-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      cost,
+      label: `${t(api, 'buy')} · ${num(cost, lang)}`,
+      primary: afford,
+      disabled: !afford
+    });
+    if (afford) listen(buy, () => noteResult(ctx, act(ctx, 'buyGem', {id: gem.id}), null));
+    card.append(buy);
+    if (!afford) card.append(h(doc, 'p', {className: 'muted', text: t(api, 'insufficientCurrency')}));
+  } else if (equipped) {
+    const unequipBtn = button(ctx, {
+      action: 'unequipGem',
+      testid: `unequip-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      label: t(api, 'unequip')
+    });
+    listen(unequipBtn, () => noteResult(ctx, act(ctx, 'unequipGem', {id: gem.id}), null));
+    card.append(unequipBtn);
+  } else {
+    const equipBtn = button(ctx, {
+      action: 'equipGem',
+      testid: `equip-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      label: t(api, 'equip'),
+      primary: true
+    });
+    listen(equipBtn, () => noteResult(ctx, act(ctx, 'equipGem', {id: gem.id}), null));
+    card.append(equipBtn);
+  }
+  return card;
+}
+
 function renderArmory(ctx, root) {
   const {doc, api, lang, profile, rawProfile} = ctx;
   root.append(pageHead(ctx, 'meta-armory', t(api, 'armory')));
@@ -22127,6 +23679,9 @@ function renderArmory(ctx, root) {
   const armoryWallet = line(ctx, t(api, 'currency'), num(profile.currency, lang), 'currency-value');
   armoryWallet.className = `${armoryWallet.className} meta-wallet-line`;
   root.append(armoryWallet);
+
+  const starterOnArmory = starterPackCard(ctx);
+  if (starterOnArmory) root.append(starterOnArmory);
 
   const bonuses = profileBonuses(rawProfile);
   const summary = h(doc, 'section', {className: 'card', 'data-testid': 'profile-bonuses'});
@@ -22148,6 +23703,8 @@ function renderArmory(ctx, root) {
     'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.',
     '奖励加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。')}));
   root.append(summary);
+
+  root.append(renderGemSection(ctx));
 
   root.append(h(doc, 'h3', {text: tx(api, lang, 'equipment', 'Equipment', '装备')}));
   root.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'equipReplaces',
@@ -23319,6 +24876,9 @@ function viewProfile(profile, lang) {
     currency: Number.isFinite(source.currency) ? source.currency : 0,
     equipmentOwned: Array.isArray(source.equipmentOwned) ? source.equipmentOwned.filter(id => typeof id === 'string') : [],
     equipped: {weapon: null, charm: null, armor: null, ...(source.equipped && typeof source.equipped === 'object' ? source.equipped : {})},
+    gemsOwned: Array.isArray(source.gemsOwned) ? source.gemsOwned.filter(id => typeof id === 'string') : [],
+    gemsEquipped: Array.isArray(source.gemsEquipped) ? source.gemsEquipped.filter(id => typeof id === 'string') : [],
+    starterClaimed: source.starterClaimed === true,
     permanent,
     best: source.best && typeof source.best === 'object' ? source.best : {},
     settings: {
@@ -23683,7 +25243,8 @@ function bonusLabel(ctx, key) {
     chain: ['chain', 'Chain', '连锁'],
     chainRange: ['chainRange', 'Chain range', '连锁范围'],
     pierce: ['pierce', 'Pierce', '穿透'],
-    projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速']
+    projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速'],
+    harvest: ['harvestYield', 'Harvest yield', '辉穗收益']
   };
   const entry = labels[key];
   if (!entry) return t(ctx.api,key);
@@ -23817,29 +25378,32 @@ __ff_factories["src/ui/shell.js"] = function(__ff_exports, __ff_load) {
 __ff_exports["mountShell"] = mountShell;
 const __ff_m0 = __ff_load("src/data/field-units.js");
 const __ff_m1 = __ff_load("src/systems/field.js");
-const __ff_m2 = __ff_load("src/shared.js");
-const __ff_m3 = __ff_load("src/systems/merges.js");
-const __ff_m4 = __ff_load("src/systems/waves.js");
-const __ff_m5 = __ff_load("src/data/enemies.js");
-const __ff_m6 = __ff_load("src/data/expeditions.js");
-const __ff_m7 = __ff_load("src/ui/icons.js");
-const __ff_m8 = __ff_load("src/i18n.js");
+const __ff_m2 = __ff_load("src/systems/combat.js");
+const __ff_m3 = __ff_load("src/shared.js");
+const __ff_m4 = __ff_load("src/systems/merges.js");
+const __ff_m5 = __ff_load("src/systems/waves.js");
+const __ff_m6 = __ff_load("src/data/enemies.js");
+const __ff_m7 = __ff_load("src/data/expeditions.js");
+const __ff_m8 = __ff_load("src/ui/icons.js");
+const __ff_m9 = __ff_load("src/i18n.js");
 const FIELD_UNITS = __ff_m0["FIELD_UNITS"];
 const fieldCost = __ff_m1["fieldCost"];
-const ARENA = __ff_m2["ARENA"];
-const DIFFICULTIES = __ff_m2["DIFFICULTIES"];
-const canPlan = __ff_m2["canPlan"];
-const hitFieldSlot = __ff_m2["hitFieldSlot"];
-const hitSlot = __ff_m2["hitSlot"];
-const slotGeometry = __ff_m2["slotGeometry"];
-const previewMerge = __ff_m3["previewMerge"];
-const bossApproaching = __ff_m4["bossApproaching"];
-const getWaveInfo = __ff_m4["getWaveInfo"];
-const ENEMIES = __ff_m5["ENEMIES"];
-const EXPEDITIONS = __ff_m6["EXPEDITIONS"];
-const catalogIcon = __ff_m7["catalogIcon"];
-const formatNumber = __ff_m8["formatNumber"];
-const localize = __ff_m8["localize"];
+const superweaponCooldown = __ff_m2["superweaponCooldown"];
+const ARENA = __ff_m3["ARENA"];
+const DIFFICULTIES = __ff_m3["DIFFICULTIES"];
+const canPlan = __ff_m3["canPlan"];
+const hitFieldSlot = __ff_m3["hitFieldSlot"];
+const hitSlot = __ff_m3["hitSlot"];
+const slotGeometry = __ff_m3["slotGeometry"];
+const previewMerge = __ff_m4["previewMerge"];
+const bossApproaching = __ff_m5["bossApproaching"];
+const getWaveInfo = __ff_m5["getWaveInfo"];
+const ENEMIES = __ff_m6["ENEMIES"];
+const EXPEDITIONS = __ff_m7["EXPEDITIONS"];
+const catalogIcon = __ff_m8["catalogIcon"];
+const formatNumber = __ff_m9["formatNumber"];
+const localize = __ff_m9["localize"];
+
 
 
 
@@ -23852,6 +25416,13 @@ const localize = __ff_m8["localize"];
 
 const SPEEDS = [1, 1.5, 3, 10];
 const SCREEN_NAMES = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
+const ARSENAL_SPECS = Object.freeze([
+  { id: 'napalm', labelKey: 'arsenalNapalm', accent: '#ff6c30' },
+  { id: 'armored_car', labelKey: 'arsenalCar', accent: '#f0cb72' },
+  { id: 'cryo_barrage', labelKey: 'arsenalCryo', accent: '#7ce8ff' },
+  { id: 'orbital_beam', labelKey: 'arsenalBeam', accent: '#54f0ff' },
+  { id: 'ricochet', labelKey: 'arsenalEm', accent: '#ffe14a' },
+]);
 
 /**
  * App shell and live HUD.
@@ -23964,8 +25535,23 @@ function mountShell(root, api) {
   const stats = el('div', { class: 'hud-stats' });
   const energyValue = el('strong', { class: 'hud-chip hud-energy-chip', 'data-testid': 'hud-energy' });
   const surgeValue = el('strong', { class: 'hud-chip hud-surge-chip', 'data-testid': 'hud-surge' });
-  stats.append(energyValue, surgeValue);
+  const aegisValue = el('strong', { class: 'hud-chip hud-aegis-chip', 'data-testid': 'hud-wall-immunity', hidden: true });
+  stats.append(energyValue, surgeValue, aegisValue);
   stats.append(sortie, waveStat, killsStat, timeStat, currencyStat, difficulty, phase);
+
+  const arsenalBar = el('div', { class: 'hud-arsenal', 'data-testid': 'hud-arsenal', hidden: true, 'aria-hidden': 'true' });
+  const arsenalItems = ARSENAL_SPECS.map((spec) => {
+    const label = el('span', { class: 'arsenal-label' });
+    const fill = el('span', { class: 'arsenal-fill' });
+    const pill = el('span', {
+      class: 'arsenal-pill',
+      'data-testid': `hud-arsenal-${spec.id}`,
+      style: `--arsenal-accent:${spec.accent}`,
+      hidden: true,
+    }, [label, el('span', { class: 'arsenal-track' }, [fill])]);
+    arsenalBar.append(pill);
+    return { ...spec, pill, label, fill };
+  });
 
   const pauseButton = controlButton('btn-pause', 'pause');
   const speedButtons = SPEEDS.map((value) => {
@@ -23990,6 +25576,7 @@ function mountShell(root, api) {
   hudMain.append(
     el('div', { class: 'hud-meters' }, [fenceMeter, xpMeter]),
     stats,
+    arsenalBar,
     waveHint,
     message
   );
@@ -24341,7 +25928,32 @@ function mountShell(root, api) {
       const maxCharges = Number.isFinite(state.surge?.maxCharges) ? state.surge.maxCharges : 0;
       setText(surgeValue, text('surge') + ' ' + charges + '/' + maxCharges);
       surgeValue.classList.toggle('is-empty', charges <= 0);
-      surgeValue.classList.toggle('is-active', (state.surge?.shieldTime || 0) > 0);
+      surgeValue.classList.toggle('is-active', (state.surge?.shieldTimer || state.surge?.shieldTime || 0) > 0);
+      const wallImmune = Number.isFinite(state.wallImmunity) ? Math.max(0, Math.floor(state.wallImmunity)) : 0;
+      aegisValue.hidden = wallImmune <= 0;
+      if (wallImmune > 0) setText(aegisValue, `${text('aegisChip')} ×${wallImmune}`);
+
+      const heroUnit = state.slots?.find((s) => s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero'))?.unit;
+      const upg = heroUnit?.upgrades && typeof heroUnit.upgrades === 'object' ? heroUnit.upgrades : {};
+      const timers = state.arsenal?.timers || {};
+      const swHaste = Number(state.systems?.integration?.bonuses?.superweaponHaste) || 0;
+      let anyArsenal = false;
+      for (const item of arsenalItems) {
+        const rank = Math.max(0, Math.floor(Number(upg[item.id]) || 0));
+        if (rank <= 0) {
+          item.pill.hidden = true;
+          continue;
+        }
+        anyArsenal = true;
+        item.pill.hidden = false;
+        const maxCd = superweaponCooldown(item.id, rank, swHaste);
+        const rem = Number.isFinite(timers[item.id]) ? Math.max(0, timers[item.id]) : 0;
+        const pct = maxCd > 0 ? clamp01(1 - rem / maxCd) : 1;
+        setText(item.label, `${text(item.labelKey)} Lv.${rank}`);
+        setWidth(item.fill, pct);
+        item.pill.classList.toggle('is-firing', pct >= 0.9 || rem <= 0.35);
+      }
+      arsenalBar.hidden = !anyArsenal;
       for (const b of fieldButtons) {
         const kind = b.dataset.kind;
         const cd = Math.ceil(state.fieldCooldowns?.[kind] || 0);
@@ -24865,8 +26477,9 @@ function structuralKey(state, profile, ui) {
     ui?.mergeFrom ?? '',
     ui?.mergePreview ? 1 : 0,
     message,
-    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',
+    state?.wave ?? '',Math.floor(state?.energy || 0),state?.surge?.charges ?? '',state?.wallImmunity ?? '',
     ...Object.values(state?.fieldCooldowns || {}).map(Math.ceil),
+    ...ARSENAL_SPECS.map((spec) => Math.floor(finite(state?.arsenal?.timers?.[spec.id], 0) * 2)),
     playerHintKey(state?.director?.playerHint),
     playerHintKey(state?.director?.nextHint),
     state?.draftLevel ?? '',

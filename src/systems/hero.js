@@ -35,11 +35,17 @@ export const HERO_UPGRADES = deepFreeze({
   volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
   strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
   cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
-  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级多贯穿一名敌人，并忽略 25% 护甲。',{pierce:1}),
-  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds.','爆炸弹溅射并灼烧敌群 2.6 秒。',{splash:30,burn:{dps:4,duration:2.6}}),
-  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take.','减速目标并使其受到更多伤害。',{brittle:{power:0.1,duration:2.6}}),
+  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级穿透 +1 名敌人，并忽略 25% 护甲。',{pierce:1}),
+  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds. Rank 2+ leaves scorch fire.','爆炸弹溅射并灼烧敌群 2.6 秒，2 级起留下灼烧火坑。',{splash:30,burn:{dps:4,duration:2.6}}),
+  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take. Rank 2+ shatters on death.','减速目标并使其易伤，2 级起击杀触发冰霜碎裂。',{brittle:{power:0.1,duration:2.6}}),
   focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80})
+  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80}),
+  split_shot:upgrade('split_shot',3,'Split Shrapnel','子母分裂弹','Gain 3 damage. Hits burst into 2/3/4 piercing shrapnel bolts.','伤害 +3，命中后向四周分裂出 2/3/4 发贯穿子母弹。',{damageAdd:3}),
+  ricochet:upgrade('ricochet',3,'EM Ricochet','电磁穿刺','Gain 2 damage. Shots chain to 2/3/4 foes and call periodic EM sky-strikes.','伤害 +2，子弹电弧弹射 2/3/4 名敌人，并周期降下自动雷击。',{damageAdd:2}),
+  napalm:upgrade('napalm',3,'Napalm Barrage','燃油弹火海','Gain 24 px blast radius and auto-lob Napalm canisters leaving a fire sea.','溅射范围 +24 像素，周期自动空投燃油弹形成大范围持续火海。',{splash:24}),
+  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 fence HP and periodically dispatch an Armored Sweeper truck up the densest lane.','栅栏生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
+  cryo_barrage:upgrade('cryo_barrage',3,'Glacial Barrage','干冰连发柱','Apply brittle (+10%/rank) and periodically launch a sweeping fan of 5/7/9 piercing ice shards.','附加易伤（+10%/级），周期自动齐射 5/7/9 道贯穿干冰柱击退尸潮。',{brittle:{power:0.1,duration:2.6}}),
+  orbital_beam:upgrade('orbital_beam',3,'Orbital Laser','高能射线','Gain +0.25x crit multiplier and periodically fire a vertical piercing laser beam.','暴击倍率 +0.25，周期自动发射纵贯战场的高能激光柱重创整列与首领。',{critMultiplier:0.25})
 });
 
 function finiteOr(value, fallback = 0) {
@@ -108,24 +114,46 @@ export function availableHeroUpgradeIds(unit) {
  */
 export function getHeroStats(unit, state) {
   const levels = upgradeLevels(unit);
-  const {strike,cadence,pierce,volley,shrapnel,frostbite,focus} = levels;
+  const {strike, cadence, pierce, volley, shrapnel, frostbite, focus, split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam} = levels;
   const bonus = readBonuses(state);
-  const stats = {...HERO_BASE, mechanics:[],
-    damage:round4((HERO_BASE.damage+5*strike)*(1+bonus.damage)),
-    interval:round4(HERO_BASE.interval/(1+0.14*cadence+bonus.haste)),
-    range:HERO_BASE.range+bonus.range,
-    critChance:round4(HERO_BASE.critChance+0.1*focus+bonus.critChance),
-    critMultiplier:round4(HERO_BASE.critMultiplier+0.3*focus),
-    fence:levels.bastion*80, pierce, armorPen:pierce*0.25, critKnockback:(strike ? 18 : 0)+(state?.systems?.integration?.bonuses?.critKnockback || getProfileBonuses(state?.profileSnapshot).critKnockback || 0), multishot:volley};
+  const rawBonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot) || {};
+  const extraPierce = Math.max(0, Math.floor(finiteOr(rawBonus.heroPierce, 0)));
+  const stats = {
+    ...HERO_BASE,
+    mechanics: [],
+    damage: round4((HERO_BASE.damage + 5 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage)),
+    interval: round4(HERO_BASE.interval / (1 + 0.14 * cadence + bonus.haste)),
+    range: HERO_BASE.range + bonus.range,
+    critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
+    critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
+    fence: levels.bastion * 80 + armored_car * 60,
+    pierce: pierce + extraPierce,
+    armorPen: pierce * 0.25,
+    critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
+    multishot: volley,
+    chain: ricochet ? 1 + ricochet : 0,
+    chainRange: ricochet ? 105 : HERO_BASE.chainRange,
+    split: split_shot ? 1 + split_shot : 0,
+    shrapnelRank: shrapnel,
+    frostbiteRank: frostbite,
+    shredPercent: Math.max(0, finiteOr(rawBonus.shredPercent, 0)),
+    statusDamage: Math.max(0, finiteOr(rawBonus.statusDamage, 0)),
+  };
   if (volley) stats.mechanics.push('multishot');
   if (focus >= 2) stats.mechanics.push('execute');
+  if (split_shot) stats.mechanics.push('split_shot');
+  if (ricochet) stats.mechanics.push('chain');
+  if (shrapnel || napalm) {
+    stats.splash = (shrapnel ? 20 + 10 * shrapnel : 0) + 24 * napalm;
+  }
   if (shrapnel) {
-    stats.splash = 20+10*shrapnel;
-    stats.burn = {dps:4*shrapnel,duration:2.6};
+    stats.burn = {dps: 4 * shrapnel, duration: 2.6};
   }
   if (frostbite) {
-    stats.slow = {factor:round4(0.82-0.06*frostbite),duration:2.2};
-    stats.brittle = {power:round4(0.1*frostbite),duration:2.6};
+    stats.slow = {factor: round4(0.82 - 0.06 * frostbite), duration: 2.2};
+  }
+  if (frostbite || cryo_barrage) {
+    stats.brittle = {power: round4(0.1 * frostbite + 0.1 * cryo_barrage), duration: 2.6};
   }
   return stats;
 }
@@ -170,6 +198,10 @@ export function applyHeroUpgrade(state, id) {
         unit.maxHp += gain;
         unit.hp += gain;
       }
+    }
+    if (id === 'armored_car' && state.fence) {
+      state.fence.maxHp += 60;
+      state.fence.hp += 60;
     }
   } catch {
     return {ok: false, reason: 'invalid_state'};

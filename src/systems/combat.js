@@ -342,6 +342,18 @@ export function killEnemy(state, enemy, sourceId, options = {}) {
       damageEnemy(state,other,damage,{sourceId:mark.sourceId,type:'corpse_explode',towerType:'blight',fromExplode:true});
     }
   }
+  const heroUnit = state.slots?.find(s => s?.unit?.kind === 'hero')?.unit;
+  const frostRank = heroUnit?.upgrades?.frostbite || 0;
+  if (frostRank >= 2 && !options.fromShatter && (enemy.statuses || []).some(s => (s.type === 'slow' || s.type === 'brittle') && s.remaining > 0)) {
+    const radius = 52 + 8 * (frostRank - 2);
+    const dmg = 16 * frostRank;
+    emit(state, 'cryo_shatter', {x: enemy.x, y: enemy.y, radius, damage: dmg});
+    for (const other of state.enemies) {
+      if (!isLiving(other) || other.id === enemy.id || distance(other, enemy) > radius) continue;
+      applyStatus(other, {type: 'slow', power: 0.68, remaining: 1.8, sourceId: heroUnit.id});
+      damageEnemy(state, other, dmg, {sourceId: heroUnit.id, type: 'cryo_shatter', towerType: 'frost', fromShatter: true});
+    }
+  }
   releaseSplit(state, enemy);
   return true;
 }
@@ -509,9 +521,17 @@ function impact(state,projectile,enemy,type) {
     amount *= 1 + effects.poisonDetonate*stacks;
     reaction = 'catalyst';
   }
+  const bonuses = state.systems?.integration?.bonuses;
+  if ((bonuses?.statusDamage || 0) > 0 && active.some(s => s.type === 'burn' || s.type === 'slow' || s.type === 'brittle' || s.type === 'poison')) {
+    amount *= 1 + bonuses.statusDamage;
+  }
+  const isCrit = type !== 'splash' && !!projectile.crit;
+  if (isCrit && (bonuses?.shredPercent || 0) > 0 && Number.isFinite(enemy.maxHp) && enemy.maxHp > 0) {
+    amount += Math.min(enemy.kind === 'boss' ? 180 : 120, enemy.maxHp * bonuses.shredPercent);
+  }
   if (effects?.corpseExplode) enemy.corpseExplode = {...effects.corpseExplode,sourceId,poison:effects.poison};
   damageEnemy(state,enemy,amount,{sourceId,towerType,type,armorPen:effects?.armorPen,reaction,
-    crit:type!=='splash' && !!projectile.crit,execute:executeApplies(projectile,enemy)});
+    crit:isCrit,execute:executeApplies(projectile,enemy)});
   applyPayload(enemy,projectile);
   if (reaction==='steam' && isLiving(enemy)) applyStatus(enemy,{type:'brittle',power:0.2,remaining:2.6,sourceId});
   const push = (effects?.knockback || 0) + (projectile.crit && enemy.kind!=='boss' ? effects?.critKnockback || 0 : 0);
@@ -519,14 +539,17 @@ function impact(state,projectile,enemy,type) {
 }
 
 const MAX_CLOUDS = 24;
+function addCloud(state, cloud) {
+  if (!Array.isArray(state.clouds)) state.clouds = [];
+  if (state.clouds.length >= MAX_CLOUDS) state.clouds.shift();
+  state.clouds.push(cloud);
+  emit(state, 'cloud_spawn', {id: cloud.id, kind: cloud.kind, x: cloud.x, y: cloud.y, radius: cloud.radius, duration: cloud.duration});
+}
 function spawnCloud(state,projectile,enemy) {
   const spec = projectile.effects?.cloud;
   if (!spec) return;
-  const cloud = {...spec,id:uid(state,'c'),kind:projectile.towerType,sourceId:projectile.sourceId,
-    x:enemy.x,y:enemy.y,remaining:spec.duration,tickTimer:0};
-  if (state.clouds.length>=MAX_CLOUDS) state.clouds.shift();
-  state.clouds.push(cloud);
-  emit(state,'cloud_spawn',{id:cloud.id,kind:cloud.kind,x:cloud.x,y:cloud.y,radius:cloud.radius,duration:cloud.duration});
+  addCloud(state, {...spec, id: uid(state, 'c'), kind: projectile.towerType || 'fire', sourceId: projectile.sourceId || 'u1',
+    x: clamp(enemy.x, 12, ARENA.width - 12), y: clamp(enemy.y, 12, ARENA.fenceY - 6), remaining: spec.duration, tickTimer: 0});
 }
 export function updateClouds(state,dt) {
   if (!state.clouds?.length) return;
@@ -555,6 +578,49 @@ function applySplash(state, projectile, primary) {
   }
 }
 
+function spawnSplitShrapnel(state, projectile, point, hitEnemyId) {
+  const count = Math.min(5, Math.floor(finite(projectile.effects?.split, 0)));
+  if (count <= 0 || projectile.isSplitChild) return;
+  const subDmg = Math.max(2, finite(projectile.damage, 0) * 0.58);
+  const spreadStep = count > 1 ? (Math.PI * 0.62) / (count - 1) : 0;
+  const baseAngle = Math.atan2(projectile.diry || -1, projectile.dirx || 0) - (spreadStep * (count - 1)) / 2;
+  for (let i = 0; i < count; i++) {
+    const angle = baseAngle + spreadStep * i;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    state.projectiles.push({
+      id: uid(state, 'p'),
+      sourceId: projectile.sourceId,
+      targetId: null,
+      x: clamp(point.x + dx * 8, -40, ARENA.width + 40),
+      y: clamp(point.y + dy * 8, -40, ARENA.fenceY + 20),
+      speed: 620,
+      damage: subDmg,
+      crit: projectile.crit,
+      critMultiplier: projectile.critMultiplier,
+      critChance: 0,
+      tags: ['hero', 'split', 'pierce'],
+      splash: 0,
+      chain: 0,
+      chainRange: 70,
+      pierce: 1,
+      visited: [hitEnemyId],
+      life: 0.72,
+      dirx: dx,
+      diry: dy,
+      aimx: null,
+      aimy: null,
+      towerType: 'hero',
+      rank: projectile.rank || 1,
+      effects: {armorPen: projectile.effects?.armorPen || 0},
+      mechanics: [],
+      impactType: null,
+      isSplitChild: true
+    });
+  }
+  emit(state, 'bullet_split', {x: point.x, y: point.y, count});
+}
+
 function rollChainCrit(state, projectile) {
   const chance = finite(projectile.critChance, 0);
   if (!(chance > 0)) return;
@@ -578,7 +644,19 @@ function resolveHit(state, projectile, enemy) {
     }
   }
   spawnCloud(state,projectile,point);
+  if (!projectile.isSplitChild && projectile.towerType === 'hero' && (projectile.effects?.shrapnelRank || 0) >= 2 && attack === 'projectile') {
+    const sr = projectile.effects.shrapnelRank;
+    addCloud(state, {
+      id: uid(state, 'c'), kind: 'shrapnel', sourceId: projectile.sourceId || 'u1',
+      x: clamp(point.x, 12, ARENA.width - 12), y: clamp(point.y, 12, ARENA.fenceY - 8),
+      radius: 30 + 6 * sr, duration: 2.0, remaining: 2.0, tick: 0.45, tickTimer: 0,
+      dps: 5 * sr, burn: {dps: 4 * sr, duration: 2.0}
+    });
+  }
   applySplash(state, projectile, point);
+  if (!projectile.isSplitChild && attack === 'projectile' && (projectile.effects?.split || 0) > 0) {
+    spawnSplitShrapnel(state, projectile, point, enemy.id);
+  }
 
   if (Math.floor(finite(projectile.pierce, 0)) > 0) {
     projectile.pierce = Math.max(0, Math.floor(projectile.pierce) - 1);
@@ -726,7 +804,7 @@ function buildEffects(stats) {
   if (stats.stun && Number.isFinite(stats.stun.duration)) {
     effects.stun = {duration: Math.max(0, stats.stun.duration)};
   }
-  for (const key of ['armorPen','knockback','critKnockback','cloud','corpseExplode','thermalShock','poisonDetonate','revealRadius']) {
+  for (const key of ['armorPen','knockback','critKnockback','cloud','corpseExplode','thermalShock','poisonDetonate','revealRadius','split','shrapnelRank','frostbiteRank']) {
     if (stats[key]) effects[key] = stats[key];
   }
   return effects;
@@ -939,6 +1017,15 @@ function biteFence(state, amount, x, sourceId, enemyKind) {
   const fence = state.fence;
   if (!fence || !(fence.hp > 0) || !(amount > 0) || !Number.isFinite(amount)) return 0;
   if (state.surge.shieldTimer>0) return 0;
+  if ((state.wallImmunity || 0) > 0) {
+    state.wallImmunity = Math.max(0, Math.floor(state.wallImmunity) - 1);
+    emitEvent(state, 'wall_immune', {x: Number.isFinite(x) ? x : ARENA.width / 2, y: ARENA.fenceY, remaining: state.wallImmunity});
+    for (const e of state.enemies) {
+      if (!isLiving(e) || e.y < ARENA.fenceY - 120) continue;
+      pushEnemy(state, e, e.kind === 'boss' ? 18 : 64);
+    }
+    return 0;
+  }
   const previous=fence.hp;
   const applied = Math.min(fence.hp, amount);
   const maxHp = Number.isFinite(fence.maxHp) ? fence.maxHp : fence.hp;
@@ -1196,6 +1283,298 @@ function combatStats(unit,state) {
   combatStatsCache.set(unit,{rank:unit.rank,type:unit.type,levels,bonuses,stats});
   return stats;
 }
+const SW_BASE_CD = Object.freeze({
+  napalm: [7.2, 5.8, 4.6],
+  armored_car: [9.4, 7.6, 6.0],
+  cryo_barrage: [7.6, 6.2, 4.9],
+  orbital_beam: [8.2, 6.7, 5.3],
+  ricochet: [7.4, 6.0, 4.8],
+});
+
+export function superweaponCooldown(id, rank, haste = 0) {
+  const table = SW_BASE_CD[id];
+  if (!table) return 8;
+  const idx = clamp(Math.floor(rank || 1) - 1, 0, table.length - 1);
+  return table[idx] / (1 + Math.max(0, finite(haste, 0)));
+}
+
+function ensureArsenal(state) {
+  if (!state.arsenal || typeof state.arsenal !== 'object') {
+    state.arsenal = {
+      timers: {napalm: 1.6, armored_car: 2.4, cryo_barrage: 2.0, orbital_beam: 2.6, ricochet: 2.2},
+      sweepers: [],
+      beams: [],
+    };
+  }
+  if (!state.arsenal.timers || typeof state.arsenal.timers !== 'object') {
+    state.arsenal.timers = {napalm: 1.6, armored_car: 2.4, cryo_barrage: 2.0, orbital_beam: 2.6, ricochet: 2.2};
+  }
+  if (!Array.isArray(state.arsenal.sweepers)) state.arsenal.sweepers = [];
+  if (!Array.isArray(state.arsenal.beams)) state.arsenal.beams = [];
+  return state.arsenal;
+}
+
+function densestEnemy(state, minY = 30) {
+  let best = null;
+  let bestScore = -1;
+  for (const e of state.enemies) {
+    if (!isTargetable(e) || e.y < minY) continue;
+    let score = 1;
+    for (const o of state.enemies) {
+      if (!isTargetable(o) || o.id === e.id) continue;
+      if (distance(e, o) <= 74) score += 1;
+    }
+    score += e.y / 640;
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function densestLaneX(state) {
+  const lanes = [54, 117, 180, 243, 306];
+  let bestX = 180;
+  let bestScore = 0;
+  for (const lx of lanes) {
+    let score = 0;
+    for (const e of state.enemies) {
+      if (!isLiving(e) || e.y < 16) continue;
+      if (Math.abs(e.x - lx) <= 42) score += 1 + (e.y / 520);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = lx;
+    }
+  }
+  return bestScore > 0 ? bestX : null;
+}
+
+function priorityColumnTarget(state) {
+  let best = null;
+  let bestScore = -1;
+  for (const e of state.enemies) {
+    if (!isTargetable(e) || e.y < 24) continue;
+    const score = (e.kind === 'boss' ? 5000 : 0) + (ENEMIES[e.kind]?.priority ? 800 : 0) + finite(e.hp, 0) + e.y * 0.6;
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function updateSuperweapons(state, dt, heroEntry) {
+  const hero = heroEntry?.unit;
+  const upgrades = hero?.upgrades || {};
+  const napalmRank = Math.floor(finite(upgrades.napalm, 0));
+  const carRank = Math.floor(finite(upgrades.armored_car, 0));
+  const cryoRank = Math.floor(finite(upgrades.cryo_barrage, 0));
+  const beamRank = Math.floor(finite(upgrades.orbital_beam, 0));
+  const emRank = Math.floor(finite(upgrades.ricochet, 0));
+  const existingSweepers = state.arsenal?.sweepers?.length || 0;
+  const existingBeams = state.arsenal?.beams?.length || 0;
+  if (!napalmRank && !carRank && !cryoRank && !beamRank && !emRank && !existingSweepers && !existingBeams) return;
+
+  const arsenal = ensureArsenal(state);
+  const haste = finite(state.systems?.integration?.bonuses?.superweaponHaste, 0);
+  const recharge = defenderRecharge(state);
+  const heroDmg = Math.max(12, finite(heroEntry?.stats?.damage, 14));
+  const heroId = hero?.id || 'u1';
+  const heroSlot = heroEntry?.slot || {x: ARENA.width / 2, y: ARENA.frontY};
+
+  // Step active Armored Sweeper trucks rolling up the field
+  const keptSweepers = [];
+  for (const sw of arsenal.sweepers) {
+    sw.y -= sw.speed * dt;
+    if (!Array.isArray(sw.hitIds)) sw.hitIds = [];
+    for (const enemy of state.enemies) {
+      if (!isLiving(enemy) || sw.hitIds.includes(enemy.id)) continue;
+      const rad = finite(enemy.radius, 12);
+      if (Math.abs(enemy.x - sw.x) <= sw.halfWidth + rad && Math.abs(enemy.y - sw.y) <= 24 + rad) {
+        sw.hitIds.push(enemy.id);
+        damageEnemy(state, enemy, sw.damage, {sourceId: heroId, towerType: 'armored_car', type: 'armored_car', crit: true, armorPen: 0.4});
+        if (isLiving(enemy)) {
+          pushEnemy(state, enemy, enemy.kind === 'boss' ? 24 : sw.knockback);
+          if (enemy.kind !== 'boss') applyStatus(enemy, {type: 'stun', power: 1, remaining: 0.75, sourceId: heroId});
+        }
+      }
+    }
+    if (sw.y > -32) keptSweepers.push(sw);
+  }
+  arsenal.sweepers = keptSweepers;
+
+  // Step active Orbital Laser Beam visuals
+  for (const beam of arsenal.beams) beam.life -= dt;
+  arsenal.beams = arsenal.beams.filter(b => b.life > 1e-6);
+
+  // 1. Napalm Airstrike (Fire Sea)
+  if (napalmRank > 0) {
+    arsenal.timers.napalm = finite(arsenal.timers.napalm, 1.6) - dt * recharge;
+    if (arsenal.timers.napalm <= 1e-9) {
+      const target = densestEnemy(state, 40);
+      if (target) {
+        arsenal.timers.napalm = superweaponCooldown('napalm', napalmRank, haste);
+        const cx = clamp(target.x, 26, ARENA.width - 26);
+        const cy = clamp(target.y, 44, ARENA.fenceY - 22);
+        const blastRadius = 58 + 10 * napalmRank;
+        const blastDmg = heroDmg * (2.0 + 0.75 * napalmRank);
+        emitEvent(state, 'napalm_blast', {x: cx, y: cy, radius: blastRadius, damage: blastDmg, rank: napalmRank});
+        for (const e of state.enemies) {
+          if (!isLiving(e) || distance(e, {x: cx, y: cy}) > blastRadius) continue;
+          damageEnemy(state, e, blastDmg, {sourceId: heroId, towerType: 'napalm', type: 'napalm_blast', crit: napalmRank >= 2, armorPen: 0.25});
+          applyStatus(e, {type: 'burn', power: 6 * napalmRank, remaining: 3.4, sourceId: heroId, tickTimer: 0});
+        }
+        addCloud(state, {
+          id: uid(state, 'c'), kind: 'napalm', sourceId: heroId,
+          x: cx, y: cy, radius: 62 + 10 * napalmRank,
+          duration: 4.5, remaining: 4.5, tick: 0.4, tickTimer: 0,
+          dps: heroDmg * (0.55 + 0.22 * napalmRank),
+          burn: {dps: 6 * napalmRank, duration: 2.8}
+        });
+      } else {
+        arsenal.timers.napalm = 0.2;
+      }
+    }
+  }
+
+  // 2. Armored Sweeper Truck
+  if (carRank > 0) {
+    arsenal.timers.armored_car = finite(arsenal.timers.armored_car, 2.4) - dt * recharge;
+    if (arsenal.timers.armored_car <= 1e-9) {
+      const laneX = densestLaneX(state);
+      if (laneX != null) {
+        arsenal.timers.armored_car = superweaponCooldown('armored_car', carRank, haste);
+        const sweeper = {
+          id: uid(state, 'sw'),
+          x: laneX,
+          y: ARENA.fenceY - 6,
+          speed: 255,
+          halfWidth: 34,
+          damage: heroDmg * (2.6 + 1.0 * carRank),
+          knockback: 68 + 10 * carRank,
+          rank: carRank,
+          hitIds: [],
+        };
+        arsenal.sweepers.push(sweeper);
+        emitEvent(state, 'armored_car', {x: laneX, y: ARENA.fenceY - 12, rank: carRank});
+      } else {
+        arsenal.timers.armored_car = 0.25;
+      }
+    }
+  }
+
+  // 3. Glacial Barrage Fan (Cryo Shards)
+  if (cryoRank > 0) {
+    arsenal.timers.cryo_barrage = finite(arsenal.timers.cryo_barrage, 2.0) - dt * recharge;
+    if (arsenal.timers.cryo_barrage <= 1e-9) {
+      const anyFoe = state.enemies.some(e => isTargetable(e) && e.y >= 20);
+      if (anyFoe) {
+        arsenal.timers.cryo_barrage = superweaponCooldown('cryo_barrage', cryoRank, haste);
+        const count = 3 + 2 * cryoRank;
+        const spread = Math.PI * 0.68;
+        const dmg = heroDmg * (1.15 + 0.38 * cryoRank);
+        for (let i = 0; i < count; i++) {
+          const angle = -Math.PI / 2 - spread / 2 + (spread * i) / (count - 1);
+          const dx = Math.cos(angle);
+          const dy = Math.sin(angle);
+          state.projectiles.push({
+            id: uid(state, 'p'),
+            sourceId: heroId,
+            targetId: null,
+            x: heroSlot.x + dx * 12,
+            y: ARENA.fenceY - 8,
+            speed: 480,
+            damage: dmg,
+            crit: false,
+            critMultiplier: 1,
+            critChance: 0,
+            tags: ['frost', 'cryo_barrage', 'pierce'],
+            splash: 0,
+            chain: 0,
+            chainRange: 70,
+            pierce: 4 + cryoRank,
+            visited: [],
+            life: 1.4,
+            dirx: dx,
+            diry: dy,
+            aimx: null,
+            aimy: null,
+            towerType: 'frost',
+            rank: cryoRank,
+            effects: {
+              slow: {factor: 0.46, duration: 2.8},
+              brittle: {power: 0.14 * cryoRank, duration: 3.0},
+              knockback: 22,
+              armorPen: 0.25,
+            },
+            mechanics: [],
+            impactType: null,
+            isSplitChild: true,
+          });
+        }
+        emitEvent(state, 'cryo_barrage', {x: heroSlot.x, y: ARENA.fenceY - 12, count, rank: cryoRank});
+      } else {
+        arsenal.timers.cryo_barrage = 0.2;
+      }
+    }
+  }
+
+  // 4. Orbital Laser Beam
+  if (beamRank > 0) {
+    arsenal.timers.orbital_beam = finite(arsenal.timers.orbital_beam, 2.6) - dt * recharge;
+    if (arsenal.timers.orbital_beam <= 1e-9) {
+      const target = priorityColumnTarget(state);
+      if (target) {
+        arsenal.timers.orbital_beam = superweaponCooldown('orbital_beam', beamRank, haste);
+        const bx = clamp(target.x, 22, ARENA.width - 22);
+        const width = 30 + 8 * beamRank;
+        const dmg = heroDmg * (2.5 + 0.95 * beamRank) * (1 + 0.25 * beamRank);
+        arsenal.beams.push({id: uid(state, 'bm'), x: bx, width, life: 0.65, maxLife: 0.65, rank: beamRank});
+        emitEvent(state, 'orbital_beam', {x: bx, y: target.y, width, damage: dmg, rank: beamRank});
+        for (const e of state.enemies) {
+          if (!isTargetable(e) || e.y < -12) continue;
+          if (Math.abs(e.x - bx) <= width / 2 + finite(e.radius, 12)) {
+            damageEnemy(state, e, dmg, {sourceId: heroId, towerType: 'orbital_beam', type: 'orbital_beam', crit: true, armorPen: 0.65});
+            applyStatus(e, {type: 'burn', power: 5 * beamRank, remaining: 2.2, sourceId: heroId, tickTimer: 0});
+          }
+        }
+      } else {
+        arsenal.timers.orbital_beam = 0.2;
+      }
+    }
+  }
+
+  // 5. EM Sky-Strike (from EM Ricochet)
+  if (emRank > 0) {
+    arsenal.timers.ricochet = finite(arsenal.timers.ricochet, 2.2) - dt * recharge;
+    if (arsenal.timers.ricochet <= 1e-9) {
+      const first = selectTarget(state, {x: ARENA.width / 2, y: ARENA.fenceY}, 520, 'priority');
+      if (first) {
+        arsenal.timers.ricochet = superweaponCooldown('ricochet', emRank, haste);
+        const maxTargets = 3 + emRank;
+        const dmg = heroDmg * (1.45 + 0.45 * emRank);
+        const hitIds = [];
+        const points = [];
+        let curr = first;
+        for (let step = 0; step < maxTargets && curr; step++) {
+          hitIds.push(curr.id);
+          points.push({x: curr.x, y: curr.y});
+          damageEnemy(state, curr, dmg, {sourceId: heroId, towerType: 'lightning', type: 'em_strike', crit: step === 0, armorPen: 0.35});
+          if (isLiving(curr) && curr.kind !== 'boss') {
+            applyStatus(curr, {type: 'stun', power: 1, remaining: 0.55, sourceId: heroId});
+          }
+          curr = nearestEnemy(state, curr, 130, hitIds);
+        }
+        emitEvent(state, 'em_strike', {x: points[0].x, y: points[0].y, points, rank: emRank});
+      } else {
+        arsenal.timers.ricochet = 0.2;
+      }
+    }
+  }
+}
+
 export function updateCombat(state, dt) {
   if (simulationFrozen(state)) return state;
   if (!Number.isFinite(dt) || dt <= 0) return state;
@@ -1211,16 +1590,20 @@ export function updateCombat(state, dt) {
   updateWards(state);
 
   const roster = [];
+  let heroEntry = null;
   for (const slot of state.slots) {
     if (!slot?.unit || slot.unit.type==='harvest') continue;
     const stats = combatStats(slot.unit,state);
     if (!stats || typeof stats !== 'object') continue;
-    roster.push({slot, unit: slot.unit, stats});
+    const entry = {slot, unit: slot.unit, stats};
+    roster.push(entry);
+    if (slot.unit.kind === 'hero' || slot.unit.type === 'hero') heroEntry = entry;
   }
   const aura = computeAura(roster);
   updateDefenders(state, dt, roster, aura);
   updateProjectiles(state, dt);
   updateClouds(state, dt);
+  updateSuperweapons(state, dt, heroEntry);
   updateMenders(state, dt);
   updateFenceAttacks(state, dt);
   updateCharges(state, dt);

@@ -154,6 +154,85 @@ function assertCatalog() {
 
 assertCatalog();
 
+export const GEM_SLOTS = 3;
+export const GEM_ORDER = Object.freeze([
+  'gem_opening_drop',
+  'gem_aegis_wall',
+  'gem_pierce_core',
+  'gem_elemental',
+  'gem_shredder',
+  'gem_overdrive',
+]);
+
+export const GEMS = deepFreeze({
+  gem_opening_drop: {
+    id: 'gem_opening_drop',
+    cost: 25,
+    tier: 'epic',
+    name: {en: 'Opening Airdrop Gem', zh: '空投先锋宝石'},
+    description: {
+      en: 'Start every battle with 1 free instant 3-choice airdrop draft to power up right away.',
+      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞跳过前期刮痧。'
+    },
+    bonuses: {openingDraft: 1},
+  },
+  gem_aegis_wall: {
+    id: 'gem_aegis_wall',
+    cost: 40,
+    tier: 'epic',
+    name: {en: 'Aegis Bastion Gem', zh: '城墙免疫宝石'},
+    description: {
+      en: 'Negate the first 5 hits on the wall and knock back attackers with a shock pulse.',
+      zh: '城墙每局前 5 次受击完全免疫，并释放震荡波击退贴墙尸群。'
+    },
+    bonuses: {wallImmunity: 5},
+  },
+  gem_pierce_core: {
+    id: 'gem_pierce_core',
+    cost: 45,
+    tier: 'epic',
+    name: {en: 'Pierce Core Gem', zh: '贯穿核心宝石'},
+    description: {
+      en: 'Hero shots gain +1 pierce and +8% team damage for effortless horde clearing.',
+      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松贯穿整排尸潮。'
+    },
+    bonuses: {heroPierce: 1, damage: 0.08},
+  },
+  gem_elemental: {
+    id: 'gem_elemental',
+    cost: 55,
+    tier: 'legend',
+    name: {en: 'Elemental Surge Gem', zh: '冰火共鸣宝石'},
+    description: {
+      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned enemies.',
+      zh: '攻击处于燃烧、减速、易伤或中毒状态的敌人时，伤害额外 +25%。'
+    },
+    bonuses: {statusDamage: 0.25},
+  },
+  gem_shredder: {
+    id: 'gem_shredder',
+    cost: 65,
+    tier: 'legend',
+    name: {en: 'HP Shredder Gem', zh: '百分比斩杀宝石'},
+    description: {
+      en: 'Critical hits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
+      zh: '暴击附带目标 4% 最大生命额外伤害（对首领单次上限 180），专克重甲与首领。'
+    },
+    bonuses: {shredPercent: 0.04},
+  },
+  gem_overdrive: {
+    id: 'gem_overdrive',
+    cost: 75,
+    tier: 'legend',
+    name: {en: 'Overdrive Arsenal Gem', zh: '超武充能宝石'},
+    description: {
+      en: 'Auto super-weapons cycle 22% faster, start with 1 random evolution, and +25% Sun Gleaner yield.',
+      zh: '全自动超武冷却 -22%，开局额外赠送 1 项随机弹幕/超武进化，辉穗收益 +25%。'
+    },
+    bonuses: {superweaponHaste: 0.22, starterWeapon: 1, harvest: 0.25},
+  },
+});
+
 export const EQUIPMENT = deepFreeze(equipmentRecord);
 export const PERMANENT_UPGRADES = deepFreeze(permanentRecord);
 
@@ -173,6 +252,10 @@ function currencyOf(profile) {
 
 function owns(profile, id) {
   return Array.isArray(profile.equipmentOwned) && profile.equipmentOwned.includes(id);
+}
+
+function ownsGem(profile, id) {
+  return Array.isArray(profile.gemsOwned) && profile.gemsOwned.includes(id);
 }
 
 function addSource(out,bonuses,times) {
@@ -208,7 +291,75 @@ export function getProfileBonuses(profile) {
       if (level > 0) addSource(bonuses, spec.bonuses, level);
     }
   }
+  const gemsEquipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped : null;
+  if (gemsEquipped && gemsEquipped.length) {
+    const seenGems = new Set();
+    let count = 0;
+    for (const id of gemsEquipped) {
+      if (count >= GEM_SLOTS) break;
+      if (typeof id !== 'string' || seenGems.has(id) || !ownsGem(profile, id)) continue;
+      const gem = GEMS[id];
+      if (!gem) continue;
+      seenGems.add(id);
+      count += 1;
+      addSource(bonuses, gem.bonuses, 1);
+    }
+  }
   return bonuses;
+}
+
+export function buyGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  const gem = typeof id === 'string' ? GEMS[id] : null;
+  if (!gem) return fail('unknownItem');
+  if (ownsGem(profile, id)) return fail('alreadyOwned');
+  const currency = currencyOf(profile);
+  if (currency == null) return fail('invalidProfile');
+  if (currency < gem.cost) return fail('insufficientCurrency');
+  profile.currency = currency - gem.cost;
+  profile.gemsOwned = (Array.isArray(profile.gemsOwned) ? profile.gemsOwned : []).concat(id);
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.slice() : [];
+  if (equipped.length < GEM_SLOTS && !equipped.includes(id)) {
+    equipped.push(id);
+    profile.gemsEquipped = equipped;
+  }
+  return {ok: true};
+}
+
+export function equipGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  const gem = typeof id === 'string' ? GEMS[id] : null;
+  if (!gem) return fail('unknownItem');
+  if (!ownsGem(profile, id)) return fail('notOwned');
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.filter(g => ownsGem(profile, g) && GEMS[g]) : [];
+  if (equipped.includes(id)) return {ok: true};
+  if (equipped.length >= GEM_SLOTS) equipped.shift();
+  equipped.push(id);
+  profile.gemsEquipped = equipped;
+  return {ok: true};
+}
+
+export function unequipGem(profile, id) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  if (!Array.isArray(profile.gemsEquipped)) return {ok: true};
+  profile.gemsEquipped = profile.gemsEquipped.filter(g => g !== id);
+  return {ok: true};
+}
+
+export function claimStarterPack(profile) {
+  if (!isProfile(profile)) return fail('invalidProfile');
+  if (profile.starterClaimed === true) return fail('alreadyOwned');
+  const currency = currencyOf(profile);
+  if (currency == null) return fail('invalidProfile');
+  profile.starterClaimed = true;
+  profile.currency = Math.min(PROGRESSION_RULES.maxCurrency, currency + 180);
+  const owned = Array.isArray(profile.gemsOwned) ? profile.gemsOwned.slice() : [];
+  if (!owned.includes('gem_opening_drop')) owned.push('gem_opening_drop');
+  profile.gemsOwned = owned;
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped.slice() : [];
+  if (!equipped.includes('gem_opening_drop') && equipped.length < GEM_SLOTS) equipped.push('gem_opening_drop');
+  profile.gemsEquipped = equipped;
+  return {ok: true, bonus: 180, gem: 'gem_opening_drop'};
 }
 
 export function buyEquipment(profile, id) {

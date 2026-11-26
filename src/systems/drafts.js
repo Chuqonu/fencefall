@@ -111,24 +111,30 @@ export function updateDrafts(state) {
   }
   if (state.settlement || defeatPending(state) || victoryPending(state)) return fail('not_playing');
   if (state.draft || state.pendingUnit) return fail('busy');
+  const freeOpening = (state.openingDraftPending || 0) > 0 && state.time >= 0.35;
   const cost = state.nextDraftXp;
-  if (!Number.isFinite(state.xp) || !Number.isFinite(cost) || cost <= 0 || state.xp < cost) {
+  if (!freeOpening && (!Number.isFinite(state.xp) || !Number.isFinite(cost) || cost <= 0 || state.xp < cost)) {
     return fail('not_ready');
   }
   const options = generateDraft(state);
   if (!Array.isArray(options) || options.length !== 3 || new Set(options.map(card => card.id)).size !== 3) {
     return fail('no_options');
   }
-  state.xp = normalizeXp(state.xp - cost);
-  const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
-  state.draftLevel = opened + 1;
-  state.nextDraftXp = Math.ceil(draftXpCost(state.draftLevel)*(state.expedition==='watch'?1:0.75));
+  if (freeOpening) {
+    state.openingDraftPending = Math.max(0, Math.floor(state.openingDraftPending) - 1);
+  } else {
+    state.xp = normalizeXp(state.xp - cost);
+    const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
+    state.draftLevel = opened + 1;
+    const pace = state.expedition === 'frenzy' ? 0.55 : state.expedition === 'watch' ? 1 : 0.75;
+    state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
+  }
   state.draftRerollsUsed = 0;
   state.pendingUnit = null;
-  state.draft = {options};
+  state.draft = freeOpening ? {options, openingDrop: true} : {options};
   state.phase = 'draft';
   if (!Array.isArray(state.events)) state.events = [];
-  emit(state, 'draft', {level: state.draftLevel, xp: state.xp, nextDraftXp: state.nextDraftXp});
+  emit(state, 'draft', {level: state.draftLevel, xp: state.xp, nextDraftXp: state.nextDraftXp, openingDrop: freeOpening});
   return ok();
 }
 

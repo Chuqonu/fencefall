@@ -8,7 +8,7 @@
  * damage, haste, critChance, and reward; range and fence are flat amounts.
  */
 import {t as translate,localize, formatNumber, resultLabel, resultStory, defeatAdvice, armoryNextLine} from '../i18n.js';
-import {EQUIPMENT, PERMANENT_UPGRADES, getProfileBonuses, nextArmoryBuy} from '../systems/progression.js';
+import {EQUIPMENT, PERMANENT_UPGRADES, GEMS, GEM_ORDER, GEM_SLOTS, getProfileBonuses, nextArmoryBuy} from '../systems/progression.js';
 import {TOWERS} from '../data/towers.js';
 import {RECIPES} from '../data/recipes.js';
 import {HERO_UPGRADES} from '../systems/hero.js';
@@ -24,9 +24,9 @@ const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 const ENEMY_ORDER = ['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality','economy'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
-const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage']);
+const FRACTION_KEYS = new Set(['damage', 'haste', 'critChance', 'crit', 'reward','fieldHp','fieldDiscount','rerollDiscount','surgePower','harvest','hybridDamage','statusDamage','shredPercent','superweaponHaste']);
 const PIXEL_KEYS = new Set(['range']);
-const FLAT_KEYS = new Set(['fence', 'vitality']);
+const FLAT_KEYS = new Set(['fence', 'vitality', 'openingDraft', 'wallImmunity', 'heroPierce', 'starterWeapon']);
 
 const local = {
   difficulty: null,
@@ -56,9 +56,17 @@ const META_CSS = `
 .meta-brand-zh,.meta-gold{color:#f2ce74;font-weight:650}
 .meta-panel .muted{color:#a1b6bc}
 .meta-panel .badge{display:inline-flex;align-items:center;align-self:flex-start;min-height:26px;padding:2px 9px;border-radius:999px;background:rgba(42,68,62,.85);border:1px solid rgba(240,203,114,.32);color:#f3d27d;font-size:.8rem;line-height:1.3}
+.meta-panel .badge-epic{background:rgba(40,46,84,.88);border-color:rgba(156,168,255,.55);color:#d0d8ff}
+.meta-panel .badge-legend{background:rgba(92,48,18,.9);border-color:rgba(255,190,82,.72);color:#ffe294}
 .meta-panel .panel,.meta-panel .card{min-width:0}
 .meta-panel .card{background:linear-gradient(180deg,rgba(24,41,48,.94) 0%,rgba(16,28,34,.96) 100%);border:1px solid rgba(114,154,164,.32);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px;box-shadow:0 8px 22px rgba(0,0,0,.24)}
 .meta-panel .card[data-equipped="true"]{border-color:rgba(240,203,114,.58);box-shadow:0 8px 22px rgba(0,0,0,.26),inset 0 0 0 1px rgba(240,203,114,.22)}
+.meta-panel .meta-starter-card{background:linear-gradient(135deg,rgba(78,54,18,.94) 0%,rgba(28,44,48,.96) 65%,rgba(18,52,66,.94) 100%);border:1px solid rgba(245,204,96,.72);box-shadow:0 10px 26px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,232,148,.18)}
+.meta-panel .meta-starter-card h3{color:#ffe694}
+.meta-panel .meta-gem-sockets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.meta-panel .meta-gem-socket{min-height:46px;padding:8px 10px;border-radius:11px;border:1px dashed rgba(132,174,186,.45);background:rgba(10,20,26,.76);display:flex;flex-direction:column;justify-content:center;gap:2px;font-size:.82rem}
+.meta-panel .meta-gem-socket.is-filled{border-style:solid;border-color:rgba(122,226,255,.68);background:linear-gradient(180deg,rgba(22,56,70,.92) 0%,rgba(14,34,44,.95) 100%);box-shadow:0 0 12px rgba(100,218,255,.2)}
+.meta-panel .meta-gem-socket b{color:#eef8fc;font-size:.86rem}
 .meta-panel .meta-result-card.is-victory{border-color:rgba(130,214,164,.62);border-top:3px solid #7dcea0}
 .meta-panel .meta-result-card.is-defeat{border-color:rgba(229,112,92,.58);border-top:3px solid #e15b4a}
 .meta-panel .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
@@ -116,7 +124,7 @@ const META_CSS = `
 .meta-slot{min-height:44px;border:1px solid #597278;background:#1f3440;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
 .meta-slot-hero{background:linear-gradient(180deg,#68522a 0%,#4e3c1e 100%);border-color:#f0cb72;color:#f7dfa0;font-weight:700}
 .meta-mini{font-size:.88rem}
-@media (max-width:340px){.meta-panel .meta-nav,.meta-bonus-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:340px){.meta-panel .meta-nav,.meta-bonus-grid,.meta-panel .meta-gem-sockets{grid-template-columns:minmax(0,1fr)}}
 @media (min-width:400px){.meta-panel .meta-diffs{grid-template-columns:1fr 1fr}}
 @media (min-width:560px){.meta-panel .meta-cards{grid-template-columns:1fr 1fr}}
 @media (min-width:640px){
@@ -247,6 +255,8 @@ function renderMenu(ctx, root) {
     }
   }
   body.append(actions);
+  const starterOnMenu = starterPackCard(ctx);
+  if (starterOnMenu) body.append(starterOnMenu);
   body.append(newRunForm(ctx, !live));
   if (run) body.append(runCard(ctx));
   if (api.getUI?.().message==='legacyRunReset') body.append(note(ctx,t(api,'legacyRunReset'),'meta-note'));
@@ -269,6 +279,131 @@ function renderMenu(ctx, root) {
   body.append(h(doc, 'p', {className: 'muted meta-mini', text: `${t(api, 'version')} ${CONTRACT_VERSION}`}));
 }
 
+function starterPackCard(ctx) {
+  const {doc, api, lang, profile} = ctx;
+  if (profile.starterClaimed) return null;
+  const card = h(doc, 'section', {className: 'card meta-starter-card', 'data-testid': 'starter-pack-card'});
+  card.append(catalogHead(
+    ctx,
+    'gem_opening_drop',
+    tx(api, lang, 'starterPackTitle', 'Vanguard Starter Supply', '开荒爽玩补给包'),
+    tx(api, lang, 'starterPackDesc',
+      'Claim +180 Currency + free Opening Airdrop Gem (instant 3-choice boost every run) to skip early grind!',
+      '一键领取 180 货币 + 免费装备【空投先锋宝石】（每局开场即享免费三选一），直接跳过前期刮痧！')
+  ));
+  const claimBtn = button(ctx, {
+    action: 'claimStarterPack',
+    testid: 'btn-claim-starter',
+    label: tx(api, lang, 'claimStarterPack', 'Claim Free Supply (+180 & Gem)', '一键领取开荒豪礼（+180币 +空投宝石）'),
+    primary: true
+  });
+  listen(claimBtn, () => noteResult(ctx, act(ctx, 'claimStarterPack'), 'starterClaimed'));
+  card.append(claimBtn);
+  return card;
+}
+
+function renderGemSection(ctx) {
+  const {doc, api, lang, profile} = ctx;
+  const section = h(doc, 'section', {className: 'meta-stack', 'data-testid': 'armory-gems'});
+  const equipped = Array.isArray(profile.gemsEquipped) ? profile.gemsEquipped : [];
+  section.append(h(doc, 'h3', {
+    text: `${tx(api, lang, 'gems', 'Tactical Core Gems', '战术核心宝石')} (${equipped.length}/${GEM_SLOTS})`
+  }));
+  section.append(h(doc, 'p', {
+    className: 'muted',
+    text: tx(api, lang, 'gemsIntro',
+      'Equip up to 3 core gems for dramatic BangBang-style build powers. Unequip or swap any time.',
+      '最多同时镶嵌 3 颗核心宝石，解锁城墙免疫、开局空投、贯穿、冰火共鸣与百分比斩杀！')
+  }));
+
+  const sockets = h(doc, 'div', {className: 'meta-gem-sockets', 'data-testid': 'gem-sockets'});
+  for (let i = 0; i < GEM_SLOTS; i++) {
+    const gemId = equipped[i] || null;
+    const gem = gemId ? GEMS[gemId] : null;
+    const box = h(doc, 'div', {
+      className: `meta-gem-socket${gem ? ' is-filled' : ''}`,
+      'data-testid': `gem-socket-${i}`
+    });
+    box.append(
+      h(doc, 'span', {className: 'muted', text: `#${i + 1}`}),
+      h(doc, 'b', {text: gem ? entryName(gem, lang, gem.id) : tx(api, lang, 'gemSlotEmpty', 'Empty Socket', '空宝石槽')})
+    );
+    sockets.append(box);
+  }
+  section.append(sockets);
+
+  const grid = h(doc, 'div', {className: 'grid meta-cards'});
+  for (const id of GEM_ORDER) {
+    const gem = GEMS[id];
+    if (!gem) continue;
+    grid.append(gemCard(ctx, gem));
+  }
+  section.append(grid);
+  return section;
+}
+
+function gemCard(ctx, gem) {
+  const {doc, api, lang, profile} = ctx;
+  const owned = Array.isArray(profile.gemsOwned) && profile.gemsOwned.includes(gem.id);
+  const equipped = Array.isArray(profile.gemsEquipped) && profile.gemsEquipped.includes(gem.id);
+  const cost = Number.isFinite(gem.cost) ? gem.cost : 0;
+  const afford = profile.currency >= cost;
+  const card = h(doc, 'article', {className: 'card', 'data-testid': `gem-card-${cssId(gem.id)}`});
+  card.setAttribute('data-owned', owned ? 'true' : 'false');
+  card.setAttribute('data-equipped', equipped ? 'true' : 'false');
+  card.setAttribute('data-cost', String(cost));
+  card.append(catalogHead(ctx, gem.id, entryName(gem, lang, gem.id), entryDesc(gem, lang)));
+
+  const badges = h(doc, 'div', {className: 'meta-badges'});
+  const tierBadge = badge(ctx, gem.tier === 'legend'
+    ? tx(api, lang, 'gemTierLegend', 'Legend', '传说')
+    : tx(api, lang, 'gemTierEpic', 'Epic', '史诗'));
+  tierBadge.className = `badge ${gem.tier === 'legend' ? 'badge-legend' : 'badge-epic'}`;
+  badges.append(tierBadge);
+  if (equipped) badges.append(badge(ctx, t(api, 'equipped')));
+  else if (owned) badges.append(badge(ctx, t(api, 'owned')));
+  card.append(badges);
+
+  for (const [key, value] of bonusEntries(gem.bonuses)) {
+    card.append(line(ctx, profileBonusLabel(ctx, key), formatBonusValue(key, value, lang)));
+  }
+
+  if (!owned) {
+    const buy = button(ctx, {
+      action: 'buyGem',
+      testid: `buy-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      cost,
+      label: `${t(api, 'buy')} · ${num(cost, lang)}`,
+      primary: afford,
+      disabled: !afford
+    });
+    if (afford) listen(buy, () => noteResult(ctx, act(ctx, 'buyGem', {id: gem.id}), null));
+    card.append(buy);
+    if (!afford) card.append(h(doc, 'p', {className: 'muted', text: t(api, 'insufficientCurrency')}));
+  } else if (equipped) {
+    const unequipBtn = button(ctx, {
+      action: 'unequipGem',
+      testid: `unequip-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      label: t(api, 'unequip')
+    });
+    listen(unequipBtn, () => noteResult(ctx, act(ctx, 'unequipGem', {id: gem.id}), null));
+    card.append(unequipBtn);
+  } else {
+    const equipBtn = button(ctx, {
+      action: 'equipGem',
+      testid: `equip-gem-${cssId(gem.id)}`,
+      id: gem.id,
+      label: t(api, 'equip'),
+      primary: true
+    });
+    listen(equipBtn, () => noteResult(ctx, act(ctx, 'equipGem', {id: gem.id}), null));
+    card.append(equipBtn);
+  }
+  return card;
+}
+
 function renderArmory(ctx, root) {
   const {doc, api, lang, profile, rawProfile} = ctx;
   root.append(pageHead(ctx, 'meta-armory', t(api, 'armory')));
@@ -278,6 +413,9 @@ function renderArmory(ctx, root) {
   const armoryWallet = line(ctx, t(api, 'currency'), num(profile.currency, lang), 'currency-value');
   armoryWallet.className = `${armoryWallet.className} meta-wallet-line`;
   root.append(armoryWallet);
+
+  const starterOnArmory = starterPackCard(ctx);
+  if (starterOnArmory) root.append(starterOnArmory);
 
   const bonuses = profileBonuses(rawProfile);
   const summary = h(doc, 'section', {className: 'card', 'data-testid': 'profile-bonuses'});
@@ -299,6 +437,8 @@ function renderArmory(ctx, root) {
     'The reward bonus is applied when a run is settled, along with the difficulty multiplier. Results show the currency actually awarded.',
     '奖励加成在对局结算时与难度倍率一起结算。结算画面显示实际获得的货币。')}));
   root.append(summary);
+
+  root.append(renderGemSection(ctx));
 
   root.append(h(doc, 'h3', {text: tx(api, lang, 'equipment', 'Equipment', '装备')}));
   root.append(h(doc, 'p', {className: 'muted', text: tx(api, lang, 'equipReplaces',
@@ -1470,6 +1610,9 @@ function viewProfile(profile, lang) {
     currency: Number.isFinite(source.currency) ? source.currency : 0,
     equipmentOwned: Array.isArray(source.equipmentOwned) ? source.equipmentOwned.filter(id => typeof id === 'string') : [],
     equipped: {weapon: null, charm: null, armor: null, ...(source.equipped && typeof source.equipped === 'object' ? source.equipped : {})},
+    gemsOwned: Array.isArray(source.gemsOwned) ? source.gemsOwned.filter(id => typeof id === 'string') : [],
+    gemsEquipped: Array.isArray(source.gemsEquipped) ? source.gemsEquipped.filter(id => typeof id === 'string') : [],
+    starterClaimed: source.starterClaimed === true,
     permanent,
     best: source.best && typeof source.best === 'object' ? source.best : {},
     settings: {
@@ -1834,7 +1977,8 @@ function bonusLabel(ctx, key) {
     chain: ['chain', 'Chain', '连锁'],
     chainRange: ['chainRange', 'Chain range', '连锁范围'],
     pierce: ['pierce', 'Pierce', '穿透'],
-    projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速']
+    projectileSpeed: ['projectileSpeed', 'Projectile speed', '弹速'],
+    harvest: ['harvestYield', 'Harvest yield', '辉穗收益']
   };
   const entry = labels[key];
   if (!entry) return t(ctx.api,key);
