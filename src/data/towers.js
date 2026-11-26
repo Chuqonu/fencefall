@@ -202,6 +202,7 @@ function tower(id, en, zh, roleEn, roleZh, summary, detail, damage, interval, ra
       .filter(k=>!['chainRange','critMultiplier','projectileSpeed'].includes(k)).map(k=>k==='critChance'?'crit':k)]})};
 }
 export const TOWERS = {
+  harvest:tower('harvest','Sun Gleaner','辉穗','Economy','经济','Produces energy and XP. Rear row gains 30%.','周期产辉光与经验，后排收益 +30%。',0,5,0,{}),
   bolt:tower('bolt','Rivet','穿钉','Projectile','投射','Pierce a second target with a fast critical bolt.','快速弩矢可暴击并贯穿第二个目标。',13,0.68,295,
     {pierce:1,critChance:0.16,critMultiplier:1.85,projectileSpeed:440}),
   fire:tower('fire','Cinder','烬火','Fire','火焰','Burn clustered enemies in a 42 px burst.','火弹在 42 像素范围内溅射并灼烧。',11,0.98,280,

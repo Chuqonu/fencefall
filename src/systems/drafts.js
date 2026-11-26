@@ -43,7 +43,7 @@ import {BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
 /** XP required to open the next draft after `opened` drafts have already been granted. */
 export function draftXpCost(opened) {
   const n = Number.isFinite(opened) ? Math.max(0, Math.floor(opened)) : 0;
-  return 8 + 4 * n + Math.floor((n * n) / 8);
+  return 6 + 4*n;
 }
 
 export function generateDraft(state) {
@@ -75,7 +75,34 @@ export function generateDraft(state) {
   }
   picked = picked.slice(0, 3);
   if (picked.length !== 3) return picked;
-  return shuffle(state, preferHeroWhenCovered(state, preferMissingType(state, picked), heroIds));
+  picked=preferHeroWhenCovered(state,preferMissingType(state,picked),heroIds);
+  if (state.draftLevel<4 && countEmpty(state) && !state.slots.some(s=>s.unit?.type==='harvest') &&
+      !picked.some(c=>c.type==='harvest') && random(state)<0.35) {
+    const i=picked.findIndex(c=>c.kind==='tower');
+    if (i>=0) picked[i]=towerCard('harvest',false);
+  }
+  return shuffle(state,picked);
+}
+
+export function rerollCost(state) {
+  return state.freeRerollsLeft>0 ? 0 : Math.ceil((20+15*state.draftRerollsUsed)*(1-(state.systems.integration?.bonuses?.rerollDiscount||0)));
+}
+export function rerollDraft(state) {
+  if (state?.phase!=='draft' || !state.draft || state.draftRerollsUsed>=3) return fail('unavailable');
+  const cost=rerollCost(state);
+  if (state.energy<cost) return fail('unavailable');
+  const before=state.draft.options.map(c=>c.id).sort().join('|');
+  let cards;
+  for (let i=0;i<8;i++) {
+    cards=generateDraft(state);
+    if (cards.map(c=>c.id).sort().join('|')!==before) break;
+  }
+  state.draft.options=cards;
+  state.energy-=cost;
+  if (!cost) state.freeRerollsLeft--;
+  state.draftRerollsUsed++;
+  emit(state,'draft_reroll',{cost,rerollsUsed:state.draftRerollsUsed});
+  return ok();
 }
 
 export function updateDrafts(state) {
@@ -95,7 +122,8 @@ export function updateDrafts(state) {
   state.xp = normalizeXp(state.xp - cost);
   const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
   state.draftLevel = opened + 1;
-  state.nextDraftXp = draftXpCost(state.draftLevel);
+  state.nextDraftXp = Math.ceil(draftXpCost(state.draftLevel)*(state.expedition==='watch'?1:0.75));
+  state.draftRerollsUsed = 0;
   state.pendingUnit = null;
   state.draft = {options};
   state.phase = 'draft';

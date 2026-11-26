@@ -113,255 +113,26 @@ const INTRO_HINTS = {
 // A phase without `rotate` repeats `groups`. `rotate` cycles group lists.
 // Group: kind, count, interval seconds, optional delay, exact (skip count scaling),
 // optional healthScale (passed through to spawnEnemy, still multiplied by difficulty health).
+// Each formation streams for most of its window. Flag waves overlap the marching column.
+function group(kind,count,interval,healthScale=1) {
+  return {kind,count,interval,healthScale,exact:kind==='boss'};
+}
+function formation(id,en,zh,from,until,every,groups,horde=false) {
+  return {id,name:{en,zh},from,until,every,groups,horde};
+}
 const PHASES = [
-  {
-    id: 'ash',
-    from: 1,
-    until: 2,
-    every: 30,
-    name: {en: 'First ash', zh: '初烬'},
-    groups: [{kind: 'shambler', count: 4, interval: 3, exact: true}],
-  },
-  {
-    id: 'line',
-    from: 16,
-    until: 64,
-    every: 9,
-    name: {en: 'Ash line', zh: '灰线'},
-    groups: [
-      {kind: 'shambler', count: 2, interval: 5},
-      {kind: 'runner', count: 2, interval: 4, delay: 2},
-    ],
-  },
-  {
-    id: 'dust',
-    from: 66,
-    until: 140,
-    every: 10,
-    name: {en: 'Dust', zh: '尘群'},
-    groups: [
-      {kind: 'swarm', count: 4, interval: 1.5},
-      {kind: 'shambler', count: 2, interval: 4, delay: 2},
-    ],
-  },
-  {
-    id: 'sap',
-    from: 146,
-    until: 232,
-    every: 11,
-    name: {en: 'Sap', zh: '腐浆'},
-    groups: [
-      {kind: 'spitter', count: 2, interval: 6},
-      {kind: 'runner', count: 2, interval: 5, delay: 2},
-      {kind: 'swarm', count: 2, interval: 3, delay: 1},
-    ],
-  },
-  {
-    id: 'leap-in',
-    from: 200,
-    until: 201,
-    every: 30,
-    name: {en: 'Leap ash', zh: '灰跃'},
-    groups: [
-      {kind: 'leaper', count: 3, interval: 1.2},
-      {kind: 'shambler', count: 2, interval: 1.2, delay: 0.8},
-    ],
-  },
-  {
-    id: 'plate',
-    from: 234,
-    until: 330,
-    every: 14,
-    name: {en: 'Plate', zh: '板甲'},
-    groups: [
-      {kind: 'armored', count: 2, interval: 8},
-      {kind: 'swarm', count: 3, interval: 2.5, delay: 1},
-      {kind: 'runner', count: 2, interval: 6, delay: 4},
-    ],
-  },
-  {
-    id: 'shade-in',
-    from: 260,
-    until: 261,
-    every: 30,
-    name: {en: 'Shade hour', zh: '栅影'},
-    groups: [
-      {kind: 'shade', count: 2, interval: 1.6},
-      {kind: 'runner', count: 2, interval: 1.2, delay: 1},
-    ],
-  },
-  {
-    id: 'banner-in',
-    from: 310,
-    until: 311,
-    every: 30,
-    name: {en: 'Standard', zh: '旗帜'},
-    groups: [
-      {kind: 'banner', count: 1, interval: 0},
-      {kind: 'shambler', count: 3, interval: 1, delay: 0.6},
-    ],
-  },
-  {
-    id: 'brute',
-    from: 332,
-    until: 333,
-    every: 10,
-    name: {en: 'The gate', zh: '闸门'},
-    groups: [
-      {kind: 'brute', count: 2, interval: 2, exact: true},
-      {kind: 'shambler', count: 3, interval: 1.2, delay: 0.6},
-    ],
-  },
-  {
-    id: 'maul',
-    from: 340,
-    until: 456,
-    every: 16,
-    name: {en: 'Maul', zh: '重压'},
-    rotate: [
-      [
-        {kind: 'brute', count: 2, interval: 12},
-        {kind: 'swarm', count: 3, interval: 5, delay: 2},
-      ],
-      [
-        {kind: 'spitter', count: 2, interval: 7},
-        {kind: 'armored', count: 2, interval: 8, delay: 3},
-        {kind: 'runner', count: 2, interval: 6, delay: 2},
-      ],
-      [
-        {kind: 'splitter', count: 2, interval: 2.4},
-        {kind: 'swarm', count: 3, interval: 2.5, delay: 1},
-        {kind: 'runner', count: 2, interval: 6, delay: 3},
-      ],
-    ],
-  },
-  {
-    id: 'ward-in',
-    from: 400,
-    until: 401,
-    every: 30,
-    name: {en: 'Ash ward', zh: '烬卫'},
-    hint: {
-      en: 'An ash warden weakens hits on a nearby ally. It is not shielded itself. Kill it first.',
-      zh: '烬卫会减弱对附近同伴的打击。它自己没有这层护盾。先打掉它。',
-    },
-    groups: [
-      {kind: 'warden', count: 1, interval: 0, exact: true},
-      {kind: 'shambler', count: 3, interval: 0.8, delay: 0.4, exact: true},
-    ],
-  },
-  {
-    id: 'charge-in',
-    from: 430,
-    until: 431,
-    every: 30,
-    name: {en: 'Cinder', zh: '烬爆'},
-    hint: {
-      en: 'A cinder charge bites once at the fence, then the fuse burns. Kill it before the blast.',
-      zh: '烬爆贴上栅栏后先啃一口，然后引线燃烧。爆炸前打掉它。',
-    },
-    groups: [
-      {kind: 'charge', count: 1, interval: 0, exact: true},
-      {kind: 'shambler', count: 2, interval: 0.8, delay: 0.5, exact: true},
-    ],
-  },
-  {
-    id: 'lesser',
-    from: 456,
-    until: 457,
-    every: 10,
-    name: {en: 'Lesser crown', zh: '次冠'},
-    hint: {
-      en: 'A lesser Crown Breach calls dust gnawers while alive. Half health only enrages it. The push resumes after.',
-      zh: '较弱的冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。之后攻势还会继续。',
-    },
-    groups: [
-      {kind: 'armored', count: 2, interval: 1.4},
-      {kind: 'swarm', count: 4, interval: 0.4, delay: 0.4},
-      {kind: 'runner', count: 2, interval: 1.2, delay: 1.6},
-      {kind: 'boss', count: 1, interval: 0, delay: 4.8, exact: true, healthScale: 0.36},
-    ],
-  },
-  {
-    id: 'hush-in',
-    from: 490,
-    until: 491,
-    every: 30,
-    name: {en: 'Ash hush', zh: '烬寂'},
-    hint: {
-      en: 'While an ash hush is on the fence, defenders recharge more slowly. Kill it to restore the board.',
-      zh: '烬寂贴在栅栏上时，防守者充能变慢。打掉它，阵列就会恢复。',
-    },
-    groups: [
-      {kind: 'hush', count: 1, interval: 0, exact: true},
-      {kind: 'shambler', count: 3, interval: 0.7, delay: 0.4, exact: true},
-    ],
-  },
-  {
-    id: 'press',
-    from: 520,
-    until: 652,
-    every: 16,
-    name: {en: 'Press', zh: '进逼'},
-    rotate: [
-      [
-        {kind: 'brute', count: 2, interval: 12},
-        {kind: 'spitter', count: 2, interval: 6, delay: 4},
-        {kind: 'swarm', count: 3, interval: 4, delay: 2},
-      ],
-      [
-        {kind: 'armored', count: 2, interval: 12},
-        {kind: 'leaper', count: 2, interval: 6, delay: 2},
-        {kind: 'shade', count: 2, interval: 6, delay: 4},
-      ],
-      [
-        {kind: 'swarm', count: 4, interval: 3.5},
-        {kind: 'runner', count: 2, interval: 8, delay: 2},
-        {kind: 'spitter', count: 2, interval: 7, delay: 5},
-      ],
-    ],
-  },
-  {
-    id: 'siege',
-    from: 654,
-    until: 772,
-    every: 16,
-    name: {en: 'Siege', zh: '围攻'},
-    rotate: [
-      [
-        {kind: 'armored', count: 2, interval: 12},
-        {kind: 'mender', count: 1, interval: 0, delay: 1.2},
-        {kind: 'swarm', count: 3, interval: 3.5, delay: 1},
-      ],
-      [
-        {kind: 'brute', count: 2, interval: 12},
-        {kind: 'runner', count: 2, interval: 7, delay: 3},
-        {kind: 'swarm', count: 3, interval: 4, delay: 2},
-      ],
-      [
-        {kind: 'splitter', count: 2, interval: 3, delay: 1},
-        {kind: 'banner', count: 1, interval: 0, delay: 2},
-        {kind: 'runner', count: 2, interval: 8, delay: 4},
-      ],
-    ],
-  },
-  {
-    id: 'crown',
-    from: 780,
-    until: 781,
-    every: 20,
-    name: {en: 'Crown Breach', zh: '冠裂'},
-    hint: {
-      en: 'Last foe: Crown Breach calls dust gnawers while alive. Half health only enrages it. Clear the field to win.',
-      zh: '最后一头冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。清场即可获胜。',
-    },
-    groups: [
-      {kind: 'armored', count: 3, interval: 1.2},
-      {kind: 'swarm', count: 5, interval: 0.35, delay: 0.35},
-      {kind: 'spitter', count: 2, interval: 1.2, delay: 1.8},
-      {kind: 'boss', count: 1, interval: 0, delay: 4.5, exact: true},
-    ],
-  },
+  formation('first','First ash','初烬',0,1,1,[group('shambler',6,0.65,0.42)]),
+  formation('trail','Broken trail','断径',12,50,12,[group('shambler',6,1.5),group('runner',3,2.6)]),
+  formation('dust','Dust cloud','尘潮',50,110,10,[group('swarm',12,0.7),group('shambler',6,1.4),group('runner',3,2)]),
+  formation('flag-one','First flag','第一面战旗',110,111,1,[group('banner',1,0),group('swarm',28,0.22),group('runner',10,0.7)],true),
+  formation('march','Ash march','灰烬行军',112,214,10,[group('shambler',9,0.9),group('swarm',12,0.73),group('armored',1,0),group('spitter',1,0)]),
+  formation('vanguard','Crown vanguard','次冠先锋',215,216,1,[group('boss',1,0,0.45),group('shade',3,2),group('leaper',3,2.5)]),
+  formation('breach','Breach patrol','裂隙巡队',218,295,10,[group('swarm',16,0.52),group('runner',7,1.3),group('splitter',1,0),group('mender',1,0)]),
+  formation('flag-two','Black flag','第二面战旗',270,271,1,[group('banner',2,1),group('swarm',32,0.2),group('warden',2,2),group('charge',2,3)],true),
+  formation('siege','Siege train','围城纵队',298,380,10,[group('swarm',16,0.5),group('shambler',8,1),group('brute',1,0),group('hush',1,0),group('leaper',2,2)]),
+  formation('flag-three','Last flag','终局战旗',365,366,1,[group('banner',2,2),group('swarm',38,0.16),group('shade',6,0.85),group('charge',2,2)],true),
+  formation('crown','Crown Breach','冠裂兽',380,381,1,[group('boss',1,0),group('warden',3,2),group('mender',2,1)]),
+  formation('last','Last guard','末路护卫',382,421,9,[group('swarm',15,0.5),group('runner',6,1.3),group('armored',2,3),group('spitter',1,0)])
 ];
 
 const ENDLESS_PATTERNS = [
@@ -471,9 +242,15 @@ export function updateWaves(state, dt = 0) {
 
   while (director.nextWave < waves.length && state.time + 1e-6 >= waves[director.nextWave].start) {
     const wave = waves[director.nextWave];
-    enqueueWave(state, sys, wave);
+    const count=enqueueWave(state, sys, wave);
     director.nextWave += 1;
     state.wave = director.nextWave;
+    if (wave.horde) {
+      const amount=Math.min(15,state.maxEnergy-state.energy);
+      state.energy+=amount;
+      emit(state,'energy_gain',{amount,source:'wave'});
+      emit(state,'wave_horde',{wave:state.wave,name:wave.name,count});
+    }
     sys.waveStartedAt = state.time;
     sys.current = snapshotWave(wave);
     emit(state, 'wave_start', {
@@ -631,6 +408,7 @@ function buildWaves(phases) {
         name: {en: phase.name.en, zh: phase.name.zh},
         hint: {en: hint.en, zh: hint.zh},
         groups,
+        horde:!!phase.horde,
         intro,
         boss: groups.some(group => group.kind === 'boss'),
       });
@@ -696,9 +474,11 @@ function enqueueWave(state, sys, wave) {
   const queue = state.director.queue;
   for (const item of items) queue.push(item);
   queue.sort((a, b) => a.time - b.time || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+  return items.length;
 }
 
 function spawnDue(state) {
+  if (!state.director.queue.length || state.director.queue[0].time > state.time+1e-6) return;
   const due = [];
   const keep = [];
   for (const item of state.director.queue) {
@@ -719,13 +499,19 @@ function pumpEndless(state, sys) {
   while (state.time + 1e-6 >= sys.endlessNext && guard++ < 200) {
     const start = sys.endlessNext;
     const wave = makeEndlessWave(sys.endlessWave, start);
-    enqueueWave(state, sys, wave);
+    const count=enqueueWave(state, sys, wave);
     const span = groupSpan(wave.groups);
     let next = quantize(start + Math.max(12, span + 3));
     if (!(next > start)) next = quantize(start + 12);
     sys.endlessNext = next;
     sys.endlessWave += 1;
     state.wave += 1;
+    if (wave.horde) {
+      const amount=Math.min(15,state.maxEnergy-state.energy);
+      state.energy+=amount;
+      emit(state,'energy_gain',{amount,source:'wave'});
+      emit(state,'wave_horde',{wave:state.wave,name:wave.name,count});
+    }
     sys.waveStartedAt = state.time;
     sys.current = snapshotWave(wave);
     emit(state, 'wave_start', {

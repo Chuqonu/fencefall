@@ -70,7 +70,8 @@
 // damageEnemy multiplies after armor and brittle. Fence bites still use
 // enemy.damage. The hit event is unchanged.
 
-import {ARENA, DIFFICULTIES, clamp, distance, emit, random, uid} from '../shared.js';
+import {gainEnergy,hurtField} from './field.js';
+import {TARGET_MODES,canPlan,ARENA, DIFFICULTIES, clamp, distance, emit, random, uid} from '../shared.js';
 import {ENEMIES} from '../data/enemies.js';
 import {getUnitStats} from '../data/towers.js';
 import {applyStatus} from './status.js';
@@ -111,13 +112,8 @@ function simulationFrozen(state) {
   return false;
 }
 
-function crouchOnly(enemy) {
-  // Ash leapers can be shot during the crouch, and again once they are biting.
-  return !!(enemy && enemy.leapEvery > 0 && enemy.attacking !== true && !(enemy.leapTimer > 0));
-}
-
 function isTargetable(enemy) {
-  return !!(enemy && !enemy.dead && enemy.hp > 0 && enemy.phased !== true && !crouchOnly(enemy) && Number.isFinite(enemy.x) && Number.isFinite(enemy.y));
+  return !!(enemy && !enemy.dead && enemy.hp > 0 && (!enemy.phased || enemy.revealed) && !enemy.airTime && Number.isFinite(enemy.x) && Number.isFinite(enemy.y));
 }
 
 function isLiving(enemy) {
@@ -172,17 +168,21 @@ function findUnit(state, id) {
   return null;
 }
 
-function preferTarget(candidate, best, candidateDistance, bestDistance) {
-  if (!best) return true;
-  const yDiff = (candidate.y || 0) - (best.y || 0);
-  if (yDiff > 1e-4) return true;
-  if (yDiff < -1e-4) return false;
-  const diff = candidateDistance - bestDistance;
-  if (diff < -1e-4) return true;
-  if (diff > 1e-4) return false;
-  return String(candidate.id) < String(best.id);
+export function setTargeting(state,index,mode) {
+  const unit=state?.slots?.[index]?.unit;
+  if (!Number.isInteger(index) || !canPlan(state) || !unit || unit.type==='harvest') return {ok:false,reason:'invalid_slot'};
+  mode=mode ?? TARGET_MODES[(TARGET_MODES.indexOf(unit.targeting)+1)%4];
+  if (!TARGET_MODES.includes(mode)) return {ok:false,reason:'invalid_mode'};
+  unit.targeting=mode;
+  emit(state,'targeting_change',{slot:index,mode});
+  return {ok:true};
 }
-
+function priorityScore(e,mode) {
+  if (mode==='priority') return Number(Boolean(e.priority || ENEMIES[e.kind]?.priority));
+  if (mode==='strongest') return e.hp;
+  if (mode==='weakest') return -e.hp/e.maxHp;
+  return 0;
+}
 function ignored(ignore, id) {
   if (!ignore) return false;
   for (let i = 0; i < ignore.length; i++) {
@@ -191,19 +191,22 @@ function ignored(ignore, id) {
   return false;
 }
 
-function nearestEnemy(state, origin, range, ignore) {
-  if (!(range > 0)) return null;
-  let best = null;
-  let bestDistance = Infinity;
-  for (const enemy of state.enemies) {
-    if (!isTargetable(enemy) || ignored(ignore, enemy.id)) continue;
-    const dist = distance(origin, enemy);
-    if (dist <= range && preferTarget(enemy, best, dist, bestDistance)) {
-      best = enemy;
-      bestDistance = dist;
+export function selectTarget(state,origin,range,targeting='foremost',ignore) {
+  let best=null, bestScore=-Infinity;
+  for (const e of state.enemies) {
+    if (!isTargetable(e) || ignored(ignore,e.id)) continue;
+    const dx=e.x-origin.x, dy=e.y-origin.y;
+    if (dx*dx+dy*dy>range*range) continue;
+    const score=priorityScore(e,targeting);
+    if (!best || score>bestScore || (score===bestScore && (e.y>best.y || (e.y===best.y && String(e.id)<String(best.id))))) {
+      best=e;
+      bestScore=score;
     }
   }
   return best;
+}
+function nearestEnemy(state,origin,range,ignore) {
+  return selectTarget(state,origin,range,'foremost',ignore);
 }
 
 function enemyById(state, id) {
@@ -317,7 +320,9 @@ export function killEnemy(state, enemy, sourceId, options = {}) {
   const xpValue = Number(enemy.xp);
   const xp = Number.isFinite(xpValue) ? Math.max(0, xpValue) : 0;
   state.xp = finite(state.xp, 0) + xp;
-  const unit = findUnit(state, sourceId);
+  const drops={swarm:1,shambler:2,runner:2,leaper:2,shade:2,brute:6,boss:35};
+  gainEnergy(state,drops[enemy.kind] || 4,'kill',enemy);
+  const unit = findUnit(state, sourceId) || state.fieldSlots?.find(p=>p.unit && p.unit.id===sourceId)?.unit;
   if (unit) unit.kills = finite(unit.kills, 0) + 1;
   emitEvent(state, 'kill', {
     sourceId: sourceId || null,
@@ -821,7 +826,7 @@ function fireUnit(state, unit, slot, stats, bonus) {
   const mechanics = mechanicList(stats);
   const extras = stats.multishot || (mechanics.includes('multishot') ? 1 : 0);
   for (let i=0; i<=extras; i++) {
-    const target = nearestEnemy(state,origin,range,selected);
+    const target = selectTarget(state,origin,range,unit.targeting,selected);
     if (!target) break;
     selected.push(target.id);
     const rolled = rollShot(state,stats,bonus);
@@ -908,9 +913,32 @@ function fenceReach(enemy) {
   return Math.max(0, finite(enemy.radius, 12));
 }
 
+function triggerFenceSurge(state) {
+  const surge=state.surge;
+  surge.charges--;
+  surge.shieldTimer=3;
+  surge.cooldown=10;
+  const level=state.slots.find(s=>s.unit?.kind==='hero')?.unit.upgrades.bastion || 0;
+  const power=1+level*0.35+(state.systems.integration?.bonuses?.surgePower || 0);
+  emit(state,'fence_surge',{y:ARENA.fenceY,reach:240,chargesLeft:surge.charges,shieldDuration:3});
+  for (const e of state.enemies) {
+    if (!isLiving(e) || e.y<ARENA.fenceY-240) continue;
+    const boss=e.kind==='boss';
+    const lethal=!boss && (e.kind==='swarm' || e.hp/e.maxHp<=0.18);
+    if (lethal) { killEnemy(state,e,null); continue; }
+    damageEnemy(state,e,boss?Math.min(450,e.maxHp*0.08):110*power,{type:'surge',armorPen:1});
+    if (!isLiving(e)) continue;
+    pushEnemy(state,e,boss?45:150*(1+0.35*level));
+    applyStatus(e,{type:'stun',remaining:(boss?0.5/(1-(e.statusResist?.stun||0)):1.6),sourceId:'fence'});
+    e.chargeLit=false;
+    e.chargeTimer=0;
+  }
+}
 function biteFence(state, amount, x, sourceId, enemyKind) {
   const fence = state.fence;
   if (!fence || !(fence.hp > 0) || !(amount > 0) || !Number.isFinite(amount)) return 0;
+  if (state.surge.shieldTimer>0) return 0;
+  const previous=fence.hp;
   const applied = Math.min(fence.hp, amount);
   const maxHp = Number.isFinite(fence.maxHp) ? fence.maxHp : fence.hp;
   fence.hp = clamp(fence.hp - amount, 0, Math.max(0, maxHp));
@@ -926,6 +954,15 @@ function biteFence(state, amount, x, sourceId, enemyKind) {
     enemyKind: enemyKind || null,
     ratio
   });
+  const surge=state.surge;
+  if (surge.charges>0 && surge.cooldown<=0) {
+    const threshold=[0.5,0.2].find(t=>previous>maxHp*t && fence.hp<=maxHp*t && !surge.thresholdsUsed.includes(t));
+    if (threshold || fence.hp<=0) {
+      if (threshold) surge.thresholdsUsed.push(threshold);
+      if (fence.hp<=0) fence.hp=Math.max(1,Math.round(maxHp*0.12));
+      triggerFenceSurge(state);
+    }
+  }
   return applied;
 }
 
@@ -942,6 +979,9 @@ function advanceEnemyShot(state, projectile, dt) {
   const y1 = projectile.y;
   projectile.x += dirx * speed * dt;
   projectile.y += diry * speed * dt;
+  const wall=state.fieldSlots?.filter(p=>p.unit?.kind==='bulwark' && Math.abs(projectile.x-p.x)<=p.width/2 &&
+    y1<=p.top+p.height && projectile.y>=p.top).sort((a,b)=>a.y-b.y)[0];
+  if (wall) { hurtField(state,wall,projectile.damage); return false; }
   const reachedFence = y1 >= ARENA.fenceY || (y1 < ARENA.fenceY && projectile.y >= ARENA.fenceY);
   if (reachedFence) {
     biteFence(state, finite(projectile.damage, 0), projectile.x, projectile.sourceId, projectile.enemyKind || null);
@@ -1023,7 +1063,8 @@ function updateCharges(state, dt) {
     const enemy = enemies[i];
     if (!isLiving(enemy) || enemy.chargeSpent === true) continue;
     if (!(enemy.chargeWindup > 0) || !(enemy.chargeDamage > 0)) continue;
-    if (!chargeContact(enemy) || isStunned(enemy)) continue;
+    const wall=state.fieldSlots.find(p=>p.unit && p.unit.id===enemy.blockedByFieldId);
+    if ((!wall && !chargeContact(enemy)) || isStunned(enemy)) continue;
     if (enemy.chargeLit !== true) {
       enemy.chargeLit = true;
       enemy.chargeTimer = enemy.chargeWindup;
@@ -1033,7 +1074,8 @@ function updateCharges(state, dt) {
     if (enemy.chargeTimer > 0) continue;
     enemy.chargeTimer = 0;
     enemy.chargeSpent = true;
-    biteFence(state, enemy.chargeDamage, enemy.x, enemy.id, enemy.kind || null);
+    if (wall) hurtField(state,wall,enemy.chargeDamage);
+    else biteFence(state, enemy.chargeDamage, enemy.x, enemy.id, enemy.kind || null);
     killEnemy(state, enemy, null);
   }
 }
@@ -1043,6 +1085,27 @@ function updateFenceAttacks(state, dt) {
   if (!fence || !Number.isFinite(fence.hp)) return;
   for (const enemy of state.enemies) {
     if (!enemy || enemy.dead) continue;
+    if (enemy.blockedByFieldId) {
+      const pad=state.fieldSlots.find(p=>p.unit?.id===enemy.blockedByFieldId);
+      if (pad) {
+        const u=pad.unit;
+        if (enemy.leapCollision) {
+          enemy.leapCollision=false;
+          damageEnemy(state,enemy,25,{sourceId:u.id,type:'collision',towerType:u.kind});
+          applyStatus(enemy,{type:'stun',remaining:1.2,sourceId:u.id});
+        }
+        if (!isStunned(enemy) && !enemy.dead && !enemy.chargeWindup) {
+          enemy.attackCooldown-=dt;
+          if (enemy.attackCooldown<=0) {
+            enemy.attackCooldown+=enemy.attackInterval;
+            hurtField(state,pad,enemy.damage);
+            if (u.kind==='bulwark') damageEnemy(state,enemy,10+(state.systems.integration?.bonuses?.thorns||0),{type:'thorns',sourceId:u.id,towerType:u.kind});
+          }
+        }
+        continue;
+      }
+      enemy.blockedByFieldId=null;
+    }
     if (enemy.chargeLit === true) {
       enemy.attacking = true;
       continue;
@@ -1127,13 +1190,15 @@ export function updateCombat(state, dt) {
   if (!Array.isArray(state.projectiles)) state.projectiles = [];
   if (!Array.isArray(state.events)) state.events = [];
 
+  state.surge.shieldTimer=Math.max(0,state.surge.shieldTimer-dt);
+  state.surge.cooldown=Math.max(0,state.surge.cooldown-dt);
   attachLivingSplits(state);
   removeDead(state);
   updateWards(state);
 
   const roster = [];
   for (const slot of state.slots) {
-    if (!slot?.unit) continue;
+    if (!slot?.unit || slot.unit.type==='harvest') continue;
     const stats = getUnitStats(slot.unit, state);
     if (!stats || typeof stats !== 'object') continue;
     roster.push({slot, unit: slot.unit, stats});

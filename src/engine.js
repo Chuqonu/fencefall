@@ -1,6 +1,7 @@
 // Fixed-step integration. Speed changes how many STEP updates run per wall
 // second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit} from './shared.js';
+import {updateField} from './systems/field.js';
 import {updateMovement} from './systems/movement.js';
 import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
 import {updateStatuses} from './systems/status.js';
@@ -110,6 +111,7 @@ function stepBody(state) {
   state.tick += 1;
   updateWaves(state, STEP);
   if (halted(state)) return;
+  updateField(state, STEP, damageEnemy);
   updateMovement(state, STEP);
   if (halted(state)) return;
   updateStatuses(state, STEP, damageEnemy);

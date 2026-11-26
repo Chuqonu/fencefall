@@ -23,7 +23,7 @@ export const DIFFICULTIES = Object.freeze({
  hard:freezeDifficulty({name:{en:'Hard',zh:'困难'},health:1.3,speed:1.08,damage:1.25,count:1.1,reward:1.9,fence:570}),
  nightmare:freezeDifficulty({name:{en:'Nightmare',zh:'噩梦'},health:1.65,speed:1.15,damage:1.5,count:1.2,reward:2.5,fence:540})
 });
-export const BASE_TYPES = Object.freeze(['bolt','fire','frost','lightning','poison','support']);
+export const BASE_TYPES = Object.freeze(['bolt','fire','frost','lightning','poison','support','harvest']);
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export const clone=value=>JSON.parse(JSON.stringify(value));
@@ -74,4 +74,4 @@ export function hitFieldSlot(x,y) {
 export const TARGET_MODES = Object.freeze(['foremost','priority','strongest','weakest']);
 const defaultModes = {lightning:'priority',support:'priority',shatter:'priority',relay:'priority',watchpost:'priority',
   poison:'strongest',catalyst:'strongest',cultivator:'strongest',venomspine:'weakest'};
-export function createUnit(state,type='bolt',rank=1,kind=type==='hero'?'hero':'tower'){return {id:uid(state,'u'),kind,type,rank,upgrades:{},cooldown:0,kills:0,targeting:defaultModes[type] || 'foremost'};}
+export function createUnit(state,type='bolt',rank=1,kind=type==='hero'?'hero':'tower'){return {id:uid(state,'u'),kind,type,rank,upgrades:{},cooldown:0,kills:0,...(type==='harvest' ? {harvestTimer:0} : {targeting:defaultModes[type] || 'foremost'})};}

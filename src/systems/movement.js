@@ -49,6 +49,7 @@ import { ARENA, DIFFICULTIES, clamp, emit, random, uid } from '../shared.js';
 import { ENEMIES } from '../data/enemies.js';
 import { getSpeedFactor } from './status.js';
 
+import {blocker} from './field.js';
 const TAU = Math.PI * 2;
 const SPAWN_ATTEMPTS = 32;
 const DRIFT_FREQ_MIN = 0.55;
@@ -409,7 +410,14 @@ function tickPhase(state, enemy, dt) {
 
 function dashLeap(state, enemy, stopY) {
   enemy.leapTimer = 0;
-  enemy.y = Math.min(stopY, enemy.y + enemy.leapDistance);
+  const end=Math.min(stopY, enemy.y+enemy.leapDistance);
+  const wall=blocker(state,enemy,enemy.y,end,true);
+  enemy.airTime=wall ? 0 : 0.35;
+  enemy.y=wall ? wall.top-enemy.radius : end;
+  if (wall) {
+    enemy.blockedByFieldId=wall.unit.id;
+    enemy.leapCollision=true;
+  }
   enemy.attacking = enemy.y >= stopY - 1e-6;
   emit(state, 'leap', {x: enemy.x, y: enemy.y});
 }
@@ -478,6 +486,12 @@ export function updateMovement(state, dt) {
     if (enemy.y > stopY) enemy.y = stopY;
 
     tickPhase(state, enemy, dt);
+    if (enemy.revealTimer>0) {
+      enemy.revealTimer=Math.max(0,enemy.revealTimer-dt);
+      enemy.revealed=enemy.revealTimer>0;
+    }
+    if (enemy.airTime>0) { enemy.airTime=Math.max(0,enemy.airTime-dt); continue; }
+    if (enemy.blockedByFieldId && state.fieldSlots.some(p=>p.unit?.id===enemy.blockedByFieldId)) continue;
 
     if (isStunned(enemy)) {
       enemy.attacking = false;
@@ -491,6 +505,13 @@ export function updateMovement(state, dt) {
     const haste = enemy.y >= stopY - 1e-6 ? 0 : allyHaste(enemies, enemy);
     const dy = speed * factor * dt * (1 + haste);
     // Plant at the fence: y stops on the contact line and lateral sway stops with it.
+    const wall=blocker(state,enemy,enemy.y,Math.min(stopY,enemy.y+dy));
+    if (wall) {
+      enemy.y=wall.top-enemy.radius;
+      enemy.blockedByFieldId=wall.unit.id;
+      enemy.attacking=true;
+      continue;
+    }
     if (enemy.y + dy >= stopY) {
       enemy.y = stopY;
       enemy.attacking = true;
