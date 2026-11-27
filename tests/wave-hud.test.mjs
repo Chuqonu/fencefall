@@ -156,19 +156,21 @@ function atProgress(wave, fraction) {
   return state;
 }
 
-test('the battle names the sortie without changing the wave number', () => {
-  const state = createRun({seed: 5, difficulty: 'normal', runId: 'wave-hud-sortie', expedition: 'leap'});
+test('the battle names the stage without changing the wave number', () => {
+  const state = createRun({seed: 5, difficulty: 'normal', runId: 'wave-hud-sortie', expedition: 'stage_7'});
   state.wave = 2;
   const hud = mount(state);
   try {
-    assert.equal(hud.text('hud-sortie'), 'Leap Ash');
+    assert.equal(hud.text('hud-sortie'), 'Stage 7 · Leaper Ambush');
+    assert.equal(hud.text('hud-stage'), 'S7');
     assert.equal(hud.text('hud-wave-value'), '2');
   } finally {
     hud.close();
   }
   const zh = mount(state, 'zh');
   try {
-    assert.equal(zh.text('hud-sortie'), '灰跃');
+    assert.equal(zh.text('hud-sortie'), '第 7 关 · 灰跃突袭');
+    assert.equal(zh.text('hud-stage'), '第7关');
   } finally {
     zh.close();
   }

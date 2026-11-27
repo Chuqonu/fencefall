@@ -1,4 +1,5 @@
 import {DIFFICULTIES, clamp} from '../shared.js';
+import {EXPEDITIONS} from '../data/expeditions.js';
 
 export const PROGRESSION_RULES = Object.freeze({
   secondsPerPoint: 25,
@@ -649,7 +650,17 @@ function updateBest(profile, settlement) {
   };
 }
 
-// One victorious sortie clear, written only on the first settlement of a run.
+function victoryStars(state) {
+  const hp = Number.isFinite(state?.fence?.hp) ? state.fence.hp : 0;
+  const maxHp = Number.isFinite(state?.fence?.maxHp) && state.fence.maxHp > 0 ? state.fence.maxHp : 1;
+  if (hp <= 0) return 0;
+  const ratio = hp / maxHp;
+  if (ratio >= 0.999) return 3;
+  if (ratio >= 0.5) return 2;
+  return 1;
+}
+
+// One victorious stage clear, written only on the first settlement of a run.
 function recordExpedition(profile, state, settlement) {
   if (!settlement || settlement.result !== 'victory') return;
   const id = typeof state.expedition === 'string' && state.expedition ? state.expedition : 'watch';
@@ -657,15 +668,18 @@ function recordExpedition(profile, state, settlement) {
   const prev = profile.expeditions[id];
   const prevClears = prev && typeof prev === 'object' && Number.isFinite(prev.clears) ? prev.clears : 0;
   const prevBest = prev && typeof prev === 'object' && Number.isFinite(prev.bestTime) ? prev.bestTime : null;
+  const prevStars = prev && typeof prev === 'object' && Number.isFinite(prev.stars) ? prev.stars : 0;
   const time = Number.isFinite(settlement.time) ? settlement.time : 0;
+  const earnedStars = Number.isFinite(settlement.stars) ? settlement.stars : victoryStars(state);
   profile.expeditions[id] = {
     clears: prevClears + 1,
     bestTime: prevBest == null ? time : Math.min(prevBest, time),
+    stars: Math.max(prevStars, earnedStars),
   };
 }
 
-function buildSettlement(state, currency, result) {
-  return {
+function buildSettlement(state, currency, result, extra = null) {
+  const out = {
     runId: typeof state.runId === 'string' ? state.runId : '',
     currency,
     difficulty: readDifficulty(state),
@@ -674,6 +688,9 @@ function buildSettlement(state, currency, result) {
     kills: cleanNumber(state.kills),
     wave: cleanNumber(state.wave)
   };
+  if (extra && Number.isFinite(extra.stars) && extra.stars > 0) out.stars = extra.stars;
+  if (extra && Number.isFinite(extra.firstClearBonus) && extra.firstClearBonus > 0) out.firstClearBonus = extra.firstClearBonus;
+  return out;
 }
 
 function earnedCurrency(state, result) {
@@ -684,6 +701,15 @@ function earnedCurrency(state, result) {
   const snapshot = state.profileSnapshot;
   const rewardFraction = isProfile(snapshot) ? getProfileBonuses(snapshot).reward : 0;
   return currencyFor(points, readDifficulty(state), rewardFraction);
+}
+
+function stageFirstClearBonus(profile, state, result) {
+  if (result !== 'victory') return 0;
+  const id = typeof state.expedition === 'string' ? state.expedition : '';
+  const spec = EXPEDITIONS[id];
+  if (!spec || !Number.isFinite(spec.firstClearBonus) || spec.firstClearBonus <= 0) return 0;
+  const prevClears = Number(profile?.expeditions?.[id]?.clears) || 0;
+  return prevClears === 0 ? spec.firstClearBonus : 0;
 }
 
 export function settleRun(profile, state) {
@@ -719,8 +745,10 @@ export function settleRun(profile, state) {
     return restored;
   }
   const result = resolveResult(state);
-  const amount = payableAmount(profile, earnedCurrency(state, result));
-  const settlement = Object.freeze(buildSettlement(state, amount, result));
+  const firstClearBonus = stageFirstClearBonus(profile, state, result);
+  const stars = result === 'victory' ? victoryStars(state) : 0;
+  const amount = payableAmount(profile, earnedCurrency(state, result) + firstClearBonus);
+  const settlement = Object.freeze(buildSettlement(state, amount, result, {stars, firstClearBonus}));
   state.settlement = settlement;
   addCurrency(profile, amount);
   remember(profile, settlement);

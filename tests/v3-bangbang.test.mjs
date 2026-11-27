@@ -160,7 +160,7 @@ test('Opening Airdrop Gem and Aegis Wall Immunity Gem work in live battle', () =
   assert.equal(buyGem(profile, 'gem_aegis_wall').ok, true);
   assert.equal(buyGem(profile, 'gem_overdrive').ok, true);
 
-  const state = createEngineRun({ seed: 17, difficulty: 'normal', expedition: 'frenzy', profile, runId: 'v3-gems-live' });
+  const state = createEngineRun({ seed: 17, difficulty: 'normal', expedition: 'stage_1', profile, runId: 'v3-gems-live' });
   assert.equal(state.wallImmunity, 5);
   assert.equal(state.openingDraftPending, 1);
   assert.equal(state.energy, undefined);
@@ -212,7 +212,7 @@ test('Elemental Surge Gem and HP Shredder Gem boost combat damage cleanly', () =
 });
 
 test('All 6 v3 BangBang Hero evolutions trigger automatically in combat', () => {
-  const state = createEngineRun({ seed: 42, difficulty: 'normal', expedition: 'frenzy', runId: 'v3-arsenal' });
+  const state = createEngineRun({ seed: 42, difficulty: 'normal', expedition: 'stage_1', runId: 'v3-arsenal' });
   const fenceStart = state.fence.maxHp;
   for (const id of ['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']) {
     assert.equal(applyHeroUpgrade(state, id).ok, true, `apply ${id}`);
@@ -266,7 +266,7 @@ test('v3 gems, starterClaimed, and arsenal state survive save export/import roun
   const profile = createProfile('zh');
   claimStarterPack(profile);
   buyGem(profile, 'gem_aegis_wall');
-  const run = createEngineRun({ seed: 99, difficulty: 'normal', expedition: 'frenzy', profile, runId: 'v3-save' });
+  const run = createEngineRun({ seed: 99, difficulty: 'normal', expedition: 'stage_1', profile, runId: 'v3-save' });
   applyHeroUpgrade(run, 'napalm');
   applyHeroUpgrade(run, 'armored_car');
 
@@ -281,7 +281,7 @@ test('v3 gems, starterClaimed, and arsenal state survive save export/import roun
   assert.equal(loaded.ok, true, loaded.reason);
   assert.equal(loaded.profile.starterClaimed, true);
   assert.deepEqual(loaded.profile.gemsEquipped, ['gem_opening_drop', 'gem_aegis_wall']);
-  assert.equal(loaded.run.expedition, 'frenzy');
+  assert.equal(loaded.run.expedition, 'stage_1');
   assert.equal(loaded.run.wallImmunity, 5);
   assert.equal(loaded.run.openingDraftPending, 1);
   assert.ok(loaded.run.arsenal && typeof loaded.run.arsenal.timers === 'object');

@@ -503,98 +503,296 @@ textarea {
 
 .m-resume-head h2 { font-size: 1.02rem; }
 
-/* Horizontal Snap-Scroll Sortie Strip */
-.m-sortie-strip {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-  margin: 0 -2px;
-  padding-inline: 2px;
-}
-
-.m-sortie-strip::-webkit-scrollbar { display: none; }
-
-.m-sortie-chip {
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 104px;
-  min-height: 50px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  text-align: left;
-}
-
-.m-sortie-chip.is-featured {
-  border-color: rgba(242, 200, 100, 0.42);
-}
-
-.m-sortie-chip.is-active {
-  background: linear-gradient(180deg, rgba(66, 52, 20, 0.92) 0%, rgba(36, 30, 16, 0.96) 100%);
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(242, 200, 100, 0.4);
-}
-
-.m-sortie-name { font-size: 0.86rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
-.m-sortie-meta { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.m-sortie-chip.is-active .m-sortie-meta { color: #f6db8d; }
-
-/* Selected Sortie Spotlight */
-.m-spotlight {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(9, 16, 21, 0.56);
-  border: 1px solid rgba(132, 174, 188, 0.16);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.m-spotlight-top {
+/* =========================================================================
+   20-STAGE CAMPAIGN CARD ("向僵尸开炮" Style)
+   ========================================================================= */
+.m-stage-prog-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.m-stage-chap-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.m-stage-chap {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.m-stage-prog-pill {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.m-stage-grid-toggle {
+  flex: 0 0 auto;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: var(--surface-1);
+}
+
+.m-stage-grid-toggle.is-active {
+  background: rgba(74, 56, 20, 0.88);
+  border-color: var(--gold);
+  color: #ffeaad;
+}
+
+/* Main Stage Switcher [ ‹  第 1 关 · 灰烬前哨  › ] */
+.m-stage-switcher {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.m-stage-arrow {
+  width: 44px;
+  min-width: 44px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 1.45rem;
+  line-height: 1;
+  background: var(--surface-1);
+}
+
+.m-stage-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.m-stage-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.m-spotlight-top h2 { font-size: 1.06rem; margin-right: auto; }
-.m-spotlight-focus { font-size: 0.82rem; font-weight: 600; color: var(--cyan); }
-.m-spotlight p.muted { font-size: 0.8rem; }
+.m-stage-title-row h2 {
+  font-size: 1.06rem;
+  letter-spacing: 0.01em;
+}
 
-/* Difficulty Segmented Bar */
-.m-diff-bar {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.m-stage-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.m-diff-pill {
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  min-height: 46px;
-  padding: 6px 4px;
-  border-radius: 10px;
-  background: var(--surface-1);
+.m-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.92rem;
+  line-height: 1;
 }
 
-.m-diff-pill strong { font-size: 0.82rem; white-space: nowrap; }
-.m-diff-pill small { font-size: 0.7rem; font-variant-numeric: tabular-nums; }
-.m-diff-pill.is-active {
-  background: rgba(74, 56, 20, 0.88);
-  border-color: var(--gold);
+.m-star { color: rgba(154, 178, 186, 0.28); }
+.m-star.is-lit { color: #ffd45c; text-shadow: 0 0 8px rgba(255, 212, 92, 0.55); }
+
+.m-result-stars {
+  font-size: 1.55rem;
+  gap: 6px;
+  margin: 2px 0;
 }
-.m-diff-pill.is-active strong { color: #ffeaad; }
-.m-diff-pill.is-active small { color: var(--gold); }
+
+.m-boss-badge {
+  background: rgba(180, 48, 42, 0.28);
+  border-color: rgba(242, 114, 102, 0.65);
+  color: #ffc5be;
+}
+
+.m-bonus-badge {
+  background: rgba(74, 52, 16, 0.85);
+  border-color: rgba(242, 200, 100, 0.58);
+  color: #ffe9a8;
+}
+
+/* Stage Spotlight Preview + Enemy Icons */
+.m-spotlight {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(9, 16, 21, 0.62);
+  border: 1px solid rgba(132, 174, 188, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.m-spotlight.is-boss {
+  border-color: rgba(242, 114, 102, 0.42);
+  background: linear-gradient(180deg, rgba(46, 20, 22, 0.55) 0%, rgba(12, 20, 26, 0.7) 100%);
+}
+
+.m-spotlight.is-locked {
+  opacity: 0.8;
+}
+
+.m-spotlight-focus { font-size: 0.82rem; font-weight: 700; color: var(--cyan); }
+.m-spotlight p.muted { font-size: 0.78rem; line-height: 1.38; }
+
+.m-threat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.m-threat-lbl {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.m-threat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.m-threat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 9px;
+  background: rgba(18, 32, 40, 0.9);
+  border: 1px solid rgba(132, 174, 188, 0.22);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.m-threat-chip.is-boss {
+  border-color: rgba(242, 114, 102, 0.52);
+  color: #ffd0ca;
+}
+
+.m-threat-chip .catalog-icon {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  border-radius: 6px;
+}
+
+/* Horizontal 1-20 Quick Strip */
+.m-stage-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding: 2px 1px 3px;
+}
+
+.m-stage-strip::-webkit-scrollbar { display: none; }
+
+.m-stage-pill,
+.m-stage-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 46px;
+  padding: 5px 4px;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+}
+
+.m-stage-pill {
+  flex: 0 0 auto;
+  min-width: 48px;
+  scroll-snap-align: start;
+}
+
+/* Expanded 5x4 All-20-Stages Grid */
+.m-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.m-stage-num {
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-stage-cell-meta {
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffd45c;
+  letter-spacing: -0.02em;
+}
+
+.m-stage-pill.is-boss,
+.m-stage-cell.is-boss {
+  border-color: rgba(242, 114, 102, 0.42);
+}
+
+.m-stage-pill.is-frontier,
+.m-stage-cell.is-frontier {
+  border-color: rgba(95, 212, 142, 0.55);
+}
+
+.m-stage-pill.is-active,
+.m-stage-cell.is-active {
+  background: linear-gradient(180deg, rgba(74, 56, 20, 0.96) 0%, rgba(38, 30, 15, 0.98) 100%);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(242, 200, 100, 0.45);
+}
+
+.m-stage-pill.is-active .m-stage-num,
+.m-stage-cell.is-active .m-stage-num {
+  color: #fff0b8;
+}
+
+.m-stage-pill.is-locked,
+.m-stage-cell.is-locked {
+  opacity: 0.52;
+  background: rgba(14, 23, 29, 0.72);
+}
+
+.m-stage-pill.is-locked .m-stage-cell-meta,
+.m-stage-cell.is-locked .m-stage-cell-meta {
+  color: var(--muted);
+}
+
+.m-cta-btn.is-locked {
+  background: var(--surface-1);
+  color: var(--muted);
+  border-color: var(--line);
+  box-shadow: none;
+}
 
 /* Quick Loadout Link Strip */
 .m-loadout-strip {
@@ -972,6 +1170,22 @@ textarea {
 .hud-surge-chip.is-active {
   border-color: var(--gold);
   color: #fff6cf;
+}
+
+.hud-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(54, 40, 14, 0.9);
+  border: 1px solid rgba(242, 200, 100, 0.55);
+  color: #ffeaad;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .wave-pill {

@@ -10,6 +10,7 @@
  */
 import {HERO_UPGRADES, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
 import {TOWERS, RANK_SCALE} from '../data/towers.js';
+import {EXPEDITIONS} from '../data/expeditions.js';
 import {AUTO_DEPLOY_ORDER, BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
 
 const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
@@ -97,7 +98,8 @@ export function updateDrafts(state) {
     state.xp = normalizeXp(state.xp - cost);
     const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
     state.draftLevel = opened + 1;
-    const pace = state.expedition === 'frenzy' ? 0.55 : state.expedition === 'watch' ? 1 : 0.75;
+    const stagePace = EXPEDITIONS[state.expedition]?.xpPace;
+    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.6);
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;

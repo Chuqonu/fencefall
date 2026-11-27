@@ -9,7 +9,21 @@
 import {CONTRACT_VERSION, DIFFICULTIES} from '../shared.js';
 import {TOWERS} from '../data/towers.js';
 import {ENEMIES} from '../data/enemies.js';
-import {EXPEDITIONS, EXPEDITION_ORDER} from '../data/expeditions.js';
+import {
+  CHAPTERS,
+  EXPEDITIONS,
+  STAGE_ORDER,
+  STAGES,
+  TOTAL_STAGES,
+  highestClearedStage,
+  highestUnlockedStage,
+  isStageUnlocked,
+  nextStageId,
+  stageClearRecord,
+  stageIdFor,
+  stageNumber,
+  totalStarsEarned
+} from '../data/expeditions.js';
 import {HERO_UPGRADES} from '../systems/hero.js';
 import {
   EQUIPMENT,
@@ -24,10 +38,8 @@ import {formatDuration, formatNumber, localize, t as translate} from '../i18n.js
 import {catalogIcon, navIcon} from './icons.js';
 
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
-const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality', 'economy'];
-const SORTIE_DISPLAY_ORDER = ['frenzy', 'watch', ...EXPEDITION_ORDER.filter((id) => id !== 'frenzy' && id !== 'watch')];
 const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 const local = {
@@ -35,8 +47,8 @@ const local = {
   armoryTab: 'gems',
   codexTab: 'towers',
   confirmAbandon: false,
-  difficulty: null,
-  expedition: null,
+  stageNum: null,
+  showStageGrid: false,
   importText: '',
   exportText: '',
   flash: null,
@@ -170,15 +182,37 @@ function starterPackCard(ctx) {
 }
 
 // =========================================================================
-// 1. HOME / BATTLE LOBBY
+// 1. HOME / 20-STAGE CAMPAIGN LOBBY ("向僵尸开炮" Style)
 // =========================================================================
+function starRow(doc, earned, max = 3, className = 'm-stars') {
+  const wrap = h(doc, 'span', {className, 'aria-label': `${earned}/${max}`});
+  for (let i = 1; i <= max; i += 1) {
+    wrap.append(h(doc, 'span', {className: `m-star${i <= earned ? ' is-lit' : ''}`, text: '★'}));
+  }
+  return wrap;
+}
+
+function chapterFor(stageNum) {
+  return CHAPTERS.find((c) => stageNum >= c.range[0] && stageNum <= c.range[1]) || CHAPTERS[0];
+}
+
 function renderMenu(ctx, root) {
   const {doc, api, lang, run, profile} = ctx;
   const live = Boolean(run && run.phase !== 'victory' && run.phase !== 'defeat');
-  const currentExp = local.expedition || profile.settings?.expedition || 'frenzy';
-  const expId = EXPEDITIONS[currentExp] ? currentExp : 'frenzy';
-  const currentDiff = local.difficulty || profile.settings?.difficulty || 'normal';
-  const diffId = DIFFICULTIES[currentDiff] ? currentDiff : 'normal';
+  const unlockedMax = highestUnlockedStage(profile);
+  const clearedCount = highestClearedStage(profile);
+  const starsTotal = totalStarsEarned(profile);
+
+  const savedStage = stageNumber(profile.settings?.expedition);
+  const rawStage = local.stageNum != null
+    ? local.stageNum
+    : (savedStage > 0 && savedStage <= unlockedMax ? savedStage : unlockedMax);
+  const stageNum = Math.max(1, Math.min(TOTAL_STAGES, rawStage));
+  const stageId = stageIdFor(stageNum);
+  const stage = STAGES[stageId];
+  const unlocked = isStageUnlocked(profile, stageId);
+  const rec = stageClearRecord(profile, stageId);
+  const chapter = chapterFor(stageNum);
 
   const stack = h(doc, 'div', {className: 'm-stack', 'data-testid': 'meta-menu'});
 
@@ -194,7 +228,7 @@ function renderMenu(ctx, root) {
     resumeCard.append(
       h(doc, 'div', {className: 'm-resume-head'}, [
         h(doc, 'div', {}, [
-          h(doc, 'span', {className: 'm-eyebrow', text: lang === 'zh' ? '进行中的防线' : 'ACTIVE BATTLE'}),
+          h(doc, 'span', {className: 'm-eyebrow', text: lang === 'zh' ? '进行中的关卡' : 'ACTIVE STAGE'}),
           h(doc, 'h2', {text: `${expName} · ${tr(api, lang, 'waveNumber', {wave: run.wave || 0})}`})
         ]),
         h(doc, 'span', {className: 'badge', text: `${tr(api, lang, 'fence')} ${hpPct}%`})
@@ -235,79 +269,173 @@ function renderMenu(ctx, root) {
   const starter = starterPackCard(ctx);
   if (starter) stack.append(starter);
 
-  // Mission Deploy Hero Card
+  // =========================================================================
+  // 20-STAGE CAMPAIGN HERO CARD
+  // =========================================================================
   const deployCard = h(doc, 'section', {className: 'm-card m-deploy-card', 'data-testid': 'deploy-card'});
-  const selectedSortie = EXPEDITIONS[expId];
-  const clearRec = profile.expeditions?.[expId];
 
-  // Horizontal snap-scroll Sortie strip
-  const sortieStrip = h(doc, 'div', {className: 'm-sortie-strip', role: 'listbox', 'aria-label': tr(api, lang, 'selectMission'), 'data-testid': 'sortie-strip'});
-  for (const id of SORTIE_DISPLAY_ORDER) {
-    const item = EXPEDITIONS[id];
-    if (!item) continue;
-    const isSel = id === expId;
-    const cleared = Number(profile.expeditions?.[id]?.clears) > 0;
-    const chip = btn(ctx, {
-      testid: `sortie-${id}`,
-      className: `m-sortie-chip${isSel ? ' is-active' : ''}${id === 'frenzy' ? ' is-featured' : ''}`,
-      pressed: isSel,
-      'data-expedition': id,
-    }, [
-      h(doc, 'span', {className: 'm-sortie-name', text: loc(item.name, lang)}),
-      h(doc, 'span', {className: 'm-sortie-meta', text: `${item.minutes}m${cleared ? ' ✓' : ''}`})
-    ]);
-    chip.addEventListener('click', () => {
-      local.expedition = id;
+  // Top progress header: Chapter + Cleared/Stars + Toggle All 20 Stages Grid
+  const progHead = h(doc, 'div', {className: 'm-stage-prog-head'});
+  const chapMeta = h(doc, 'div', {className: 'm-stage-chap-meta'}, [
+    h(doc, 'span', {className: 'm-stage-chap', text: loc(chapter.name, lang)}),
+    h(doc, 'span', {
+      className: 'm-stage-prog-pill',
+      'data-testid': 'campaign-progress',
+      text: `${tr(api, lang, 'clearedOfTotal', {cleared: clearedCount, total: TOTAL_STAGES})} · ★ ${starsTotal}/${TOTAL_STAGES * 3}`
+    })
+  ]);
+  const gridToggle = btn(ctx, {
+    testid: 'btn-toggle-stage-grid',
+    className: `m-stage-grid-toggle${local.showStageGrid ? ' is-active' : ''}`,
+    label: local.showStageGrid ? tr(api, lang, 'hideStages') : tr(api, lang, 'allStages'),
+    pressed: local.showStageGrid
+  });
+  gridToggle.addEventListener('click', () => {
+    local.showStageGrid = !local.showStageGrid;
+    ctx.rerender();
+  });
+  progHead.append(chapMeta, gridToggle);
+
+  // Signature Left / Stage Title / Right Switcher
+  const switcher = h(doc, 'div', {className: 'm-stage-switcher', 'data-testid': 'stage-switcher'});
+  const prevBtn = btn(ctx, {
+    testid: 'btn-stage-prev',
+    className: 'm-stage-arrow',
+    label: '‹',
+    disabled: stageNum <= 1,
+    'aria-label': tr(api, lang, 'prevStageAria')
+  });
+  prevBtn.addEventListener('click', () => {
+    if (stageNum > 1) {
+      local.stageNum = stageNum - 1;
       ctx.rerender();
-    });
-    sortieStrip.append(chip);
-  }
+    }
+  });
 
-  // Selected Sortie Spotlight
-  const spotlight = h(doc, 'div', {className: 'm-spotlight', 'data-testid': 'sortie-spotlight'}, [
-    h(doc, 'div', {className: 'm-spotlight-top'}, [
-      h(doc, 'h2', {text: loc(selectedSortie.name, lang)}),
-      h(doc, 'span', {className: 'badge', text: `${selectedSortie.minutes} ${lang === 'zh' ? '分钟' : 'min'}`}),
-      clearRec?.clears > 0 ? h(doc, 'span', {className: 'badge is-ok', text: `${lang === 'zh' ? '已通关' : 'Cleared'} ×${clearRec.clears}`}) : null
+  const stageTitleBox = h(doc, 'div', {className: 'm-stage-center'}, [
+    h(doc, 'div', {className: 'm-stage-title-row'}, [
+      h(doc, 'h2', {'data-testid': 'stage-title', text: loc(stage.name, lang)}),
+      stage.boss ? h(doc, 'span', {className: 'badge m-boss-badge', text: tr(api, lang, 'bossBadge')}) : null
     ]),
-    h(doc, 'p', {className: 'm-spotlight-focus', text: loc(selectedSortie.focus, lang)}),
-    h(doc, 'p', {className: 'muted', text: loc(selectedSortie.summary, lang)})
+    h(doc, 'div', {className: 'm-stage-sub-row'}, [
+      starRow(doc, rec.stars, 3, 'm-stars'),
+      rec.clears > 0
+        ? h(doc, 'span', {className: 'badge is-ok', text: tr(api, lang, 'firstClearClaimed')})
+        : h(doc, 'span', {className: 'badge m-bonus-badge', 'data-testid': 'first-clear-badge', text: tr(api, lang, 'firstClearBonus', {amount: stage.firstClearBonus})})
+    ])
   ]);
 
-  // 4-Pill Difficulty Segmented Selector
-  const diffBar = h(doc, 'div', {className: 'm-diff-bar', role: 'group', 'aria-label': tr(api, lang, 'difficulty'), 'data-testid': 'difficulty-bar'});
-  for (const id of DIFFICULTY_ORDER) {
-    const spec = DIFFICULTIES[id];
-    const active = id === diffId;
-    const dBtn = btn(ctx, {
-      testid: `difficulty-${id}`,
-      className: `m-diff-pill${active ? ' is-active' : ''}`,
-      pressed: active,
-      'data-difficulty': id,
-    }, [
-      h(doc, 'strong', {text: loc(spec.name, lang)}),
-      h(doc, 'small', {text: `×${spec.reward}`})
-    ]);
-    dBtn.addEventListener('click', () => {
-      local.difficulty = id;
+  const nextBtn = btn(ctx, {
+    testid: 'btn-stage-next',
+    className: 'm-stage-arrow',
+    label: '›',
+    disabled: stageNum >= TOTAL_STAGES,
+    'aria-label': tr(api, lang, 'nextStageAria')
+  });
+  nextBtn.addEventListener('click', () => {
+    if (stageNum < TOTAL_STAGES) {
+      local.stageNum = stageNum + 1;
       ctx.rerender();
-    });
-    diffBar.append(dBtn);
+    }
+  });
+  switcher.append(prevBtn, stageTitleBox, nextBtn);
+
+  // Stage Spotlight Preview (tactical focus + featured enemy icons)
+  const preview = h(doc, 'div', {className: `m-spotlight${stage.boss ? ' is-boss' : ''}${!unlocked ? ' is-locked' : ''}`, 'data-testid': 'stage-preview'});
+  preview.append(
+    h(doc, 'p', {className: 'm-spotlight-focus', text: loc(stage.focus, lang)}),
+    h(doc, 'p', {className: 'muted', text: loc(stage.summary, lang)})
+  );
+
+  // Featured Zombies Icons Row
+  const threatRow = h(doc, 'div', {className: 'm-threat-row', 'data-testid': 'stage-enemies'});
+  threatRow.append(h(doc, 'span', {className: 'm-threat-lbl', text: tr(api, lang, 'featuredEnemies')}));
+  const threatPills = h(doc, 'div', {className: 'm-threat-pills'});
+  for (const kind of stage.enemies) {
+    const enemySpec = ENEMIES[kind];
+    if (!enemySpec) continue;
+    threatPills.append(h(doc, 'span', {className: `m-threat-chip${kind === 'boss' ? ' is-boss' : ''}`}, [
+      catalogIcon(doc, kind),
+      h(doc, 'span', {text: loc(enemySpec.name, lang)})
+    ]));
+  }
+  threatRow.append(threatPills);
+  preview.append(threatRow);
+
+  // Stage Selector: Compact 1-20 Strip OR Expanded 5x4 All-20 Grid
+  let stagePicker;
+  if (local.showStageGrid) {
+    stagePicker = h(doc, 'div', {className: 'm-stage-grid', role: 'listbox', 'aria-label': tr(api, lang, 'allStages'), 'data-testid': 'stage-grid'});
+    for (const id of STAGE_ORDER) {
+      const s = STAGES[id];
+      const sUnlocked = isStageUnlocked(profile, id);
+      const sRec = stageClearRecord(profile, id);
+      const isSel = s.stage === stageNum;
+      const isFrontier = s.stage === unlockedMax && sRec.clears === 0;
+      const cell = btn(ctx, {
+        testid: `stage-cell-${s.stage}`,
+        className: `m-stage-cell${isSel ? ' is-active' : ''}${s.boss ? ' is-boss' : ''}${!sUnlocked ? ' is-locked' : ''}${isFrontier ? ' is-frontier' : ''}`,
+        pressed: isSel,
+        'data-stage': String(s.stage)
+      }, [
+        h(doc, 'strong', {className: 'm-stage-num', text: String(s.stage)}),
+        h(doc, 'span', {
+          className: 'm-stage-cell-meta',
+          text: !sUnlocked ? '🔒' : (sRec.stars > 0 ? '★'.repeat(sRec.stars) : (s.boss ? 'BOSS' : 'NEW'))
+        })
+      ]);
+      cell.addEventListener('click', () => {
+        local.stageNum = s.stage;
+        ctx.rerender();
+      });
+      stagePicker.append(cell);
+    }
+  } else {
+    stagePicker = h(doc, 'div', {className: 'm-stage-strip', role: 'listbox', 'aria-label': tr(api, lang, 'allStages'), 'data-testid': 'stage-strip'});
+    for (const id of STAGE_ORDER) {
+      const s = STAGES[id];
+      const sUnlocked = isStageUnlocked(profile, id);
+      const sRec = stageClearRecord(profile, id);
+      const isSel = s.stage === stageNum;
+      const isFrontier = s.stage === unlockedMax && sRec.clears === 0;
+      const pill = btn(ctx, {
+        testid: `stage-pill-${s.stage}`,
+        className: `m-stage-pill${isSel ? ' is-active' : ''}${s.boss ? ' is-boss' : ''}${!sUnlocked ? ' is-locked' : ''}${isFrontier ? ' is-frontier' : ''}`,
+        pressed: isSel,
+        'data-stage': String(s.stage)
+      }, [
+        h(doc, 'strong', {className: 'm-stage-num', text: String(s.stage)}),
+        h(doc, 'span', {
+          className: 'm-stage-cell-meta',
+          text: !sUnlocked ? '🔒' : (sRec.stars > 0 ? '★'.repeat(sRec.stars) : (s.boss ? '👑' : '●'))
+        })
+      ]);
+      pill.addEventListener('click', () => {
+        local.stageNum = s.stage;
+        ctx.rerender();
+      });
+      stagePicker.append(pill);
+    }
   }
 
   // Big Thumb-Zone Primary Deploy CTA
   const startBtn = btn(ctx, {
     action: 'start',
     testid: 'btn-start',
-    primary: true,
-    className: 'm-cta-btn',
-    label: `${tr(api, lang, 'deployNow')} · ${loc(selectedSortie.name, lang)}`
+    primary: unlocked,
+    disabled: !unlocked,
+    className: `m-cta-btn${!unlocked ? ' is-locked' : ''}`,
+    label: unlocked
+      ? tr(api, lang, 'playStage', {n: stageNum})
+      : `🔒 ${tr(api, lang, 'stageLocked', {prev: stageNum - 1})}`
   });
-  startBtn.addEventListener('click', () => {
-    act(ctx, 'start', {difficulty: diffId, expedition: expId});
-  });
+  if (unlocked) {
+    startBtn.addEventListener('click', () => {
+      act(ctx, 'start', {difficulty: 'normal', expedition: stageId});
+    });
+  }
 
-  deployCard.append(sortieStrip, spotlight, diffBar, startBtn);
+  deployCard.append(progHead, switcher, preview, stagePicker, startBtn);
   stack.append(deployCard);
 
   // Equipped Gems Quick Preview Strip (tap jumps straight to Armory!)
@@ -324,18 +452,6 @@ function renderMenu(ctx, root) {
   );
   gemStrip.addEventListener('click', () => act(ctx, 'screen', {name: 'armory'}));
   stack.append(gemStrip);
-
-  // Best record summary if any
-  const bestEntries = Object.entries(profile.best || {}).filter(([, r]) => r && (r.kills > 0 || r.victories > 0));
-  if (bestEntries.length) {
-    const topRec = bestEntries.sort((a, b) => (b[1].kills || 0) - (a[1].kills || 0))[0];
-    const [dKey, rec] = topRec;
-    const bestCard = h(doc, 'section', {className: 'm-best-bar', 'data-testid': 'best-record'}, [
-      h(doc, 'span', {className: 'muted', text: `${lang === 'zh' ? '最佳战绩' : 'Best'} (${loc(DIFFICULTIES[dKey]?.name, lang) || dKey})`}),
-      h(doc, 'strong', {text: `${tr(api, lang, 'waveNumber', {wave: rec.wave || 0})} · ${tr(api, lang, 'kills')} ${num(rec.kills || 0, lang)} · ${lang === 'zh' ? '胜' : 'W'} ${rec.victories || 0}`})
-    ]);
-    stack.append(bestCard);
-  }
 
   root.append(stack);
 }
@@ -801,24 +917,38 @@ function renderSettings(ctx, root) {
 }
 
 // =========================================================================
-// 5. RESULTS OVERLAY SCREEN
+// 5. RESULTS OVERLAY SCREEN (Stars + First-Clear Bonus + 1-Tap Next Stage)
 // =========================================================================
 function renderResults(ctx, root) {
   const {doc, api, lang, run, profile} = ctx;
   const settlement = run?.settlement || null;
   const outcome = settlement?.result || (run?.phase === 'victory' || run?.phase === 'defeat' ? run.phase : 'defeat');
   const isWin = outcome === 'victory';
+  const curStageNum = stageNumber(run?.expedition);
+  const nextId = isWin ? nextStageId(run?.expedition) : null;
+  const nextNum = nextId ? stageNumber(nextId) : 0;
+  const earnedStars = isWin
+    ? (Number.isFinite(settlement?.stars) ? settlement.stars : (run?.fence?.hp >= run?.fence?.maxHp * 0.999 ? 3 : run?.fence?.hp >= run?.fence?.maxHp * 0.5 ? 2 : 1))
+    : 0;
+  const firstBonus = Number.isFinite(settlement?.firstClearBonus) ? settlement.firstClearBonus : 0;
 
   const stack = h(doc, 'div', {className: 'm-stack', 'data-testid': 'meta-results'});
   const hero = h(doc, 'section', {className: `m-card m-result-hero${isWin ? ' is-victory' : ' is-defeat'}`});
   hero.append(
     h(doc, 'span', {className: 'm-eyebrow', text: loc(EXPEDITIONS[run?.expedition]?.name, lang) || tr(api, lang, 'title')}),
     h(doc, 'h2', {'data-testid': 'result-outcome', text: isWin ? tr(api, lang, 'victory') : tr(api, lang, 'defeat')}),
+    isWin ? starRow(doc, earnedStars, 3, 'm-stars m-result-stars') : null,
+    isWin && curStageNum === TOTAL_STAGES
+      ? h(doc, 'span', {className: 'badge m-bonus-badge', text: tr(api, lang, 'campaignCleared')})
+      : null,
     settlement && Number.isFinite(settlement.currency)
       ? h(doc, 'div', {className: 'm-result-payout', 'data-testid': 'result-currency'}, [
           navIcon(doc, 'coin', 20),
           h(doc, 'strong', {text: `+${num(settlement.currency, lang)}`}),
-          h(doc, 'span', {text: tr(api, lang, 'currency')})
+          h(doc, 'span', {text: tr(api, lang, 'currency')}),
+          firstBonus > 0
+            ? h(doc, 'span', {className: 'badge m-bonus-badge', text: tr(api, lang, 'firstClearBonus', {amount: firstBonus})})
+            : null
         ])
       : null
   );
@@ -849,9 +979,39 @@ function renderResults(ctx, root) {
   }
 
   const actions = h(doc, 'div', {className: 'm-stack'});
-  const replayBtn = btn(ctx, {action: 'restart', testid: 'btn-replay', label: tr(api, lang, 'restart'), primary: true, className: 'm-cta-btn'});
-  replayBtn.addEventListener('click', () => act(ctx, 'restart'));
-  actions.append(replayBtn);
+  if (isWin && nextId) {
+    const nextStageBtn = btn(ctx, {
+      action: 'start',
+      testid: 'btn-next-stage',
+      label: tr(api, lang, 'nextStageBtn', {n: nextNum}),
+      primary: true,
+      className: 'm-cta-btn'
+    });
+    nextStageBtn.addEventListener('click', () => {
+      local.stageNum = nextNum;
+      act(ctx, 'start', {difficulty: 'normal', expedition: nextId});
+    });
+    actions.append(nextStageBtn);
+
+    const replayBtn = btn(ctx, {
+      action: 'restart',
+      testid: 'btn-replay',
+      label: curStageNum > 0 ? tr(api, lang, 'retryStage', {n: curStageNum}) : tr(api, lang, 'restart'),
+      className: 'm-full-btn'
+    });
+    replayBtn.addEventListener('click', () => act(ctx, 'restart'));
+    actions.append(replayBtn);
+  } else {
+    const replayBtn = btn(ctx, {
+      action: 'restart',
+      testid: 'btn-replay',
+      label: curStageNum > 0 ? tr(api, lang, 'retryStage', {n: curStageNum}) : tr(api, lang, 'restart'),
+      primary: true,
+      className: 'm-cta-btn'
+    });
+    replayBtn.addEventListener('click', () => act(ctx, 'restart'));
+    actions.append(replayBtn);
+  }
 
   if (isWin && run?.phase === 'victory' && !run.endless) {
     const endlessBtn = btn(ctx, {action: 'endless', testid: 'btn-endless', label: tr(api, lang, 'endlessEnter'), className: 'm-full-btn'});
@@ -863,7 +1023,10 @@ function renderResults(ctx, root) {
   const armoryBtn = btn(ctx, {testid: 'btn-results-armory', label: tr(api, lang, 'armory')});
   armoryBtn.addEventListener('click', () => act(ctx, 'screen', {name: 'armory'}));
   const menuBtn = btn(ctx, {testid: 'btn-results-menu', label: tr(api, lang, 'tabBattle')});
-  menuBtn.addEventListener('click', () => act(ctx, 'screen', {name: 'menu'}));
+  menuBtn.addEventListener('click', () => {
+    if (isWin && nextNum > 0) local.stageNum = nextNum;
+    act(ctx, 'screen', {name: 'menu'});
+  });
   row.append(armoryBtn, menuBtn);
   actions.append(row);
 

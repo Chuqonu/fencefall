@@ -2,7 +2,7 @@ import {superweaponCooldown} from '../systems/combat.js';
 import {ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry} from '../shared.js';
 import {bossApproaching, getWaveInfo} from '../systems/waves.js';
 import {ENEMIES} from '../data/enemies.js';
-import {EXPEDITIONS} from '../data/expeditions.js';
+import {EXPEDITIONS, stageNumber} from '../data/expeditions.js';
 import {catalogIcon, navIcon} from './icons.js';
 import {formatNumber, localize} from '../i18n.js';
 
@@ -114,6 +114,7 @@ export function mountShell(root, api) {
   const aegisValue = el('strong', {class: 'hud-chip hud-aegis-chip', 'data-testid': 'hud-wall-immunity', hidden: true});
   const surgeValue = el('strong', {class: 'hud-chip hud-surge-chip', 'data-testid': 'hud-surge', hidden: true});
 
+  const stageChip = el('span', {class: 'hud-stage-pill', 'data-testid': 'hud-stage', hidden: true});
   const waveLabel = el('span', {class: 'stat-label'});
   const waveValue = el('strong', {class: 'stat-value', 'data-testid': 'hud-wave-value'});
   const waveProgress = el('small', {'data-testid': 'hud-wave-progress'});
@@ -127,7 +128,7 @@ export function mountShell(root, api) {
   const difficulty = el('span', {class: 'badge hud-quiet', 'data-testid': 'hud-difficulty'});
 
   const topLeft = el('div', {class: 'hud-left'}, [fenceMeter, aegisValue, surgeValue]);
-  const topRight = el('div', {class: 'hud-right'}, [waveStat, phase]);
+  const topRight = el('div', {class: 'hud-right'}, [stageChip, waveStat, phase]);
   const hudTopRow = el('div', {class: 'hud-row-main'}, [topLeft, topRight]);
 
   const xpLabel = el('span', {class: 'xp-lv-pill', 'data-testid': 'hud-xp-level'});
@@ -574,6 +575,9 @@ export function mountShell(root, api) {
 
     const sortieName = runReady ? sortieLabel(state, language) : '';
     setText(sortie, sortieName);
+    const sNum = runReady ? stageNumber(state.expedition) : 0;
+    stageChip.hidden = sNum <= 0;
+    if (sNum > 0) setText(stageChip, language === 'zh' ? `第${sNum}关` : `S${sNum}`);
     setText(waveLabel, language === 'zh' ? '波' : 'W');
     setText(waveValue, runReady ? num(finite(state.wave, 0), language) : '—');
     setText(waveProgress, runReady ? `${Math.round((getWaveInfo(state).progress || 0) * 100)}%` : '');

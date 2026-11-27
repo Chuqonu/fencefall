@@ -823,7 +823,7 @@ function validateRun(state) {
     value.systems = systems;
   }
   if (state.expedition !== undefined) {
-    if (typeof state.expedition !== 'string' || state.expedition.length < 1 || state.expedition.length > 32 || !/^[a-z]+$/.test(state.expedition)) {
+    if (typeof state.expedition !== 'string' || state.expedition.length < 1 || state.expedition.length > 32 || !/^[a-z0-9_]+$/.test(state.expedition)) {
       return fail('invalid_run');
     }
     value.expedition = state.expedition;

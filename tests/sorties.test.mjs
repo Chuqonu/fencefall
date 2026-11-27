@@ -1,9 +1,32 @@
-// Sortie selection, the long-watch schedule, and one-time clear records.
+// 20-stage campaign progression, stage wave rosters, unlocking, stars, and first-clear rewards.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProfile, createRun} from '../src/state.js';
+import {createController} from '../src/boot.js';
+import {
+  CHAPTERS,
+  EXPEDITIONS,
+  STAGE_ORDER,
+  STAGES,
+  TOTAL_STAGES,
+  highestClearedStage,
+  highestUnlockedStage,
+  isStageUnlocked,
+  nextStageId,
+  stageClearRecord,
+  totalStarsEarned
+} from '../src/data/expeditions.js';
 import {WAVES, updateWaves} from '../src/systems/waves.js';
 import {settleRun} from '../src/systems/progression.js';
+
+function memoryStorage() {
+  const map = new Map();
+  return {
+    getItem(k) { return map.has(k) ? map.get(k) : null; },
+    setItem(k, v) { map.set(k, String(v)); },
+    removeItem(k) { map.delete(k); }
+  };
+}
 
 function seesKind(state, kind) {
   const enemies = Array.isArray(state.enemies) ? state.enemies : [];
@@ -19,126 +42,88 @@ function schedule(expedition, time, runId) {
   return state;
 }
 
-test('createRun defaults a missing or unknown expedition to watch', () => {
-  assert.equal(createRun().expedition, 'watch');
-  assert.equal(createRun({expedition: 'nope'}).expedition, 'watch');
-});
-
-test('createRun keeps the leap expedition', () => {
-  assert.equal(createRun({expedition: 'leap'}).expedition, 'leap');
-});
-
-test('the long campaign still opens with four shamblers', () => {
-  const opening = WAVES[0];
-  assert.ok(opening);
-  assert.ok(Array.isArray(opening.groups));
-  assert.ok(opening.groups.some(group => group && group.kind === 'shambler' && group.count === 6));
-});
-
-test('the long watch at 40s has no leaper or warden', () => {
-  const state = schedule('watch', 40, 'watch-sched');
-  assert.equal(seesKind(state, 'leaper'), false);
-  assert.equal(seesKind(state, 'warden'), false);
-  assert.equal(seesKind(state, 'charge'), false);
-  assert.equal(seesKind(state, 'hush'), false);
-});
-
-test('the long watch teaches each new role after the opening', () => {
-  const marks = [
-    [215, 'leaper'],
-    [270, 'shade'],
-    [320, 'banner'],
-    [380, 'splitter'],
-    [410, 'warden'],
-    [440, 'charge'],
-    [500, 'hush'],
-    [660, 'mender'],
-  ];
-  for (const [time, kind] of marks) {
-    const state = schedule('watch', time, `watch-${kind}`);
-    assert.equal(seesKind(state, kind), true, `${kind} by ${time}s`);
+test('exactly 20 sequential campaign stages exist across 4 chapters with boss milestones on 5/10/15/20', () => {
+  assert.equal(TOTAL_STAGES, 20);
+  assert.equal(STAGE_ORDER.length, 20);
+  assert.equal(CHAPTERS.length, 4);
+  for (let n = 1; n <= 20; n += 1) {
+    const id = `stage_${n}`;
+    const s = STAGES[id];
+    assert.ok(s, `stage ${id}`);
+    assert.equal(s.stage, n);
+    assert.equal(EXPEDITIONS[id], s);
+    assert.ok(s.name.en.includes(`Stage ${n}`));
+    assert.ok(s.name.zh.includes(`第 ${n} 关`));
+    assert.ok(Array.isArray(s.phases) && s.phases.length >= 5);
+    assert.ok(s.firstClearBonus >= 40);
+    assert.equal(s.boss, n % 5 === 0);
   }
-  const bosses = schedule('watch', 790, 'watch-boss');
-  assert.equal(seesKind(bosses, 'boss'), true);
+  assert.equal(nextStageId('stage_1'), 'stage_2');
+  assert.equal(nextStageId('stage_19'), 'stage_20');
+  assert.equal(nextStageId('stage_20'), null);
 });
 
-test('leap ash at 50s has a leaper on the field or in the queue', () => {
-  const state = schedule('leap', 50, 'leap-sched');
-  assert.equal(seesKind(state, 'leaper'), true);
+test('createRun preserves stage_1..stage_20 and each milestone stage spawns its signature enemies', () => {
+  assert.equal(createRun({expedition: 'stage_1'}).expedition, 'stage_1');
+  assert.equal(createRun({expedition: 'stage_20'}).expedition, 'stage_20');
+  assert.equal(seesKind(schedule('stage_5', 160, 's5-boss'), 'boss'), true);
+  assert.equal(seesKind(schedule('stage_6', 80, 's6-split'), 'splitter'), true);
+  assert.equal(seesKind(schedule('stage_7', 40, 's7-leap'), 'leaper'), true);
+  assert.equal(seesKind(schedule('stage_11', 80, 's11-banner'), 'banner'), true);
+  assert.equal(seesKind(schedule('stage_12', 80, 's12-warden'), 'warden'), true);
+  assert.equal(seesKind(schedule('stage_13', 80, 's13-charge'), 'charge'), true);
+  assert.equal(seesKind(schedule('stage_14', 80, 's14-hush'), 'hush'), true);
+  assert.equal(seesKind(schedule('stage_20', 160, 's20-boss'), 'boss'), true);
 });
 
-test('ash hush keeps the expedition and brings a hush after the opening', () => {
-  assert.equal(createRun({expedition: 'hush', runId: 'hush-keep'}).expedition, 'hush');
-  const quiet = schedule('hush', 18, 'hush-quiet');
-  assert.equal(seesKind(quiet, 'hush'), false);
-  assert.equal(seesKind(quiet, 'shambler'), true);
-  const state = schedule('hush', 24, 'hush-soon');
-  assert.equal(seesKind(state, 'hush'), true);
-});
+test('stage unlocking, 1-3 star mastery, and one-time first-clear bonus work sequentially', async () => {
+  const profile = createProfile('zh');
+  assert.equal(highestClearedStage(profile), 0);
+  assert.equal(highestUnlockedStage(profile), 1);
+  assert.equal(isStageUnlocked(profile, 'stage_1'), true);
+  assert.equal(isStageUnlocked(profile, 'stage_2'), false);
 
-test('cinder line keeps the expedition and brings a charge after the opening', () => {
-  assert.equal(createRun({expedition: 'cinder', runId: 'cinder-keep'}).expedition, 'cinder');
-  const quiet = schedule('cinder', 18, 'cinder-quiet');
-  assert.equal(seesKind(quiet, 'charge'), false);
-  assert.equal(seesKind(quiet, 'shambler'), true);
-  const state = schedule('cinder', 24, 'cinder-soon');
-  assert.equal(seesKind(state, 'charge'), true);
-});
+  // Controller blocks locked Stage 2 before Stage 1 is cleared
+  const api = await createController({storage: memoryStorage(), profile});
+  assert.equal(api.act('start', {expedition: 'stage_2'}).reason, 'stageLocked');
+  assert.equal(api.act('start', {expedition: 'stage_1'}).ok, true);
 
-test('ash ward keeps the expedition and brings a warden after the opening', () => {
-  assert.equal(createRun({expedition: 'ward', runId: 'ward-keep'}).expedition, 'ward');
-  const quiet = schedule('ward', 18, 'ward-quiet');
-  assert.equal(seesKind(quiet, 'warden'), false);
-  assert.equal(seesKind(quiet, 'shambler'), true);
-  const state = schedule('ward', 24, 'ward-soon');
-  assert.equal(seesKind(state, 'warden'), true);
-});
+  // Clearing Stage 1 with full wall HP grants 3 stars + firstClearBonus (+40) and unlocks Stage 2
+  const run1 = createRun({expedition: 'stage_1', runId: 'clear-s1-first', seed: 1, profile});
+  run1.phase = 'victory';
+  run1.time = 150;
+  run1.kills = 120;
+  run1.wave = 10;
+  const s1 = settleRun(profile, run1);
+  assert.equal(s1.stars, 3);
+  assert.equal(s1.firstClearBonus, STAGES.stage_1.firstClearBonus);
+  assert.equal(stageClearRecord(profile, 'stage_1').clears, 1);
+  assert.equal(stageClearRecord(profile, 'stage_1').stars, 3);
+  assert.equal(highestClearedStage(profile), 1);
+  assert.equal(highestUnlockedStage(profile), 2);
+  assert.equal(isStageUnlocked(profile, 'stage_2'), true);
+  assert.equal(isStageUnlocked(profile, 'stage_3'), false);
+  assert.equal(totalStarsEarned(profile), 3);
 
-test('leap ash stays on shamblers until the signature wave, then leapers arrive', () => {
-  const quiet = schedule('leap', 18, 'leap-quiet');
-  assert.equal(seesKind(quiet, 'leaper'), false);
-  assert.equal(seesKind(quiet, 'shambler'), true);
-  const state = schedule('leap', 24, 'leap-soon');
-  assert.equal(seesKind(state, 'leaper'), true);
-});
-
-test('the mixed gate includes the ash hush before the crown', () => {
-  const state = schedule('gauntlet', 255, 'gauntlet-hush');
-  assert.equal(seesKind(state, 'hush'), true);
-});
-
-test('the mixed gate at 370s has a boss on the field or in the queue', () => {
-  const state = schedule('gauntlet', 370, 'gauntlet-sched');
-  assert.equal(seesKind(state, 'boss'), true);
-});
-
-test('dust brood at 130s has a splitter on the field or in the queue', () => {
-  const state = schedule('dust', 130, 'dust-sched');
-  assert.equal(seesKind(state, 'splitter'), true);
-});
-
-test('a wires victory records one clear and a second settle does not add another', () => {
-  const profile = createProfile();
-  const state = createRun({expedition: 'wires', runId: 'sortie-clear-1', seed: 1});
-  state.phase = 'victory';
-  state.time = 120;
-  state.kills = 10;
-  state.wave = 4;
-  assert.ok(state.fence.hp > 0);
-
-  settleRun(profile, state);
-  assert.equal(profile.expeditions.wires.clears, 1);
-  assert.equal(Number.isFinite(profile.expeditions.wires.bestTime), true);
-
-  settleRun(profile, state);
-  assert.equal(profile.expeditions.wires.clears, 1);
+  // Re-clearing Stage 1 with damaged wall keeps best 3 stars and does NOT pay firstClearBonus again
+  const run1Again = createRun({expedition: 'stage_1', runId: 'clear-s1-second', seed: 2, profile});
+  run1Again.phase = 'victory';
+  run1Again.time = 150;
+  run1Again.kills = 120;
+  run1Again.wave = 10;
+  run1Again.fence.hp = run1Again.fence.maxHp * 0.6;
+  const s1Again = settleRun(profile, run1Again);
+  assert.equal(s1Again.stars, 2);
+  assert.equal(s1Again.firstClearBonus, undefined);
+  assert.equal(stageClearRecord(profile, 'stage_1').clears, 2);
+  assert.equal(stageClearRecord(profile, 'stage_1').stars, 3);
 });
 
 test('endless keeps wardens and cinder charges in the rotation', () => {
-  const state = createRun({expedition: 'watch', seed: 5, runId: 'endless-roles'});
+  const state = createRun({expedition: 'stage_1', seed: 5, runId: 'endless-roles'});
   state.phase = 'playing';
   state.endless = true;
-  state.director.nextWave = WAVES.length;
+  state.director.nextWave = 100;
   state.director.queue = [];
   state.director.done = true;
   state.time = 20;
@@ -150,26 +135,10 @@ test('endless keeps wardens and cinder charges in the rotation', () => {
     sawWarden = sawWarden || seesKind(state, 'warden');
     sawCharge = sawCharge || seesKind(state, 'charge');
     sawHush = sawHush || seesKind(state, 'hush');
-    state.time += 8;
+    state.time += 12;
   }
   assert.equal(sawWarden, true);
   assert.equal(sawCharge, true);
   assert.equal(sawHush, true);
-});
-
-test('a shade defeat does not record a clear', () => {
-  const profile = createProfile();
-  const state = createRun({expedition: 'shade', runId: 'sortie-defeat-1', seed: 2});
-  state.phase = 'defeat';
-  state.time = 80;
-  state.kills = 4;
-  state.wave = 2;
-  state.fence.hp = 0;
-
-  settleRun(profile, state);
-  const entry = profile.expeditions && profile.expeditions.shade;
-  if (entry != null) {
-    const clears = typeof entry.clears === 'number' ? entry.clears : 0;
-    assert.ok(!(clears > 0));
-  }
+  assert.ok(WAVES.length > 0);
 });

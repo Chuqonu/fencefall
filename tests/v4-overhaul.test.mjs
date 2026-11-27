@@ -246,13 +246,15 @@ test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft
     getUI: () => ({ selectedSlot: 2 })
   };
 
-  // Home Lobby
+  // Home Lobby (20-Stage Campaign)
   const home = doc.createElement('div');
   renderMetaPanel(home, 'menu', null, profile, api);
   assert.ok(findTestId(home, 'starter-pack-card'), 'Starter Pack visible on Home');
-  assert.ok(findTestId(home, 'sortie-strip'), 'Horizontal sortie strip rendered');
-  assert.ok(findTestId(home, 'difficulty-bar'), '4-pill difficulty selector rendered');
-  assert.ok(findTestId(home, 'btn-start'), 'Primary Deploy CTA rendered');
+  assert.ok(findTestId(home, 'stage-switcher'), 'Stage switcher rendered');
+  assert.ok(findTestId(home, 'stage-strip'), '1-20 stage strip rendered');
+  assert.ok(findTestId(home, 'btn-toggle-stage-grid'), 'All 20 stages grid toggle rendered');
+  assert.ok(findTestId(home, 'btn-start'), 'Primary Start Stage CTA rendered');
+  assert.equal(findTestId(home, 'difficulty-bar'), null, 'No redundant 4-difficulty selector on Home');
 
   // 3-Tab Armory (Gems / Gear / Upgrades)
   const armory = doc.createElement('div');
@@ -271,7 +273,7 @@ test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft
   assert.equal(findTestId(codex, 'codex-tab-recipes'), null);
 
   // Draft Modal with 3 cards + Reroll button
-  const run = createRun({ seed: 606, difficulty: 'normal', profile, runId: 'v4-ui' });
+  const run = createRun({ seed: 606, difficulty: 'normal', expedition: 'stage_1', profile, runId: 'v4-ui' });
   run.xp = run.nextDraftXp;
   updateDrafts(run);
   const draftHost = doc.createElement('div');
@@ -292,11 +294,11 @@ test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft
   }
 });
 
-test('v1 and v2 saves migrate to v3 profile cleanly and v3 saves round-trip completely', () => {
+test('v1 and v2 saves migrate to v3 profile cleanly and v3 stage saves round-trip completely', () => {
   const store = memoryStorage();
   const profile = createProfile('zh');
   claimStarterPack(profile);
-  const run = createRun({ seed: 707, difficulty: 'normal', expedition: 'frenzy', profile, runId: 'v4-roundtrip' });
+  const run = createRun({ seed: 707, difficulty: 'normal', expedition: 'stage_5', profile, runId: 'v4-roundtrip' });
   prepare(run);
   run.rerollsLeft = 1;
   run.slots[1].unit = createUnit(run, 'lightning', 3, 'tower');
@@ -306,6 +308,7 @@ test('v1 and v2 saves migrate to v3 profile cleanly and v3 saves round-trip comp
   assert.equal(res.ok, true, res.reason);
   assert.equal(res.profile.version, CONTRACT_VERSION);
   assert.equal(res.run.version, CONTRACT_VERSION);
+  assert.equal(res.run.expedition, 'stage_5');
   assert.equal(res.run.rerollsLeft, 1);
   assert.equal(res.run.slots[1].unit.type, 'lightning');
   assert.equal(res.run.slots[1].unit.rank, 3);

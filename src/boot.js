@@ -1,4 +1,5 @@
 import {DIFFICULTIES, canPlan, clone} from './shared.js';
+import {highestUnlockedStageId, isExpedition, isStageUnlocked, stageNumber} from './data/expeditions.js';
 import {advance, createProfile, createRun, enterEndless, exportRun, integrationInfo, prepare, setSpeed, takeEvents} from './engine.js';
 import {setTargeting} from './systems/combat.js';
 import * as hero from './systems/hero.js';
@@ -140,9 +141,15 @@ export async function createController(options = {}) {
       const difficulty = Object.prototype.hasOwnProperty.call(DIFFICULTIES, requested) ? requested : 'normal';
       profile.settings.difficulty = difficulty;
       const seed = Number.isFinite(Number(payload.seed)) ? Number(payload.seed) >>> 0 : Math.floor(Math.random() * 0x100000000) >>> 0;
-      const expedition = typeof payload.expedition === 'string'
+      const savedExp = typeof profile.settings?.expedition === 'string' && isExpedition(profile.settings.expedition)
+        ? profile.settings.expedition
+        : null;
+      const expedition = typeof payload.expedition === 'string' && isExpedition(payload.expedition)
         ? payload.expedition
-        : (typeof profile.settings?.expedition === 'string' ? profile.settings.expedition : 'frenzy');
+        : (savedExp && isStageUnlocked(profile, savedExp) ? savedExp : highestUnlockedStageId(profile));
+      if (stageNumber(expedition) > 0 && !isStageUnlocked(profile, expedition)) {
+        return {ok: false, reason: 'stageLocked'};
+      }
       run = createRun({seed, difficulty, profile, runId: typeof payload.runId === 'string' ? payload.runId : undefined, expedition});
       if (typeof run.expedition === 'string') profile.settings.expedition = run.expedition;
       prepare(run);
