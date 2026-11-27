@@ -85,17 +85,17 @@ function formation(id,en,zh,from,until,every,groups,horde=false) {
 }
 const PHASES = [
   formation('first','First ash','初烬',0.5,1.5,1,[group('shambler',6,0.65,0.42)]),
-  formation('trail','Broken trail','断径',12,50,12,[group('shambler',6,1.5),group('runner',3,2.6)]),
-  formation('dust','Dust cloud','尘潮',50,110,10,[group('swarm',12,0.7),group('shambler',6,1.4),group('runner',3,2)]),
+  formation('trail','Broken trail','断径',4.5,52.5,8,[group('shambler',6,1.45),group('runner',3,2.5)]),
+  formation('dust','Dust cloud','尘潮',52.5,112.5,8,[group('swarm',11,0.72),group('shambler',5,1.5),group('runner',3,2.4)]),
   formation('flag-one','First flag','第一面战旗',110,111,1,[group('banner',1,0),group('swarm',28,0.22),group('runner',10,0.7)],true),
-  formation('march','Ash march','灰烬行军',112,214,10,[group('shambler',9,0.9),group('swarm',12,0.73),group('armored',3,2.7,1.6),group('spitter',2,3,1.3)]),
+  formation('march','Ash march','灰烬行军',112,214,9,[group('shambler',9,0.95),group('swarm',12,0.75),group('armored',3,2.7,1.6),group('spitter',2,3,1.3)]),
   formation('vanguard','Crown vanguard','次冠先锋',215,216,1,[group('boss',1,0,0.45),group('shade',3,2),group('leaper',3,2.5)]),
-  formation('breach','Breach patrol','裂隙巡队',218,295,10,[group('swarm',16,0.52),group('runner',7,1.3),group('splitter',2,3,1.4),group('mender',1,0)]),
+  formation('breach','Breach patrol','裂隙巡队',218,295,9,[group('swarm',16,0.55),group('runner',7,1.3),group('splitter',2,3,1.4),group('mender',1,0)]),
   formation('flag-two','Black flag','第二面战旗',270,271,1,[group('banner',2,1),group('swarm',32,0.2),group('warden',2,2),group('charge',2,3)],true),
-  formation('siege','Siege train','围城纵队',298,380,10,[group('swarm',16,0.5),group('shambler',8,1),group('brute',2,3,1.8),group('hush',1,0),group('leaper',2,2)]),
+  formation('siege','Siege train','围城纵队',298,380,9,[group('swarm',16,0.52),group('shambler',8,1),group('brute',2,3,1.8),group('hush',1,0),group('leaper',2,2)]),
   formation('flag-three','Last flag','终局战旗',365,366,1,[group('banner',2,2),group('swarm',38,0.16),group('shade',6,0.85),group('charge',2,2)],true),
   formation('crown','Crown Breach','冠裂兽',380,381,1,[group('boss',1,0),group('warden',3,2),group('mender',2,1)]),
-  formation('last','Last guard','末路护卫',382,421,9,[group('swarm',15,0.5),group('runner',6,1.3),group('armored',2,3),group('spitter',1,0)])
+  formation('last','Last guard','末路护卫',382,421,8,[group('swarm',15,0.52),group('runner',6,1.3),group('armored',2,3),group('spitter',1,0)])
 ];
 
 const ENDLESS_PATTERNS = [
@@ -193,6 +193,21 @@ function activeSchedule(state) {
 
 const SCHEDULE_END = lastSpawnTime(WAVES);
 
+const EARLY_PULL_MIN_AGE = 2.2;
+const EARLY_PULL_LIVING = 4;
+const EARLY_PULL_QUEUED = 2;
+const EARLY_BOSS_LEAD = 1.5;
+
+function countAllLiving(state) {
+  let total = 0;
+  for (const enemy of state.enemies || []) if (isLive(enemy)) total += 1;
+  return total;
+}
+
+function effectiveStart(wave, shift) {
+  return quantize(Math.max(0, Number(wave.start) - (Number(shift) || 0)));
+}
+
 export function updateWaves(state, dt = 0) {
   // state.time is the clock. dt stays in the signature for the lead's fixed step.
   void dt;
@@ -203,9 +218,30 @@ export function updateWaves(state, dt = 0) {
   if (state.endless && director.done) director.done = false;
   const waves = activeSchedule(state);
 
-  while (director.nextWave < waves.length && state.time + 1e-6 >= waves[director.nextWave].start) {
+  // Continuous-flow early pull-in: if the player shreds the current wave fast
+  // (only a few zombies left on the road and at most 2 queued), pull the next
+  // wave forward immediately so the next wave enters BEFORE the previous wave dies!
+  if (director.nextWave > 0 && director.nextWave < waves.length && sys.waveStartedAt != null) {
+    const waveAge = state.time - sys.waveStartedAt;
+    const nextWave = waves[director.nextWave];
+    const nextAt = effectiveStart(nextWave, sys.timeShift);
+    if (waveAge >= EARLY_PULL_MIN_AGE && state.time + 1e-6 < nextAt) {
+      if (director.queue.length <= EARLY_PULL_QUEUED && countAllLiving(state) <= EARLY_PULL_LIVING) {
+        if (nextWave.boss) {
+          if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
+            sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
+          }
+        } else {
+          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
+        }
+      }
+    }
+  }
+
+  while (director.nextWave < waves.length && state.time + 1e-6 >= effectiveStart(waves[director.nextWave], sys.timeShift)) {
     const wave = waves[director.nextWave];
-    const count=enqueueWave(state, sys, wave);
+    const startAt = effectiveStart(wave, sys.timeShift);
+    const count = enqueueWave(state, sys, wave, startAt);
     director.nextWave += 1;
     state.wave = director.nextWave;
     if (wave.horde) {
@@ -224,20 +260,32 @@ export function updateWaves(state, dt = 0) {
 
   spawnDue(state);
 
-  if (director.nextWave >= waves.length && director.queue.length === 0) {
+  if (director.nextWave >= waves.length) {
     if (state.endless) {
       director.done = false;
+      if (
+        sys.endlessNext != null &&
+        sys.waveStartedAt != null &&
+        state.time - sys.waveStartedAt >= EARLY_PULL_MIN_AGE &&
+        state.time + 1e-6 < sys.endlessNext &&
+        director.queue.length <= EARLY_PULL_QUEUED &&
+        countAllLiving(state) <= EARLY_PULL_LIVING
+      ) {
+        sys.endlessNext = quantize(state.time);
+      }
       pumpEndless(state, sys);
       spawnDue(state);
-    } else if (!director.done) {
-      director.done = true;
-      if (!sys.doneEmitted) {
+    } else if (director.queue.length === 0) {
+      if (!director.done) {
+        director.done = true;
+        if (!sys.doneEmitted) {
+          sys.doneEmitted = true;
+          emit(state, 'waves_complete', {wave: state.wave, time: state.time});
+        }
+      } else if (!sys.doneEmitted) {
         sys.doneEmitted = true;
         emit(state, 'waves_complete', {wave: state.wave, time: state.time});
       }
-    } else if (!sys.doneEmitted) {
-      sys.doneEmitted = true;
-      emit(state, 'waves_complete', {wave: state.wave, time: state.time});
     }
   }
 
@@ -283,8 +331,9 @@ export function getWaveInfo(state) {
     live[kind] = (live[kind] || 0) + 1;
     if (kind === 'boss' || ENEMIES[kind]?.enrage) bossAlive = true;
   }
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
   let nextIn = 0;
-  if (upcomingWave) nextIn = Math.max(0, upcomingWave.start - time);
+  if (upcomingWave) nextIn = Math.max(0, effectiveStart(upcomingWave, shift) - time);
   else if (state?.endless) {
     const at = state?.systems?.waves?.endlessNext;
     if (Number.isFinite(at)) nextIn = Math.max(0, at - time);
@@ -317,7 +366,7 @@ export function getWaveInfo(state) {
     living,
     upcoming: upcomingWave ? peekGroups(upcomingWave, mult, state?.systems?.waves?.countRemainder || 0) : [],
     countMultiplier: mult,
-    finalSpawn: waves === WAVES ? SCHEDULE_END : lastSpawnTime(waves),
+    finalSpawn: Math.max(0, (waves === WAVES ? SCHEDULE_END : lastSpawnTime(waves)) - shift),
     bossAlive,
     hasBoss: readHasBoss(state, director),
     progress: campaignProgress(state, director, time),
@@ -328,12 +377,18 @@ function campaignProgress(state, director, time) {
   const waves = activeSchedule(state);
   const index = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
   if (index <= 0 || waves.length === 0) return 0;
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
   const current = waves[Math.min(index, waves.length) - 1];
   if (!current || !Number.isFinite(current.start)) return 0;
   const next = index < waves.length ? waves[index] : null;
-  const end = next && Number.isFinite(next.start) ? next.start : current.start + 30;
-  const span = Math.max(1e-6, end - current.start);
-  const raw = (time - current.start) / span;
+  const startedAt = Number.isFinite(state?.systems?.waves?.waveStartedAt)
+    ? state.systems.waves.waveStartedAt
+    : effectiveStart(current, shift);
+  const end = next && Number.isFinite(next.start)
+    ? Math.max(startedAt + 1e-6, effectiveStart(next, shift))
+    : startedAt + 30;
+  const span = Math.max(1e-6, end - startedAt);
+  const raw = (time - startedAt) / span;
   if (!Number.isFinite(raw)) return 0;
   return Math.max(0, Math.min(1, raw));
 }
@@ -415,7 +470,8 @@ function lastSpawnTime(waves) {
 
 // Spawn health in the main campaign after the opening. Difficulty base health still applies.
 const MAIN_PACK_HP = Object.freeze({easy:1,normal:4.43,hard:4,nightmare:6});
-function enqueueWave(state, sys, wave) {
+function enqueueWave(state, sys, wave, startAt = wave.start) {
+  const origin = Number.isFinite(startAt) ? quantize(startAt) : quantize(wave.start);
   const pressure = state.expedition==='watch' && wave.start>=65 ? MAIN_PACK_HP[state.difficulty] : 1;
   const mult = countMultiplier(state);
   const items = [];
@@ -425,14 +481,14 @@ function enqueueWave(state, sys, wave) {
     const interval = Math.max(0, Number(group.interval) || 0);
     const delay = Math.max(0, Number(group.delay) || 0);
     for (let i = 0; i < count; i++) {
-      const item = {time: quantize(wave.start + delay + i * interval), kind: group.kind};
+      const item = {time: quantize(origin + delay + i * interval), kind: group.kind};
       item.overrides={healthScale:(group.healthScale || 1)*pressure};
       items.push(item);
     }
   }
   if (!items.length && wave.groups.length) {
     const kind = wave.groups.find(group => ENEMIES[group.kind])?.kind;
-    if (kind) items.push({time: quantize(wave.start), kind});
+    if (kind) items.push({time: origin, kind});
   }
   const queue = state.director.queue;
   for (const item of items) queue.push(item);
@@ -457,15 +513,15 @@ function spawnDue(state) {
 }
 
 function pumpEndless(state, sys) {
-  if (sys.endlessNext == null) sys.endlessNext = quantize(state.time + 4);
+  if (sys.endlessNext == null) sys.endlessNext = quantize(state.time + 1);
   let guard = 0;
   while (state.time + 1e-6 >= sys.endlessNext && guard++ < 200) {
     const start = sys.endlessNext;
     const wave = makeEndlessWave(sys.endlessWave, start);
-    const count=enqueueWave(state, sys, wave);
+    const count = enqueueWave(state, sys, wave, start);
     const span = groupSpan(wave.groups);
-    let next = quantize(start + Math.max(12, span + 3));
-    if (!(next > start)) next = quantize(start + 12);
+    let next = quantize(start + Math.max(5.5, span - 1.5));
+    if (!(next > start)) next = quantize(start + 5.5);
     sys.endlessNext = next;
     sys.endlessWave += 1;
     state.wave += 1;
@@ -723,7 +779,8 @@ export function bossApproaching(state) {
   const wave = waves[index];
   if (!waveContainsBoss(wave)) return false;
   const time = Number.isFinite(state.time) ? state.time : 0;
-  const wait = Number(wave.start) - time;
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
+  const wait = effectiveStart(wave, shift) - time;
   return wait >= 0 && wait <= BOSS_APPROACH_SECONDS;
 }
 
@@ -769,6 +826,7 @@ function ensureWaves(state) {
       countRemainder: 0,
       summonRemainder: 0,
       waveStartedAt: null,
+      timeShift: 0,
       endlessNext: null,
       endlessWave: 0,
       doneEmitted: false,
@@ -778,6 +836,7 @@ function ensureWaves(state) {
   const sys = state.systems.waves;
   if (!Number.isFinite(sys.countRemainder)) sys.countRemainder = 0;
   if (!Number.isFinite(sys.summonRemainder)) sys.summonRemainder = 0;
+  if (!Number.isFinite(sys.timeShift) || sys.timeShift < 0) sys.timeShift = 0;
   if (!Number.isFinite(sys.endlessWave)) sys.endlessWave = 0;
   if (typeof sys.doneEmitted !== 'boolean') sys.doneEmitted = false;
   return sys;

@@ -4503,7 +4503,7 @@ const CHAPTERS = Object.freeze([
 __ff_exports["CHAPTERS"] = CHAPTERS;
 
 
-const pack = (kind, count, interval, healthScale = 1) => ({ kind, count, interval, healthScale });
+const pack = (kind, count, interval, healthScale = 1, delay = 0) => ({ kind, count, interval, healthScale, delay });
 const phase = (id, from, until, every, name, groups, horde = false) => ({ id, from, until, every, name, groups, horde });
 
 // Stage blueprint tuples:
@@ -4525,47 +4525,47 @@ function makeStandardPhases(s, hp, opts) {
   const n = (en, zh) => ({ en, zh });
   const h = (mult) => roundScale(hp * mult);
   const phases = [
-    // 1. Opening wave at 0.5s: immediate mowing action + rapid first 3-of-1 upgrade
+    // 1. Opening wave at 0.5s: immediate mowing action, streams through ~4.5s right into Wave 2 at 4.0s
     phase(
       `s${s}-open`, 0.5, 1.5, 1,
       n(`Stage ${s} · Vanguard`, `第 ${s} 关 · 前锋尸潮`),
       [
-        pack('swarm', Math.round(swarmCount * 0.7), 0.24, h(0.42)),
-        pack('shambler', 5, 0.52, h(0.38)),
+        pack('swarm', Math.round(swarmCount * 0.7), 0.42, h(0.42), 0),
+        pack('shambler', 5, 0.85, h(0.38), 0.4),
       ]
     ),
-    // 2. Early wave (12s - 62s): rising tide, quick gun mod ramp
+    // 2. Early wave (4s - 60s, every 8s): starts BEFORE Wave 1 clears; each wave streams ~8.6s so waves overlap continuously
     phase(
-      `s${s}-rush`, 12, 62, 10,
+      `s${s}-rush`, 4, 60, 8,
       n('Rising Tide', '尸潮涌动'),
       [
-        pack('swarm', swarmCount, 0.28, h(0.56)),
-        pack(primary, primary === 'swarm' ? swarmCount : primary === 'runner' ? 5 : 4, primary === 'swarm' ? 0.25 : 1.15, h(0.62)),
-        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 4 : 2, 1.75, h(0.68)),
+        pack('swarm', Math.max(8, Math.round(swarmCount * 0.82)), 0.72, h(0.56), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.8) : primary === 'runner' ? 4 : 3, primary === 'swarm' ? 0.65 : 2.1, h(0.62), 1.3),
+        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 3 : 2, 2.6, h(0.68), 3.2),
       ],
       s >= 4
     ),
-    // 3. First Horde Surge (66s - 122s): dense mowing action, unlocks Auto Skills
+    // 3. First Horde Surge (60s - 124s, every 8s): zero phase gap, dense overlapping mowing action
     phase(
-      `s${s}-surge`, 66, 122, 11,
+      `s${s}-surge`, 60, 124, 8,
       n('First Surge', '第一波尸潮'),
       [
-        pack('swarm', Math.round(swarmCount * 1.25), 0.22, h(0.72)),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.15) : 5, 1.0, h(0.78)),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.2, h(0.82)),
-        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.4, h(0.8))] : []),
+        pack('swarm', Math.round(swarmCount * 1.05), 0.56, h(0.72), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.95) : 4, primary === 'swarm' ? 0.55 : 1.9, h(0.78), 1.1),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.82), 2.7),
+        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.8, h(0.8), 4.0)] : []),
       ],
       true
     ),
-    // 4. Mid-Stage Steel Clash (126s - 182s): mixed elites & supports
+    // 4. Mid-Stage Steel Clash (124s - 188s, every 8s): seamless handover from Surge
     phase(
-      `s${s}-clash`, 126, 182, 11,
+      `s${s}-clash`, 124, 188, 8,
       n('Steel Clash', '中段激战'),
       [
-        pack('swarm', Math.round(swarmCount * 1.35), 0.2, h(0.86)),
-        pack(secondary, secondary === 'runner' ? 6 : 3, 1.15, h(0.92)),
-        pack(elite, elite === 'brute' ? 2 : 4, 1.9, h(0.96)),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.2, h(0.94))] : []),
+        pack('swarm', Math.round(swarmCount * 1.15), 0.52, h(0.86), 0),
+        pack(secondary, secondary === 'runner' ? 5 : 3, secondary === 'runner' ? 1.6 : 2.3, h(0.92), 1.0),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.96), 2.5),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.7, h(0.94), 3.9)] : []),
       ],
       false
     ),
@@ -4575,59 +4575,59 @@ function makeStandardPhases(s, hp, opts) {
   if (vanguardScale > 0) {
     phases.push(
       phase(
-        `s${s}-vanguard`, 156, 157, 1,
+        `s${s}-vanguard`, 152, 153, 1,
         n('Vanguard Boss', '先锋巨兽'),
         [
-          pack('boss', 1, 0, roundScale(vanguardScale)),
-          pack('swarm', Math.round(swarmCount * 1.15), 0.22, h(0.9)),
-          pack(secondary, 4, 1.2, h(0.96)),
+          pack('boss', 1, 0, roundScale(vanguardScale), 0),
+          pack('swarm', Math.round(swarmCount * 1.0), 0.46, h(0.9), 0.4),
+          pack(secondary, 4, 1.5, h(0.96), 1.2),
         ],
         true
       )
     );
   }
 
-  // 5. Crimson Storm (188s - 240s): intense full-screen bullet-storm spectacle
+  // 5. Crimson Storm (188s - 244s, every 8s): intense nonstop bullet-storm spectacle
   phases.push(
     phase(
-      `s${s}-storm`, 188, 240, 10,
+      `s${s}-storm`, 188, 244, 8,
       n('Crimson Storm', '赤潮狂攻'),
       [
-        pack('swarm', Math.round(swarmCount * 1.5), 0.18, h(0.98)),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.3) : 6, 0.95, h(1.04)),
-        pack(elite, elite === 'brute' ? 3 : 4, 1.8, h(1.1)),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.1, h(1.05))] : []),
+        pack('swarm', Math.round(swarmCount * 1.28), 0.46, h(0.98), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.1) : 5, primary === 'swarm' ? 0.48 : 1.65, h(1.04), 0.8),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.3, h(1.1), 2.3),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.6, h(1.05), 3.7)] : []),
       ],
       true
     )
   );
 
-  // 6. Final Siege Buildup (244s - 280s): high pressure before boss/finale
+  // 6. Final Siege Buildup (244s - 284s, every 8s): unbroken pressure right into Boss / Finale
   phases.push(
     phase(
-      `s${s}-siege`, 244, 280, 11,
+      `s${s}-siege`, 244, 284, 8,
       n('Last Stand', '死守防线'),
       [
-        pack('swarm', Math.round(swarmCount * 1.65), 0.16, h(1.02)),
-        pack(secondary, secondary === 'runner' ? 7 : 4, 1.0, h(1.06)),
-        pack(elite, elite === 'brute' ? 3 : 5, 1.65, h(1.12)),
-        ...(support ? [pack(support, 2, 2.0, h(1.06))] : []),
+        pack('swarm', Math.round(swarmCount * 1.4), 0.42, h(1.02), 0),
+        pack(secondary, secondary === 'runner' ? 6 : 4, secondary === 'runner' ? 1.35 : 2.0, h(1.06), 0.8),
+        pack(elite, elite === 'brute' ? 3 : 4, 2.0, h(1.12), 1.8),
+        ...(support ? [pack(support, 2, 2.5, h(1.06), 3.5)] : []),
       ],
       true
     )
   );
 
-  // 7. Stage Finale (Boss or Final Assault at 288s -> ~5.0–5.4 min clear time)
+  // 7. Stage Finale (Boss or Final Assault at 284s -> overlaps Siege tail, ~5 min total clear)
   if (bossScale > 0) {
     phases.push(
       phase(
-        `s${s}-boss`, 288, 289, 1,
+        `s${s}-boss`, 284, 285, 1,
         n('Boss Siege', '首领压境'),
         [
-          pack('boss', 1, 0, roundScale(bossScale)),
-          pack('swarm', Math.round(swarmCount * 1.7), 0.17, h(0.96)),
-          pack(elite, 3, 2.0, h(1.08)),
-          ...(support ? [pack(support, 2, 1.9, h(1.02))] : []),
+          pack('boss', 1, 0, roundScale(bossScale), 0),
+          pack('swarm', Math.round(swarmCount * 1.7), 0.42, h(0.96), 0.3),
+          pack(elite, 3, 2.2, h(1.08), 1.5),
+          ...(support ? [pack(support, 2, 2.4, h(1.02), 2.5)] : []),
         ],
         true
       )
@@ -4635,13 +4635,13 @@ function makeStandardPhases(s, hp, opts) {
   } else {
     phases.push(
       phase(
-        `s${s}-finale`, 288, 289, 1,
+        `s${s}-finale`, 284, 285, 1,
         n('Final Assault', '终局总攻'),
         [
-          pack('swarm', Math.round(swarmCount * 1.9), 0.15, h(1.04)),
-          pack(elite, elite === 'brute' ? 4 : 5, 1.35, h(1.15)),
-          pack(secondary, secondary === 'runner' ? 8 : 4, 0.9, h(1.08)),
-          ...(support ? [pack(support, 2, 1.8, h(1.06))] : []),
+          pack('swarm', Math.round(swarmCount * 1.9), 0.38, h(1.04), 0),
+          pack(elite, elite === 'brute' ? 4 : 5, 1.8, h(1.15), 0.9),
+          pack(secondary, secondary === 'runner' ? 8 : 4, 1.25, h(1.08), 0.5),
+          ...(support ? [pack(support, 2, 2.2, h(1.06), 2.2)] : []),
         ],
         true
       )
@@ -18873,17 +18873,17 @@ function formation(id,en,zh,from,until,every,groups,horde=false) {
 }
 const PHASES = [
   formation('first','First ash','初烬',0.5,1.5,1,[group('shambler',6,0.65,0.42)]),
-  formation('trail','Broken trail','断径',12,50,12,[group('shambler',6,1.5),group('runner',3,2.6)]),
-  formation('dust','Dust cloud','尘潮',50,110,10,[group('swarm',12,0.7),group('shambler',6,1.4),group('runner',3,2)]),
+  formation('trail','Broken trail','断径',4.5,52.5,8,[group('shambler',6,1.45),group('runner',3,2.5)]),
+  formation('dust','Dust cloud','尘潮',52.5,112.5,8,[group('swarm',11,0.72),group('shambler',5,1.5),group('runner',3,2.4)]),
   formation('flag-one','First flag','第一面战旗',110,111,1,[group('banner',1,0),group('swarm',28,0.22),group('runner',10,0.7)],true),
-  formation('march','Ash march','灰烬行军',112,214,10,[group('shambler',9,0.9),group('swarm',12,0.73),group('armored',3,2.7,1.6),group('spitter',2,3,1.3)]),
+  formation('march','Ash march','灰烬行军',112,214,9,[group('shambler',9,0.95),group('swarm',12,0.75),group('armored',3,2.7,1.6),group('spitter',2,3,1.3)]),
   formation('vanguard','Crown vanguard','次冠先锋',215,216,1,[group('boss',1,0,0.45),group('shade',3,2),group('leaper',3,2.5)]),
-  formation('breach','Breach patrol','裂隙巡队',218,295,10,[group('swarm',16,0.52),group('runner',7,1.3),group('splitter',2,3,1.4),group('mender',1,0)]),
+  formation('breach','Breach patrol','裂隙巡队',218,295,9,[group('swarm',16,0.55),group('runner',7,1.3),group('splitter',2,3,1.4),group('mender',1,0)]),
   formation('flag-two','Black flag','第二面战旗',270,271,1,[group('banner',2,1),group('swarm',32,0.2),group('warden',2,2),group('charge',2,3)],true),
-  formation('siege','Siege train','围城纵队',298,380,10,[group('swarm',16,0.5),group('shambler',8,1),group('brute',2,3,1.8),group('hush',1,0),group('leaper',2,2)]),
+  formation('siege','Siege train','围城纵队',298,380,9,[group('swarm',16,0.52),group('shambler',8,1),group('brute',2,3,1.8),group('hush',1,0),group('leaper',2,2)]),
   formation('flag-three','Last flag','终局战旗',365,366,1,[group('banner',2,2),group('swarm',38,0.16),group('shade',6,0.85),group('charge',2,2)],true),
   formation('crown','Crown Breach','冠裂兽',380,381,1,[group('boss',1,0),group('warden',3,2),group('mender',2,1)]),
-  formation('last','Last guard','末路护卫',382,421,9,[group('swarm',15,0.5),group('runner',6,1.3),group('armored',2,3),group('spitter',1,0)])
+  formation('last','Last guard','末路护卫',382,421,8,[group('swarm',15,0.52),group('runner',6,1.3),group('armored',2,3),group('spitter',1,0)])
 ];
 
 const ENDLESS_PATTERNS = [
@@ -18983,6 +18983,21 @@ function activeSchedule(state) {
 
 const SCHEDULE_END = lastSpawnTime(WAVES);
 
+const EARLY_PULL_MIN_AGE = 2.2;
+const EARLY_PULL_LIVING = 4;
+const EARLY_PULL_QUEUED = 2;
+const EARLY_BOSS_LEAD = 1.5;
+
+function countAllLiving(state) {
+  let total = 0;
+  for (const enemy of state.enemies || []) if (isLive(enemy)) total += 1;
+  return total;
+}
+
+function effectiveStart(wave, shift) {
+  return quantize(Math.max(0, Number(wave.start) - (Number(shift) || 0)));
+}
+
 function updateWaves(state, dt = 0) {
   // state.time is the clock. dt stays in the signature for the lead's fixed step.
   void dt;
@@ -18993,9 +19008,30 @@ function updateWaves(state, dt = 0) {
   if (state.endless && director.done) director.done = false;
   const waves = activeSchedule(state);
 
-  while (director.nextWave < waves.length && state.time + 1e-6 >= waves[director.nextWave].start) {
+  // Continuous-flow early pull-in: if the player shreds the current wave fast
+  // (only a few zombies left on the road and at most 2 queued), pull the next
+  // wave forward immediately so the next wave enters BEFORE the previous wave dies!
+  if (director.nextWave > 0 && director.nextWave < waves.length && sys.waveStartedAt != null) {
+    const waveAge = state.time - sys.waveStartedAt;
+    const nextWave = waves[director.nextWave];
+    const nextAt = effectiveStart(nextWave, sys.timeShift);
+    if (waveAge >= EARLY_PULL_MIN_AGE && state.time + 1e-6 < nextAt) {
+      if (director.queue.length <= EARLY_PULL_QUEUED && countAllLiving(state) <= EARLY_PULL_LIVING) {
+        if (nextWave.boss) {
+          if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
+            sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
+          }
+        } else {
+          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
+        }
+      }
+    }
+  }
+
+  while (director.nextWave < waves.length && state.time + 1e-6 >= effectiveStart(waves[director.nextWave], sys.timeShift)) {
     const wave = waves[director.nextWave];
-    const count=enqueueWave(state, sys, wave);
+    const startAt = effectiveStart(wave, sys.timeShift);
+    const count = enqueueWave(state, sys, wave, startAt);
     director.nextWave += 1;
     state.wave = director.nextWave;
     if (wave.horde) {
@@ -19014,20 +19050,32 @@ function updateWaves(state, dt = 0) {
 
   spawnDue(state);
 
-  if (director.nextWave >= waves.length && director.queue.length === 0) {
+  if (director.nextWave >= waves.length) {
     if (state.endless) {
       director.done = false;
+      if (
+        sys.endlessNext != null &&
+        sys.waveStartedAt != null &&
+        state.time - sys.waveStartedAt >= EARLY_PULL_MIN_AGE &&
+        state.time + 1e-6 < sys.endlessNext &&
+        director.queue.length <= EARLY_PULL_QUEUED &&
+        countAllLiving(state) <= EARLY_PULL_LIVING
+      ) {
+        sys.endlessNext = quantize(state.time);
+      }
       pumpEndless(state, sys);
       spawnDue(state);
-    } else if (!director.done) {
-      director.done = true;
-      if (!sys.doneEmitted) {
+    } else if (director.queue.length === 0) {
+      if (!director.done) {
+        director.done = true;
+        if (!sys.doneEmitted) {
+          sys.doneEmitted = true;
+          emit(state, 'waves_complete', {wave: state.wave, time: state.time});
+        }
+      } else if (!sys.doneEmitted) {
         sys.doneEmitted = true;
         emit(state, 'waves_complete', {wave: state.wave, time: state.time});
       }
-    } else if (!sys.doneEmitted) {
-      sys.doneEmitted = true;
-      emit(state, 'waves_complete', {wave: state.wave, time: state.time});
     }
   }
 
@@ -19073,8 +19121,9 @@ function getWaveInfo(state) {
     live[kind] = (live[kind] || 0) + 1;
     if (kind === 'boss' || ENEMIES[kind]?.enrage) bossAlive = true;
   }
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
   let nextIn = 0;
-  if (upcomingWave) nextIn = Math.max(0, upcomingWave.start - time);
+  if (upcomingWave) nextIn = Math.max(0, effectiveStart(upcomingWave, shift) - time);
   else if (state?.endless) {
     const at = state?.systems?.waves?.endlessNext;
     if (Number.isFinite(at)) nextIn = Math.max(0, at - time);
@@ -19107,7 +19156,7 @@ function getWaveInfo(state) {
     living,
     upcoming: upcomingWave ? peekGroups(upcomingWave, mult, state?.systems?.waves?.countRemainder || 0) : [],
     countMultiplier: mult,
-    finalSpawn: waves === WAVES ? SCHEDULE_END : lastSpawnTime(waves),
+    finalSpawn: Math.max(0, (waves === WAVES ? SCHEDULE_END : lastSpawnTime(waves)) - shift),
     bossAlive,
     hasBoss: readHasBoss(state, director),
     progress: campaignProgress(state, director, time),
@@ -19118,12 +19167,18 @@ function campaignProgress(state, director, time) {
   const waves = activeSchedule(state);
   const index = Number.isFinite(director?.nextWave) ? director.nextWave : 0;
   if (index <= 0 || waves.length === 0) return 0;
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
   const current = waves[Math.min(index, waves.length) - 1];
   if (!current || !Number.isFinite(current.start)) return 0;
   const next = index < waves.length ? waves[index] : null;
-  const end = next && Number.isFinite(next.start) ? next.start : current.start + 30;
-  const span = Math.max(1e-6, end - current.start);
-  const raw = (time - current.start) / span;
+  const startedAt = Number.isFinite(state?.systems?.waves?.waveStartedAt)
+    ? state.systems.waves.waveStartedAt
+    : effectiveStart(current, shift);
+  const end = next && Number.isFinite(next.start)
+    ? Math.max(startedAt + 1e-6, effectiveStart(next, shift))
+    : startedAt + 30;
+  const span = Math.max(1e-6, end - startedAt);
+  const raw = (time - startedAt) / span;
   if (!Number.isFinite(raw)) return 0;
   return Math.max(0, Math.min(1, raw));
 }
@@ -19205,7 +19260,8 @@ function lastSpawnTime(waves) {
 
 // Spawn health in the main campaign after the opening. Difficulty base health still applies.
 const MAIN_PACK_HP = Object.freeze({easy:1,normal:4.43,hard:4,nightmare:6});
-function enqueueWave(state, sys, wave) {
+function enqueueWave(state, sys, wave, startAt = wave.start) {
+  const origin = Number.isFinite(startAt) ? quantize(startAt) : quantize(wave.start);
   const pressure = state.expedition==='watch' && wave.start>=65 ? MAIN_PACK_HP[state.difficulty] : 1;
   const mult = countMultiplier(state);
   const items = [];
@@ -19215,14 +19271,14 @@ function enqueueWave(state, sys, wave) {
     const interval = Math.max(0, Number(group.interval) || 0);
     const delay = Math.max(0, Number(group.delay) || 0);
     for (let i = 0; i < count; i++) {
-      const item = {time: quantize(wave.start + delay + i * interval), kind: group.kind};
+      const item = {time: quantize(origin + delay + i * interval), kind: group.kind};
       item.overrides={healthScale:(group.healthScale || 1)*pressure};
       items.push(item);
     }
   }
   if (!items.length && wave.groups.length) {
     const kind = wave.groups.find(group => ENEMIES[group.kind])?.kind;
-    if (kind) items.push({time: quantize(wave.start), kind});
+    if (kind) items.push({time: origin, kind});
   }
   const queue = state.director.queue;
   for (const item of items) queue.push(item);
@@ -19247,15 +19303,15 @@ function spawnDue(state) {
 }
 
 function pumpEndless(state, sys) {
-  if (sys.endlessNext == null) sys.endlessNext = quantize(state.time + 4);
+  if (sys.endlessNext == null) sys.endlessNext = quantize(state.time + 1);
   let guard = 0;
   while (state.time + 1e-6 >= sys.endlessNext && guard++ < 200) {
     const start = sys.endlessNext;
     const wave = makeEndlessWave(sys.endlessWave, start);
-    const count=enqueueWave(state, sys, wave);
+    const count = enqueueWave(state, sys, wave, start);
     const span = groupSpan(wave.groups);
-    let next = quantize(start + Math.max(12, span + 3));
-    if (!(next > start)) next = quantize(start + 12);
+    let next = quantize(start + Math.max(5.5, span - 1.5));
+    if (!(next > start)) next = quantize(start + 5.5);
     sys.endlessNext = next;
     sys.endlessWave += 1;
     state.wave += 1;
@@ -19513,7 +19569,8 @@ function bossApproaching(state) {
   const wave = waves[index];
   if (!waveContainsBoss(wave)) return false;
   const time = Number.isFinite(state.time) ? state.time : 0;
-  const wait = Number(wave.start) - time;
+  const shift = Number(state?.systems?.waves?.timeShift) || 0;
+  const wait = effectiveStart(wave, shift) - time;
   return wait >= 0 && wait <= BOSS_APPROACH_SECONDS;
 }
 
@@ -19559,6 +19616,7 @@ function ensureWaves(state) {
       countRemainder: 0,
       summonRemainder: 0,
       waveStartedAt: null,
+      timeShift: 0,
       endlessNext: null,
       endlessWave: 0,
       doneEmitted: false,
@@ -19568,6 +19626,7 @@ function ensureWaves(state) {
   const sys = state.systems.waves;
   if (!Number.isFinite(sys.countRemainder)) sys.countRemainder = 0;
   if (!Number.isFinite(sys.summonRemainder)) sys.summonRemainder = 0;
+  if (!Number.isFinite(sys.timeShift) || sys.timeShift < 0) sys.timeShift = 0;
   if (!Number.isFinite(sys.endlessWave)) sys.endlessWave = 0;
   if (typeof sys.doneEmitted !== 'boolean') sys.doneEmitted = false;
   return sys;

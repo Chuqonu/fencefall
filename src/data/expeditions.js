@@ -8,7 +8,7 @@ export const CHAPTERS = Object.freeze([
   { id: 4, range: [16, 20], name: { en: 'Ch.4 Final Bastion', zh: '第四章 · 终末壁垒' } },
 ]);
 
-const pack = (kind, count, interval, healthScale = 1) => ({ kind, count, interval, healthScale });
+const pack = (kind, count, interval, healthScale = 1, delay = 0) => ({ kind, count, interval, healthScale, delay });
 const phase = (id, from, until, every, name, groups, horde = false) => ({ id, from, until, every, name, groups, horde });
 
 // Stage blueprint tuples:
@@ -30,47 +30,47 @@ function makeStandardPhases(s, hp, opts) {
   const n = (en, zh) => ({ en, zh });
   const h = (mult) => roundScale(hp * mult);
   const phases = [
-    // 1. Opening wave at 0.5s: immediate mowing action + rapid first 3-of-1 upgrade
+    // 1. Opening wave at 0.5s: immediate mowing action, streams through ~4.5s right into Wave 2 at 4.0s
     phase(
       `s${s}-open`, 0.5, 1.5, 1,
       n(`Stage ${s} · Vanguard`, `第 ${s} 关 · 前锋尸潮`),
       [
-        pack('swarm', Math.round(swarmCount * 0.7), 0.24, h(0.42)),
-        pack('shambler', 5, 0.52, h(0.38)),
+        pack('swarm', Math.round(swarmCount * 0.7), 0.42, h(0.42), 0),
+        pack('shambler', 5, 0.85, h(0.38), 0.4),
       ]
     ),
-    // 2. Early wave (12s - 62s): rising tide, quick gun mod ramp
+    // 2. Early wave (4s - 60s, every 8s): starts BEFORE Wave 1 clears; each wave streams ~8.6s so waves overlap continuously
     phase(
-      `s${s}-rush`, 12, 62, 10,
+      `s${s}-rush`, 4, 60, 8,
       n('Rising Tide', '尸潮涌动'),
       [
-        pack('swarm', swarmCount, 0.28, h(0.56)),
-        pack(primary, primary === 'swarm' ? swarmCount : primary === 'runner' ? 5 : 4, primary === 'swarm' ? 0.25 : 1.15, h(0.62)),
-        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 4 : 2, 1.75, h(0.68)),
+        pack('swarm', Math.max(8, Math.round(swarmCount * 0.82)), 0.72, h(0.56), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.8) : primary === 'runner' ? 4 : 3, primary === 'swarm' ? 0.65 : 2.1, h(0.62), 1.3),
+        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 3 : 2, 2.6, h(0.68), 3.2),
       ],
       s >= 4
     ),
-    // 3. First Horde Surge (66s - 122s): dense mowing action, unlocks Auto Skills
+    // 3. First Horde Surge (60s - 124s, every 8s): zero phase gap, dense overlapping mowing action
     phase(
-      `s${s}-surge`, 66, 122, 11,
+      `s${s}-surge`, 60, 124, 8,
       n('First Surge', '第一波尸潮'),
       [
-        pack('swarm', Math.round(swarmCount * 1.25), 0.22, h(0.72)),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.15) : 5, 1.0, h(0.78)),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.2, h(0.82)),
-        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.4, h(0.8))] : []),
+        pack('swarm', Math.round(swarmCount * 1.05), 0.56, h(0.72), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.95) : 4, primary === 'swarm' ? 0.55 : 1.9, h(0.78), 1.1),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.82), 2.7),
+        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.8, h(0.8), 4.0)] : []),
       ],
       true
     ),
-    // 4. Mid-Stage Steel Clash (126s - 182s): mixed elites & supports
+    // 4. Mid-Stage Steel Clash (124s - 188s, every 8s): seamless handover from Surge
     phase(
-      `s${s}-clash`, 126, 182, 11,
+      `s${s}-clash`, 124, 188, 8,
       n('Steel Clash', '中段激战'),
       [
-        pack('swarm', Math.round(swarmCount * 1.35), 0.2, h(0.86)),
-        pack(secondary, secondary === 'runner' ? 6 : 3, 1.15, h(0.92)),
-        pack(elite, elite === 'brute' ? 2 : 4, 1.9, h(0.96)),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.2, h(0.94))] : []),
+        pack('swarm', Math.round(swarmCount * 1.15), 0.52, h(0.86), 0),
+        pack(secondary, secondary === 'runner' ? 5 : 3, secondary === 'runner' ? 1.6 : 2.3, h(0.92), 1.0),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.96), 2.5),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.7, h(0.94), 3.9)] : []),
       ],
       false
     ),
@@ -80,59 +80,59 @@ function makeStandardPhases(s, hp, opts) {
   if (vanguardScale > 0) {
     phases.push(
       phase(
-        `s${s}-vanguard`, 156, 157, 1,
+        `s${s}-vanguard`, 152, 153, 1,
         n('Vanguard Boss', '先锋巨兽'),
         [
-          pack('boss', 1, 0, roundScale(vanguardScale)),
-          pack('swarm', Math.round(swarmCount * 1.15), 0.22, h(0.9)),
-          pack(secondary, 4, 1.2, h(0.96)),
+          pack('boss', 1, 0, roundScale(vanguardScale), 0),
+          pack('swarm', Math.round(swarmCount * 1.0), 0.46, h(0.9), 0.4),
+          pack(secondary, 4, 1.5, h(0.96), 1.2),
         ],
         true
       )
     );
   }
 
-  // 5. Crimson Storm (188s - 240s): intense full-screen bullet-storm spectacle
+  // 5. Crimson Storm (188s - 244s, every 8s): intense nonstop bullet-storm spectacle
   phases.push(
     phase(
-      `s${s}-storm`, 188, 240, 10,
+      `s${s}-storm`, 188, 244, 8,
       n('Crimson Storm', '赤潮狂攻'),
       [
-        pack('swarm', Math.round(swarmCount * 1.5), 0.18, h(0.98)),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.3) : 6, 0.95, h(1.04)),
-        pack(elite, elite === 'brute' ? 3 : 4, 1.8, h(1.1)),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.1, h(1.05))] : []),
+        pack('swarm', Math.round(swarmCount * 1.28), 0.46, h(0.98), 0),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.1) : 5, primary === 'swarm' ? 0.48 : 1.65, h(1.04), 0.8),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.3, h(1.1), 2.3),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.6, h(1.05), 3.7)] : []),
       ],
       true
     )
   );
 
-  // 6. Final Siege Buildup (244s - 280s): high pressure before boss/finale
+  // 6. Final Siege Buildup (244s - 284s, every 8s): unbroken pressure right into Boss / Finale
   phases.push(
     phase(
-      `s${s}-siege`, 244, 280, 11,
+      `s${s}-siege`, 244, 284, 8,
       n('Last Stand', '死守防线'),
       [
-        pack('swarm', Math.round(swarmCount * 1.65), 0.16, h(1.02)),
-        pack(secondary, secondary === 'runner' ? 7 : 4, 1.0, h(1.06)),
-        pack(elite, elite === 'brute' ? 3 : 5, 1.65, h(1.12)),
-        ...(support ? [pack(support, 2, 2.0, h(1.06))] : []),
+        pack('swarm', Math.round(swarmCount * 1.4), 0.42, h(1.02), 0),
+        pack(secondary, secondary === 'runner' ? 6 : 4, secondary === 'runner' ? 1.35 : 2.0, h(1.06), 0.8),
+        pack(elite, elite === 'brute' ? 3 : 4, 2.0, h(1.12), 1.8),
+        ...(support ? [pack(support, 2, 2.5, h(1.06), 3.5)] : []),
       ],
       true
     )
   );
 
-  // 7. Stage Finale (Boss or Final Assault at 288s -> ~5.0–5.4 min clear time)
+  // 7. Stage Finale (Boss or Final Assault at 284s -> overlaps Siege tail, ~5 min total clear)
   if (bossScale > 0) {
     phases.push(
       phase(
-        `s${s}-boss`, 288, 289, 1,
+        `s${s}-boss`, 284, 285, 1,
         n('Boss Siege', '首领压境'),
         [
-          pack('boss', 1, 0, roundScale(bossScale)),
-          pack('swarm', Math.round(swarmCount * 1.7), 0.17, h(0.96)),
-          pack(elite, 3, 2.0, h(1.08)),
-          ...(support ? [pack(support, 2, 1.9, h(1.02))] : []),
+          pack('boss', 1, 0, roundScale(bossScale), 0),
+          pack('swarm', Math.round(swarmCount * 1.7), 0.42, h(0.96), 0.3),
+          pack(elite, 3, 2.2, h(1.08), 1.5),
+          ...(support ? [pack(support, 2, 2.4, h(1.02), 2.5)] : []),
         ],
         true
       )
@@ -140,13 +140,13 @@ function makeStandardPhases(s, hp, opts) {
   } else {
     phases.push(
       phase(
-        `s${s}-finale`, 288, 289, 1,
+        `s${s}-finale`, 284, 285, 1,
         n('Final Assault', '终局总攻'),
         [
-          pack('swarm', Math.round(swarmCount * 1.9), 0.15, h(1.04)),
-          pack(elite, elite === 'brute' ? 4 : 5, 1.35, h(1.15)),
-          pack(secondary, secondary === 'runner' ? 8 : 4, 0.9, h(1.08)),
-          ...(support ? [pack(support, 2, 1.8, h(1.06))] : []),
+          pack('swarm', Math.round(swarmCount * 1.9), 0.38, h(1.04), 0),
+          pack(elite, elite === 'brute' ? 4 : 5, 1.8, h(1.15), 0.9),
+          pack(secondary, secondary === 'runner' ? 8 : 4, 1.25, h(1.08), 0.5),
+          ...(support ? [pack(support, 2, 2.2, h(1.06), 2.2)] : []),
         ],
         true
       )
