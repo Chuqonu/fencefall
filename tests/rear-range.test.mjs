@@ -36,9 +36,9 @@ test('the defender block is a centered 2×5 grid under a lower fence', () => {
   assert.equal(ARENA.slotHeight, 48);
   assert.ok(ARENA.backY - ARENA.frontY < 84);
   assert.ok(ARENA.frontY > ARENA.fenceY);
-  assert.equal(HERO_BASE.range, 320);
+  assert.equal(HERO_BASE.range, 390);
   const reachY = ARENA.frontY - HERO_BASE.range;
-  assert.ok(reachY === 240, `front-row range ends at y=${reachY}`);
+  assert.ok(reachY === 170, `front-row range ends at y=${reachY}`);
   const front = [];
   const back = [];
   for (let index = 0; index < ARENA.rows * ARENA.cols; index += 1) {

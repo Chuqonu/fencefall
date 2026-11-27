@@ -1,8 +1,7 @@
-// generateDraft stays at three different cards on an empty board and a full board.
-// The hero stays one unit on slot 2. Opening a draft does not rewrite the XP curve.
+// generateDraft stays at three different Gun Mod / Auto Skill cards, keeps the
+// Gunner anchored on slot 2, and leaves the XP curve untouched.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BASE_TYPES, createUnit} from '../src/shared.js';
 import {createRun} from '../src/state.js';
 import {HERO_UPGRADES} from '../src/systems/hero.js';
 import {draftXpCost, generateDraft} from '../src/systems/drafts.js';
@@ -21,37 +20,26 @@ function heroIndexes(state) {
   return indexes;
 }
 
-function fillBoard(state) {
-  let t = 0;
-  for (let index = 0; index < state.slots.length; index += 1) {
-    if (isHero(state.slots[index].unit)) continue;
-    state.slots[index].unit = createUnit(state, BASE_TYPES[t % BASE_TYPES.length], 1, 'tower');
-    t += 1;
-  }
-}
-
-function capHero(state) {
+function capMainUpgrades(state) {
   const hero = state.slots[2].unit;
   const upgrades = {};
-  for (const [id, spec] of Object.entries(HERO_UPGRADES)) upgrades[id] = spec.cap;
+  for (const [id, spec] of Object.entries(HERO_UPGRADES)) {
+    if (id !== 'overclock') upgrades[id] = spec.cap;
+  }
   hero.upgrades = upgrades;
 }
 
-function cardSignature(card) {
-  return [card.kind, card.type || '', card.upgradeId || '', card.action || ''].join(':');
-}
-
-function assertThreeDifferent(cards, label) {
+function assertThreeDifferentHeroCards(cards, label) {
   assert.ok(Array.isArray(cards), label);
   assert.equal(cards.length, 3, label);
   const ids = cards.map(card => {
     assert.ok(card && typeof card === 'object', label);
+    assert.equal(card.kind, 'hero_upgrade', label);
     assert.equal(typeof card.id, 'string', label);
-    assert.ok(card.id, label);
+    assert.ok(HERO_UPGRADES[card.upgradeId], label);
     return card.id;
   });
   assert.equal(new Set(ids).size, 3, `${label} ids`);
-  assert.equal(new Set(cards.map(cardSignature)).size, 3, `${label} offers`);
 }
 
 function assertOneHeroOnSlot2(state, hero, label) {
@@ -68,41 +56,27 @@ function assertCurveUntouched(state, label) {
   assert.equal(state.xp, 0, label);
 }
 
-test('generateDraft returns three different cards on an empty board and a full board', () => {
+test('generateDraft returns three unique Gun Mod / Auto Skill cards and keeps Gunner on slot 2', () => {
   assert.equal(new Set(SEEDS).size, 2);
   assert.deepEqual([0, 1, 2, 3, 4].map(draftXpCost), [6, 10, 14, 18, 22]);
 
   for (const seed of SEEDS) {
-    const empty = createRun({seed, difficulty: 'normal', runId: `draft-count-empty-${seed}`});
-    const emptyHero = empty.slots[2].unit;
-    assert.equal(empty.slots.filter(slot => slot.unit).length, 1, `empty ${seed}`);
-    assertOneHeroOnSlot2(empty, emptyHero, `empty ${seed} before`);
-    const emptyCards = generateDraft(empty);
-    assertThreeDifferent(emptyCards, `empty ${seed}`);
-    assert.equal(empty.slots.filter(slot => slot.unit).length, 1, `empty ${seed} board`);
-    assertOneHeroOnSlot2(empty, emptyHero, `empty ${seed} after`);
-    assertCurveUntouched(empty, `empty ${seed} curve`);
-
-    const full = createRun({seed, difficulty: 'normal', runId: `draft-count-full-${seed}`});
-    fillBoard(full);
-    const fullHero = full.slots[2].unit;
-    assert.equal(full.slots.filter(slot => slot.unit).length, 10, `full ${seed}`);
-    assertOneHeroOnSlot2(full, fullHero, `full ${seed} before`);
-    const fullCards = generateDraft(full);
-    assertThreeDifferent(fullCards, `full ${seed}`);
-    for (const card of fullCards) {
-      if (card.kind === 'tower') assert.equal(card.action, 'upgrade', `full ${seed} ${card.id}`);
-    }
-    assertOneHeroOnSlot2(full, fullHero, `full ${seed} after`);
-    assertCurveUntouched(full, `full ${seed} curve`);
+    const run = createRun({seed, difficulty: 'normal', runId: `draft-count-solo-${seed}`});
+    const hero = run.slots[2].unit;
+    assert.equal(run.slots.filter(slot => slot.unit).length, 1, `solo ${seed}`);
+    assertOneHeroOnSlot2(run, hero, `solo ${seed} before`);
+    const cards = generateDraft(run);
+    assertThreeDifferentHeroCards(cards, `solo ${seed}`);
+    assert.equal(run.slots.filter(slot => slot.unit).length, 1, `solo ${seed} board`);
+    assertOneHeroOnSlot2(run, hero, `solo ${seed} after`);
+    assertCurveUntouched(run, `solo ${seed} curve`);
 
     const capped = createRun({seed, difficulty: 'normal', runId: `draft-count-capped-${seed}`});
-    fillBoard(capped);
-    capHero(capped);
+    capMainUpgrades(capped);
     const cappedHero = capped.slots[2].unit;
     const cappedCards = generateDraft(capped);
-    assertThreeDifferent(cappedCards, `capped ${seed}`);
-    assert.ok(cappedCards.every(card => card.kind === 'tower' && card.action === 'upgrade'), `capped ${seed}`);
+    assert.equal(cappedCards.length, 1, `capped ${seed}`);
+    assert.equal(cappedCards[0].upgradeId, 'overclock', `capped ${seed}`);
     assertOneHeroOnSlot2(capped, cappedHero, `capped ${seed} after`);
     assertCurveUntouched(capped, `capped ${seed} curve`);
   }

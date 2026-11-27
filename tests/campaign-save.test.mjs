@@ -152,18 +152,17 @@ test('a draft-phase run exports and imports with the same offer and 1-tap deploy
   assert.equal(state.phase, 'draft');
   assert.ok(state.events.some(event => event.type === 'draft'));
 
-  const choice = loaded.draft.options.findIndex(option => option.kind === 'tower');
+  const choice = loaded.draft.options.findIndex(option => option.kind === 'hero_upgrade');
   assert.ok(choice >= 0);
   const card = loaded.draft.options[choice];
   const chosen = chooseDraft(loaded, choice);
   assert.equal(chosen.ok, true, chosen.reason);
   assert.equal(loaded.phase, 'playing');
   assert.equal(loaded.draft, null);
-  const deployed = loaded.slots.find(slot => slot.unit && slot.unit.type === card.type);
-  assert.ok(deployed, '1-tap draft must auto-deploy the chosen turret');
-  assert.equal(deployed.unit.kind, 'tower');
-  assert.equal(deployed.unit.rank, 1);
-  assert.equal(loaded.slots.filter(slot => slot.unit).length, 2);
+  const hero = loaded.slots[2].unit;
+  assert.ok(hero && hero.kind === 'hero', '1-tap draft upgrades the anchored center gunner');
+  assert.equal(hero.upgrades[card.upgradeId], 1);
+  assert.equal(loaded.slots.filter(slot => slot.unit).length, 1);
 });
 
 test('a board that already has ten units exports and imports every defender', () => {

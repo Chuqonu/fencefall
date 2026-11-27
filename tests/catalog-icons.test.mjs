@@ -163,13 +163,14 @@ test('equipment, permanent upgrades, and hero upgrades render an icon before the
   assert.equal(signatures.size, drawn.size, 'each id has its own icon');
 });
 
-test('codex towers and enemies use the same icon-then-description card (and no recipes tab)', () => {
+test('codex guns/skills and enemies use the same icon-then-description card (no towers or recipes tabs)', () => {
   for (const language of ['en', 'zh']) {
     const codex = panel(language, 'codex');
     assert.equal(findByTestId(codex, 'codex-tab-recipes'), null, 'recipes tab is removed');
-    clickTab(codex, 'codex-tab-towers');
-    for (const tower of Object.values(TOWERS)) {
-      iconBeforeDescription(findByTestId(codex, `codex-tower-${tower.id}`), tower.id, tower.description[language]);
+    assert.equal(findByTestId(codex, 'codex-tab-towers'), null, 'towers tab is removed');
+    clickTab(codex, 'codex-tab-hero');
+    for (const upgrade of Object.values(HERO_UPGRADES)) {
+      iconBeforeDescription(findByTestId(codex, `codex-hero-${upgrade.id}`), upgrade.id, upgrade.description[language]);
     }
     clickTab(codex, 'codex-tab-enemies');
     for (const [id, enemy] of Object.entries(ENEMIES)) {

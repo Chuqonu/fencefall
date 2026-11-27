@@ -1,13 +1,12 @@
 /**
- * Fencefall v4 Mobile-First Meta Screens:
- * - Home Battle Lobby (Resume banner, Starter Pack, Horizontal Sortie Strip, 4-Pill Difficulty, Big Deploy CTA)
+ * Fencefall v5 Mobile-First Meta Screens:
+ * - Home 20-Stage Campaign Lobby (Resume banner, Starter Pack, Stage Switcher & 5×4 Grid, Deploy CTA)
  * - Tabbed Armory (Core Gems 3-Socket / Gear / Permanent Upgrades)
- * - Clean 3-Tab Codex (Turrets / Hero & Super-Weapons / Enemies)
+ * - Clean 2-Tab Codex (Guns & Auto Skills / Zombies)
  * - Settings + Quick Guide + Save Backup
  * - Punchy Victory/Defeat Results Screen
  */
-import {CONTRACT_VERSION, DIFFICULTIES} from '../shared.js';
-import {TOWERS} from '../data/towers.js';
+import {CONTRACT_VERSION} from '../shared.js';
 import {ENEMIES} from '../data/enemies.js';
 import {
   CHAPTERS,
@@ -24,7 +23,7 @@ import {
   stageNumber,
   totalStarsEarned
 } from '../data/expeditions.js';
-import {HERO_UPGRADES} from '../systems/hero.js';
+import {HERO_UPGRADES, isAutoSkill} from '../systems/hero.js';
 import {
   EQUIPMENT,
   GEMS,
@@ -40,12 +39,11 @@ import {catalogIcon, navIcon} from './icons.js';
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality', 'economy'];
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 const local = {
   screen: null,
   armoryTab: 'gems',
-  codexTab: 'towers',
+  codexTab: 'hero',
   confirmAbandon: false,
   stageNum: null,
   showStageGrid: false,
@@ -473,7 +471,7 @@ function renderArmory(ctx, root) {
     ['bonus-damage', tr(api, lang, 'damage'), `+${Math.round((bonuses.damage || 0) * 100)}%`],
     ['bonus-haste', lang === 'zh' ? '攻速' : 'Speed', `+${Math.round((bonuses.haste || 0) * 100)}%`],
     ['bonus-fence', tr(api, lang, 'fence'), `+${Math.round(bonuses.fence || 0)}`],
-    ['bonus-sw', lang === 'zh' ? '超武冷却' : 'Arsenal', bonuses.superweaponHaste > 0 ? `-${Math.round(bonuses.superweaponHaste * 100)}%` : '0%'],
+    ['bonus-sw', tr(api, lang, 'superweaponHaste'), bonuses.superweaponHaste > 0 ? `-${Math.round(bonuses.superweaponHaste * 100)}%` : '0%'],
   ];
   for (const [testid, label, val] of metrics) {
     summary.append(h(doc, 'div', {className: 'm-bonus-tile', 'data-testid': testid}, [
@@ -701,16 +699,16 @@ function renderArmoryUpgrades(ctx, host) {
 }
 
 // =========================================================================
-// 3. CLEAN 3-TAB CODEX (TURRETS / HERO & SUPER-WEAPONS / ENEMIES)
+// 3. CLEAN 2-TAB CODEX (GUNS & AUTO SKILLS / ZOMBIES)
 // =========================================================================
 function renderCodex(ctx, root) {
   const {doc, api, lang} = ctx;
   const stack = h(doc, 'div', {className: 'm-stack', 'data-testid': 'meta-codex'});
+  if (local.codexTab !== 'enemies') local.codexTab = 'hero';
 
   const tabs = h(doc, 'div', {className: 'm-seg-tabs', role: 'tablist', 'data-testid': 'codex-tabs'});
   for (const [id, label] of [
-    ['towers', tr(api, lang, 'towers')],
-    ['hero', lang === 'zh' ? '英雄与超武' : 'Hero & Arsenal'],
+    ['hero', lang === 'zh' ? '枪械与技能' : 'Guns & Skills'],
     ['enemies', tr(api, lang, 'enemies')]
   ]) {
     const active = local.codexTab === id;
@@ -727,26 +725,7 @@ function renderCodex(ctx, root) {
   stack.append(tabs);
 
   const grid = h(doc, 'div', {className: 'm-grid'});
-  if (local.codexTab === 'hero') {
-    for (const [id, spec] of Object.entries(HERO_UPGRADES)) {
-      const isSuper = SUPERWEAPON_IDS.has(id);
-      const card = h(doc, 'article', {className: `m-item-card${isSuper ? ' is-super-card' : ''}`, 'data-testid': `codex-hero-${id}`});
-      card.append(h(doc, 'div', {className: 'm-item-head'}, [
-        catalogIcon(doc, id),
-        h(doc, 'div', {className: 'm-item-info'}, [
-          h(doc, 'div', {className: 'm-item-title-row'}, [
-            h(doc, 'h3', {text: loc(spec.name, lang)}),
-            h(doc, 'span', {
-              className: `badge ${isSuper ? 'badge-legend' : ''}`,
-              text: `${isSuper ? tr(api, lang, 'tagSuperweapon') : tr(api, lang, 'tagHero')} · Max ${spec.cap}`
-            })
-          ]),
-          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang).replace(/^(Hero · |英雄 · )/, '')})
-        ])
-      ]));
-      grid.append(card);
-    }
-  } else if (local.codexTab === 'enemies') {
+  if (local.codexTab === 'enemies') {
     for (const [id, spec] of Object.entries(ENEMIES)) {
       const card = h(doc, 'article', {className: 'm-item-card', 'data-testid': `codex-enemy-${id}`});
       card.append(h(doc, 'div', {className: 'm-item-head'}, [
@@ -762,18 +741,28 @@ function renderCodex(ctx, root) {
       grid.append(card);
     }
   } else {
-    for (const [id, spec] of Object.entries(TOWERS)) {
-      const rate = spec.stats.interval > 0 ? Math.round((1 / spec.stats.interval) * 10) / 10 : 0;
-      const card = h(doc, 'article', {className: 'm-item-card', 'data-testid': `codex-tower-${id}`});
+    const entries = Object.entries(HERO_UPGRADES).sort(([a], [b]) => {
+      if (a === 'overclock') return 1;
+      if (b === 'overclock') return -1;
+      return Number(isAutoSkill(b)) - Number(isAutoSkill(a));
+    });
+    for (const [id, spec] of entries) {
+      const isSuper = isAutoSkill(id);
+      const card = h(doc, 'article', {className: `m-item-card${isSuper ? ' is-super-card' : ''}`, 'data-testid': `codex-hero-${id}`});
+      const badgeText = id === 'overclock'
+        ? (lang === 'zh' ? '枪械强化 · 可重复' : 'Gun Mod · Repeatable')
+        : `${isSuper ? tr(api, lang, 'tagSuperweapon') : tr(api, lang, 'tagHero')} · Max ${spec.cap}`;
       card.append(h(doc, 'div', {className: 'm-item-head'}, [
         catalogIcon(doc, id),
         h(doc, 'div', {className: 'm-item-info'}, [
           h(doc, 'div', {className: 'm-item-title-row'}, [
             h(doc, 'h3', {text: loc(spec.name, lang)}),
-            h(doc, 'span', {className: 'badge', text: loc(spec.role, lang)})
+            h(doc, 'span', {
+              className: `badge ${isSuper ? 'badge-legend' : ''}`,
+              text: badgeText
+            })
           ]),
-          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang)}),
-          h(doc, 'p', {className: 'm-mini-stats', text: `${tr(api, lang, 'damage')} ${spec.stats.damage} · ${rate}/s · ${tr(api, lang, 'range')} ${spec.stats.range}`})
+          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang).replace(/^(Hero · |英雄 · )/, '')})
         ])
       ]));
       grid.append(card);
@@ -849,7 +838,7 @@ function renderSettings(ctx, root) {
     h(doc, 'p', {className: 'muted', text: tr(api, lang, 'howtoLead')})
   );
   const steps = h(doc, 'ol', {className: 'm-guide-list'});
-  for (const key of ['helpOverview', 'helpDraft', 'helpPlacement', 'helpRange', 'helpFence']) {
+  for (const key of ['helpOverview', 'helpDraft', 'helpRange', 'helpFence', 'helpPlacement']) {
     steps.append(h(doc, 'li', {text: tr(api, lang, key)}));
   }
   guide.append(steps);
@@ -912,7 +901,7 @@ function renderSettings(ctx, root) {
   });
   save.append(importArea, importBtn);
   stack.append(save);
-  stack.append(h(doc, 'p', {className: 'muted m-footnote', text: `Fencefall v4 · Contract ${CONTRACT_VERSION}`}));
+  stack.append(h(doc, 'p', {className: 'muted m-footnote', text: `Fencefall v5 · Contract ${CONTRACT_VERSION}`}));
   root.append(stack);
 }
 

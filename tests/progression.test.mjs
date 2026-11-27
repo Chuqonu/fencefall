@@ -128,10 +128,11 @@ test('hero upgrades stop at their caps and a capped card is not applied', () => 
   for (let i = 0; i < HERO_UPGRADES.pierce.cap; i += 1) assert.equal(applyHeroUpgrade(state, 'pierce').ok, true);
   assert.equal(applyHeroUpgrade(state, 'pierce').reason, 'upgrade_capped');
   assert.equal(getHeroStats(hero, state).pierce, HERO_BASE.pierce + HERO_UPGRADES.pierce.cap);
-  capHero(state);
+  capHero(state, 'overclock');
   openDraft(state);
-  assertOptions(state);
-  assert.ok(state.draft.options.every(card => card.kind === 'tower' && card.upgradeId == null));
+  assert.equal(state.draft.options.length, 1);
+  assert.equal(state.draft.options[0].kind, 'hero_upgrade');
+  assert.equal(state.draft.options[0].upgradeId, 'overclock');
   const level = hero.upgrades.strike;
   const xp = state.xp;
   const slots = JSON.stringify(state.slots);
@@ -214,7 +215,7 @@ test('equipment and permanent purchases charge catalog prices and apply only whe
   const stats = getHeroStats(geared.slots[2].unit, geared);
   assert.equal(stats.damage, Number((HERO_BASE.damage * 1.1).toFixed(4)));
   assert.equal(stats.range, HERO_BASE.range);
-  assert.equal(stats.critChance, 0.13);
+  assert.equal(stats.critChance, Number((HERO_BASE.critChance + 0.05).toFixed(4)));
   assert.equal(buyEquipment(profile, 'splinter_bow').reason, 'alreadyOwned');
   assert.equal(purchasePermanent(profile, 'damage').reason, 'insufficientCurrency');
   assert.equal(profile.permanent.damage, 1);

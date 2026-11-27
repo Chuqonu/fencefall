@@ -1,5 +1,5 @@
-// The inset slot block leaves side rooms. A thin sill may continue the fence
-// to the edge. Crates, stakes, sandbags, posts, and other props must not sit there.
+// v5 battlefield backdrop draws sky, road, fortified wall, and central commander
+// deck cleanly across full and damaged wall ratios without a 2x5 tower grid.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ARENA, slotGeometry} from '../src/shared.js';
@@ -23,7 +23,7 @@ function paint(ratio) {
     }
   };
   const slots = Array.from({length: 10}, () => ({unit: null}));
-  slots[2] = {unit: {id: 'hero', kind: 'hero', type: 'hero', rank: 1}};
+  slots[2] = {unit: {id: 'hero', kind: 'hero', type: 'hero', rank: 1, upgrades: {}}};
   drawWorld(ctx, {
     phase: 'playing',
     fence: {hp: Math.round(600 * ratio), maxHp: 600},
@@ -32,45 +32,20 @@ function paint(ratio) {
   return rects;
 }
 
-function inMargin(rect, start, end) {
-  return rect.w > 0 && rect.h > 0 && rect.x >= start && rect.x + rect.w <= end;
-}
-
-function overlaps(rect, slot) {
-  return rect.x < slot.left + slot.width
-    && rect.x + rect.w > slot.left
-    && rect.y < slot.top + slot.height
-    && rect.y + rect.h > slot.top;
-}
-
-test('side rooms stay empty and a thin sill meets the fence', () => {
+test('battlefield world draws sky, road, wall, and center bastion deck cleanly with no 2x5 grid', () => {
   assert.equal(ARENA.fenceY, 512);
   assert.equal(ARENA.frontY, 560);
-  assert.equal(ARENA.backY, 612);
-  assert.equal(ARENA.pitch, 48);
-  assert.equal(ARENA.sideMargin, 60);
-  assert.equal(slotGeometry(2).col, 2);
-  assert.equal(slotGeometry(2).row, 0);
-
-  const margin = ARENA.sideMargin;
-  const roomTop = slotGeometry(0).top;
-  const roomBottom = slotGeometry(ARENA.cols).top + slotGeometry(ARENA.cols).height;
-  const slots = Array.from({length: 10}, (_, index) => slotGeometry(index));
-  const bands = [[0, margin], [ARENA.width - margin, ARENA.width]];
+  assert.equal(slotGeometry(2).x, 180);
+  assert.equal(slotGeometry(2).y, ARENA.frontY);
 
   for (const ratio of [1, 0.2]) {
     const rects = paint(ratio);
-    for (const [start, end] of bands) {
-      const side = rects.filter(rect => inMargin(rect, start, end));
-      const sill = side.filter(rect => rect.w >= margin - 2 && rect.h <= 4 && rect.y >= ARENA.fenceY && rect.y + rect.h <= roomTop);
-      assert.ok(sill.length >= 1, `missing thin sill in ${start}-${end} at ratio ${ratio}`);
-      const props = side.filter(rect => rect.y < roomBottom && rect.y + rect.h > roomTop);
-      assert.equal(props.length, 0, `side room ${start}-${end} still holds ${props.length} props`);
-      for (const rect of side) {
-        for (const slot of slots) {
-          assert.equal(overlaps(rect, slot), false, `sill ${rect.x},${rect.y} covers slot ${slot.index}`);
-        }
-      }
-    }
+    assert.ok(rects.length >= 4, `world drew backdrop layers at ratio ${ratio}`);
+    // Wall spans the full arena width across ARENA.fenceY
+    const wall = rects.filter(r => r.x === 0 && r.w === ARENA.width && r.y <= ARENA.fenceY && r.y + r.h >= ARENA.fenceY);
+    assert.ok(wall.length >= 1, `fortified wall covers fenceY at ratio ${ratio}`);
+    // Commander deck spans below the wall without 10 individual 48x48 grid tiles
+    const gridCells = rects.filter(r => r.w === 48 && r.h === 48);
+    assert.equal(gridCells.length, 0, 'no 2x5 tower grid cells drawn');
   }
 });

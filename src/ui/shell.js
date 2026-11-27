@@ -1,5 +1,5 @@
 import {superweaponCooldown} from '../systems/combat.js';
-import {ARENA, DIFFICULTIES, canPlan, hitSlot, slotGeometry} from '../shared.js';
+import {ARENA, DIFFICULTIES, slotGeometry} from '../shared.js';
 import {bossApproaching, getWaveInfo} from '../systems/waves.js';
 import {ENEMIES} from '../data/enemies.js';
 import {EXPEDITIONS, stageNumber} from '../data/expeditions.js';
@@ -23,12 +23,13 @@ const ARSENAL_SPECS = Object.freeze([
 ]);
 
 /**
- * Mobile-first App Shell & Live Battle HUD (Fencefall v4).
+ * Mobile-first App Shell & Live Battle HUD (Fencefall v5).
  * - Non-battle screens use a slim Top App Bar + Sticky 4-Tab Bottom Navigation Bar.
- * - Battle screen uses an unobstructed full-height canvas, slim translucent Top Status/XP strip,
- *   floating Auto-Arsenal super-weapon strip, and a thumb-zone Bottom Control Dock
- *   (Pause/Resume · 1× 1.5× 3× 10× · Menu).
- * - Dragging any defender on the wall moves to an empty slot or swaps with another defender.
+ * - Battle screen uses an unobstructed full-height HD vector canvas, slim translucent
+ *   Top Status/XP strip, floating Auto-Skill cooldown strip, and thumb-zone Bottom
+ *   Control Dock (Pause/Resume · 1× 1.5× 3× 10× · Menu).
+ * - Solo Wall Gunner is permanently anchored on the central platform; tapping the Gunner
+ *   toggles the Gunner Stats & Targeting Priority bottom sheet.
  */
 export function mountShell(root, api) {
   if (!root || typeof root.appendChild !== 'function') {
@@ -209,19 +210,12 @@ export function mountShell(root, api) {
     'data-testid': 'menu-root'
   });
 
-  const ghost = el('div', {
-    class: 'drag-ghost',
-    'data-testid': 'drag-ghost',
-    hidden: true
-  });
-
-  shell.append(topbar, body, hud, arsenalBar, battleDock, overlayRoot, menuRoot, bottomNav, ghost);
+  shell.append(topbar, body, hud, arsenalBar, battleDock, overlayRoot, menuRoot, bottomNav);
   root.replaceChildren(shell);
 
   let dead = false;
   let pointer = null;
   let suppressClick = false;
-  let snapToken = 0;
   let clickTimer = 0;
   let lastKey = '';
   let lastPaint = 0;
@@ -232,61 +226,32 @@ export function mountShell(root, api) {
     pointer = {
       id: event.pointerId,
       type: event.pointerType || 'mouse',
-      index: indexFromClient(event.clientX, event.clientY, event.pointerType),
       x: event.clientX,
       y: event.clientY,
-      active: false
     };
-    try { canvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
-  }
-
-  function onPointerMove(event) {
-    if (dead || !pointer || pointer.id !== event.pointerId) return;
-    const dx = event.clientX - pointer.x;
-    const dy = event.clientY - pointer.y;
-    if (!pointer.active && Math.hypot(dx, dy) < 10) return;
-    const state = readState();
-    const start = pointer.index;
-    const unit = state && validSlot(start, state) ? state.slots[start]?.unit : null;
-    if (!unit) return;
-    pointer.active = true;
-    const hover = indexFromClient(event.clientX, event.clientY, pointer.type);
-    const kind = dropKind(state, start, hover);
-    showGhost(event.clientX, event.clientY, unit, kind);
-    api.act('hover', {index: hover, intent: kind === 'empty' || kind === 'swap' || kind === 'illegal' ? kind : ''});
   }
 
   function onPointerUp(event) {
     if (dead) return;
     if (pointer && pointer.id !== event.pointerId) return;
+    const startX = pointer ? pointer.x : event.clientX;
+    const startY = pointer ? pointer.y : event.clientY;
     const pointerType = pointer?.type || event.pointerType;
-    const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY, pointerType);
-    const dragging = Boolean(pointer?.active);
     pointer = null;
     suppressClick = true;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => { suppressClick = false; }, 400);
-    const end = indexFromClient(event.clientX, event.clientY, pointerType);
-    if (dragging) finishDrag(start, end);
-    else {
-      hideGhost();
-      handleGesture(start, end);
-    }
+    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 36) return;
+    handleTap(event.clientX, event.clientY, pointerType);
   }
 
   function onPointerCancel() {
-    const start = pointer?.index;
-    const dragging = Boolean(pointer?.active);
     pointer = null;
-    api.act('hover', {index: -1});
-    if (dragging && validSlot(start, readState())) snapGhost(start);
-    else hideGhost();
   }
 
   function onClick(event) {
     if (dead || suppressClick) return;
-    const idx = indexFromClient(event.clientX, event.clientY);
-    handleGesture(idx, idx);
+    handleTap(event.clientX, event.clientY, 'mouse');
   }
 
   function onControl(event) {
@@ -353,12 +318,6 @@ export function mountShell(root, api) {
       return;
     }
 
-    if (screen === 'battle' && state && event.code.startsWith('Arrow')) {
-      event.preventDefault();
-      nudgeSelection(event.code, state, ui);
-      return;
-    }
-
     const digit = digitFromCode(event.code);
     if (digit == null || screen !== 'battle' || !state) return;
     if (phaseName === 'draft') {
@@ -376,7 +335,6 @@ export function mountShell(root, api) {
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
-  canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('click', onClick);
@@ -602,134 +560,38 @@ export function mountShell(root, api) {
     setText(live, [phaseText, note].filter(Boolean).join(' · '));
   }
 
-  function handleGesture(startIndex, endIndex) {
+  function handleTap(clientX, clientY, pointerType) {
     const state = readState();
     const ui = readUI();
     if (!state || screenName(ui, state) !== 'battle') return;
-    const phaseName = state.phase;
-
-    if (!validSlot(endIndex, state)) {
-      if (!validSlot(startIndex, state) && slotIndex(ui?.selectedSlot) >= 0) {
-        api.act('selectSlot', {index: -1});
-      }
+    if (state.phase === 'draft') return;
+    const hit = heroSlotFromClient(clientX, clientY, pointerType, state);
+    if (hit >= 0) {
+      const next = slotIndex(ui?.selectedSlot) === hit ? -1 : hit;
+      api.act('selectSlot', {index: next});
       return;
     }
-
-    const planning = canPlan(state) && phaseName !== 'victory' && phaseName !== 'defeat';
-    if (planning && validSlot(startIndex, state) && startIndex !== endIndex && state.slots[startIndex]?.unit) {
-      api.act('move', {from: startIndex, to: endIndex});
-      return;
+    if (slotIndex(ui?.selectedSlot) >= 0) {
+      api.act('selectSlot', {index: -1});
     }
-    api.act('selectSlot', {index: endIndex});
   }
 
-  function nudgeSelection(code, state, ui) {
-    if ((state.slots?.length || 0) < 10) return;
-    const current = slotIndex(ui?.selectedSlot);
-    if (!validSlot(current, state)) {
-      api.act('selectSlot', {index: 0});
-      return;
-    }
-    const col = current % 5;
-    const row = Math.floor(current / 5);
-    let next = current;
-    if (code === 'ArrowLeft') next = row * 5 + ((col + 4) % 5);
-    else if (code === 'ArrowRight') next = row * 5 + ((col + 1) % 5);
-    else if (code === 'ArrowUp' && row === 1) next = col;
-    else if (code === 'ArrowDown' && row === 0) next = 5 + col;
-    if (next !== current) api.act('selectSlot', {index: next});
-  }
-
-  function showGhost(x, y, unit, kind) {
-    ghost.hidden = false;
-    ghost.classList.toggle('is-illegal', kind === 'illegal');
-    ghost.classList.toggle('is-empty', kind === 'empty');
-    ghost.classList.toggle('is-swap', kind === 'swap');
-    const label = unit?.kind === 'hero' || unit?.type === 'hero'
-      ? 'H'
-      : String(unit?.type || unit?.kind || '').slice(0, 4).toUpperCase();
-    setText(ghost, label);
-    ghost.style.left = `${x}px`;
-    ghost.style.top = `${y}px`;
-  }
-
-  function hideGhost() {
-    snapToken += 1;
-    ghost.hidden = true;
-    ghost.classList.remove('is-illegal', 'is-empty', 'is-swap', 'is-snapping');
-    setText(ghost, '');
-  }
-
-  function snapGhost(index) {
-    const center = slotClientCenter(index);
-    if (!center) { hideGhost(); return; }
-    ghost.classList.add('is-snapping');
-    ghost.style.left = `${center.x}px`;
-    ghost.style.top = `${center.y}px`;
-    const token = ++snapToken;
-    setTimeout(() => { if (token === snapToken) hideGhost(); }, 160);
-  }
-
-  function slotClientCenter(index) {
-    const rect = canvas.getBoundingClientRect();
-    if (!(rect.width > 0) || !(rect.height > 0)) return null;
-    const slot = slotGeometry(index);
-    return {
-      x: rect.left + (slot.x / ARENA.width) * rect.width,
-      y: rect.top + (slot.y / ARENA.height) * rect.height
-    };
-  }
-
-  function dropKind(state, from, to) {
-    if (!state || !validSlot(from, state) || !validSlot(to, state) || from === to) return 'same';
-    if (!canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return 'illegal';
-    const origin = state.slots[from]?.unit;
-    if (!origin) return 'illegal';
-    return state.slots[to]?.unit ? 'swap' : 'empty';
-  }
-
-  function finishDrag(from, to) {
-    api.act('hover', {index: -1});
-    const state = readState();
-    if (!state || !validSlot(from, state) || !state.slots[from]?.unit) {
-      hideGhost();
-      return;
-    }
-    const outcome = api.act('dragDrop', {from, to});
-    if (outcome?.ok && !outcome.snapped) {
-      hideGhost();
-      return;
-    }
-    snapGhost(from);
-  }
-
-  function indexFromClient(clientX, clientY, pointerType) {
+  function heroSlotFromClient(clientX, clientY, pointerType, state) {
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return -1;
+    const x = ((clientX - rect.left) / rect.width) * ARENA.width;
+    const y = ((clientY - rect.top) / rect.height) * ARENA.height;
+    if (x < -16 || y < -16 || x > ARENA.width + 16 || y > ARENA.height + 16) return -1;
+    const slots = Array.isArray(state?.slots) ? state.slots : [];
+    const heroIndex = slots.findIndex((s) => s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero'));
+    if (heroIndex < 0) return -1;
+    const center = slotGeometry(heroIndex);
     const touch = pointerType === 'touch' || pointerType === 'pen';
-    const slopCss = touch ? 28 : 8;
-    const slopX = (slopCss / rect.width) * ARENA.width;
-    const slopY = (slopCss / rect.height) * ARENA.height;
-    let x = ((clientX - rect.left) / rect.width) * ARENA.width;
-    let y = ((clientY - rect.top) / rect.height) * ARENA.height;
-    if (x < -slopX || y < -slopY || x >= ARENA.width + slopX || y >= ARENA.height + slopY) return -1;
-    x = Math.max(0, Math.min(ARENA.width - 0.01, x));
-    y = Math.max(0, Math.min(ARENA.height - 0.01, y));
-    const direct = hitSlot(x, y);
-    if (direct >= 0) return direct;
-    let best = -1;
-    let bestDist = touch ? 32 : 12;
-    for (let index = 0; index < 10; index += 1) {
-      const slot = slotGeometry(index);
-      const dx = Math.max(slot.left - x, 0, x - (slot.left + slot.width));
-      const dy = Math.max(slot.top - y, 0, y - (slot.top + slot.height));
-      const dist = Math.hypot(dx, dy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = index;
-      }
-    }
-    return best;
+    const rx = touch ? 54 : 44;
+    const ry = touch ? 46 : 38;
+    const dx = Math.abs(x - center.x);
+    const dy = Math.abs(y - (center.y - 2));
+    return (dx <= rx && dy <= ry) ? heroIndex : -1;
   }
 
   function destroy() {
@@ -738,7 +600,6 @@ export function mountShell(root, api) {
     clearInterval(timer);
     clearTimeout(clickTimer);
     canvas.removeEventListener('pointerdown', onPointerDown);
-    canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('click', onClick);

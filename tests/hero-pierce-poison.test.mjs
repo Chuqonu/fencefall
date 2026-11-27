@@ -68,14 +68,14 @@ function shoot(state, hero, firstId, pierce, dps) {
   return hits;
 }
 
-test('Thermobaric and Armor Core burn the first enemy and the pierced enemy at one stack', () => {
-  assert.equal(HERO_UPGRADES.shrapnel.name.en, 'Thermobaric');
-  assert.equal(HERO_UPGRADES.pierce.name.en, 'Armor Core');
+test('Flame Rounds and Armor Pierce burn the first enemy and the pierced enemy at one stack', () => {
+  assert.equal(HERO_UPGRADES.shrapnel.name.en, 'Flame Rounds');
+  assert.equal(HERO_UPGRADES.pierce.name.en, 'Armor Pierce');
   const shrapnel = HERO_UPGRADES.shrapnel.effect.burn;
   const pierceCount = HERO_UPGRADES.pierce.effect.pierce;
   assert.equal(shrapnel.duration, 2.6);
   assert.equal(pierceCount, 1);
-  assert.equal(shrapnel.dps, 4);
+  assert.equal(shrapnel.dps, 5);
 
   const state = createRun({seed: 41, difficulty: 'normal', runId: 'hero-pierce-burn'});
   const hero = state.slots[2].unit;

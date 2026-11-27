@@ -1,30 +1,32 @@
 /**
- * Fencefall v4 Battle Draft & Unit Bottom Sheet.
- * - Full-screen zero-scroll 3-of-1 Draft modal (1 tap applies immediately: Hero mod, Auto Super-Weapon,
- *   New Turret auto-deploy, or Existing Turret Lv.1->Lv.4 upgrade).
- * - Compact mobile-friendly Unit Bottom Sheet with direct 4-mode targeting pills and clean stats.
+ * Fencefall v5 — Pure Solo-Gunner 3-of-1 Draft Modal & Gunner Inspector Bottom Sheet.
+ * - Full-screen zero-scroll 3-of-1 Draft modal offering ONLY Gun Mods (枪械强化)
+ *   and Auto Skills (自动技能), applied immediately in 1 tap.
+ * - Compact mobile-friendly Gunner Bottom Sheet with direct 4-mode targeting pills,
+ *   live stats, and active Auto Skills + Gun Mods list.
  */
-import {TOWERS, getUnitStats} from '../data/towers.js';
-import {HERO_UPGRADES} from '../systems/hero.js';
+import {getUnitStats} from '../data/towers.js';
+import {HERO_UPGRADES, isAutoSkill} from '../systems/hero.js';
 import {TARGET_MODES} from '../shared.js';
 import {formatNumber, localize, t as translate} from '../i18n.js';
 import {catalogIcon, navIcon} from './icons.js';
 
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
-
 const ACCENTS = Object.freeze({
-  bolt: '#f0d56a',
-  fire: '#ff6c30',
-  frost: '#7ce8ff',
-  lightning: '#ffe14a',
-  poison: '#80e06a',
-  support: '#78d8c8',
   split_shot: '#ffaa44',
   ricochet: '#ffe14a',
   napalm: '#ff6c30',
   armored_car: '#f0cb72',
   cryo_barrage: '#7ce8ff',
   orbital_beam: '#54f0ff',
+  shrapnel: '#ff7a3a',
+  frostbite: '#7ee6ff',
+  pierce: '#a4e870',
+  bastion: '#78e0b8',
+  volley: '#ffd65a',
+  strike: '#ff8a56',
+  cadence: '#f6d268',
+  focus: '#ffe26a',
+  overclock: '#ff8c3c',
   hero: '#f0cb72',
 });
 
@@ -83,49 +85,26 @@ function fmt(n, lang) {
   return Number.isFinite(n) ? formatNumber(Math.round(n * 10) / 10, lang) : '0';
 }
 
-function stars(rank, max = 4) {
-  const r = Math.max(1, Math.min(max, Math.round(Number(rank) || 1)));
-  return '★'.repeat(r) + '☆'.repeat(Math.max(0, max - r));
-}
-
 function accentOf(option) {
   if (!option) return ACCENTS.hero;
-  if (option.kind === 'tower') return ACCENTS[option.type] || ACCENTS.hero;
-  if (option.kind === 'hero_upgrade') return ACCENTS[option.upgradeId] || ACCENTS.hero;
-  return ACCENTS.hero;
+  return ACCENTS[option.upgradeId] || ACCENTS.hero;
 }
 
 function iconIdOf(option) {
   if (!option) return 'hero';
-  if (option.kind === 'tower') return option.type;
-  if (option.kind === 'hero_upgrade') return option.upgradeId;
-  return 'hero';
+  return option.upgradeId || 'hero';
 }
 
 function draftCardMeta(option, lang, tr) {
-  if (option.kind === 'tower') {
-    const spec = TOWERS[option.type];
-    const name = loc(spec?.name, lang) || option.type;
-    const isUpgrade = option.action === 'upgrade' || (option.rank || 0) >= 1;
-    const fromRank = Math.max(1, option.rank || 1);
-    const toRank = option.nextRank || (isUpgrade ? fromRank + 1 : 1);
-    const tag = isUpgrade
-      ? tr('tagUpgradeTurret', {from: fromRank, to: toRank})
-      : tr('tagNewTurret');
-    const tagKind = isUpgrade ? 'is-upgrade' : 'is-new';
-    const desc = isUpgrade
-      ? (lang === 'zh'
-        ? `火力大幅飙升至 Lv.${toRank}，强化射速、射程与特效。`
-        : `Power up to Lv.${toRank} with higher damage, fire rate & range.`)
-      : (loc(spec?.description, lang) || '');
-    return {name, tag, tagKind, desc, isSuper: false};
-  }
-  const spec = HERO_UPGRADES[option.upgradeId];
-  const isSuper = SUPERWEAPON_IDS.has(option.upgradeId);
-  const name = loc(spec?.name, lang) || option.upgradeId;
+  const id = option.upgradeId;
+  const spec = HERO_UPGRADES[id];
+  const isSuper = isAutoSkill(id);
+  const name = loc(spec?.name, lang) || id;
   const lv = option.nextLevel || 1;
-  const cap = option.cap || spec?.cap || 3;
-  const tag = `${isSuper ? tr('tagSuperweapon') : tr('tagHero')} · Lv.${lv}/${cap}`;
+  const cap = option.cap || spec?.cap || 4;
+  const tag = id === 'overclock'
+    ? `${tr('tagHero')} · Lv.${lv}`
+    : `${isSuper ? tr('tagSuperweapon') : tr('tagHero')} · Lv.${lv}/${cap}`;
   const rawDesc = loc(option.description || spec?.description, lang) || '';
   const desc = rawDesc.replace(/^(Hero · |英雄 · )/, '');
   return {name, tag, tagKind: isSuper ? 'is-super' : 'is-hero', desc, isSuper};
@@ -177,7 +156,7 @@ function renderDraft(state, lang, tr) {
       style: `--choice-accent:${accent}`,
       'data-action': 'chooseDraft',
       'data-index': String(index),
-      'data-kind': option.kind || '',
+      'data-kind': option.kind || 'hero_upgrade',
       'data-type': option.type || '',
       'data-upgrade-id': option.upgradeId || '',
       'data-option-id': option.id || '',
@@ -217,10 +196,12 @@ function renderInspector(state, ui, lang, tr) {
   if (!unit) return null;
 
   const doc = currentDoc;
-  const isHeroUnit = unit.kind === 'hero' || unit.type === 'hero';
-  const spec = isHeroUnit ? null : TOWERS[unit.type];
-  const name = isHeroUnit ? tr('hero') : (loc(spec?.name, lang) || unit.type);
+  const name = tr('gunnerTitle');
   const stats = getUnitStats(unit, state);
+  const upgEntries = Object.entries(unit.upgrades || {})
+    .filter(([, lv]) => Number(lv) > 0)
+    .sort(([a], [b]) => Number(isAutoSkill(b)) - Number(isAutoSkill(a)));
+  const totalLevels = upgEntries.reduce((sum, [, lv]) => sum + Number(lv), 0);
 
   const sheet = el('section', {
     class: 'ff-sheet',
@@ -229,17 +210,18 @@ function renderInspector(state, ui, lang, tr) {
     'aria-label': name,
   });
 
-  // Compact header: icon + name + rank stars + kills + close
   const head = el('div', {class: 'ff-sheet-head'});
   const idBlock = el('div', {class: 'ff-sheet-id'}, [
-    el('span', {class: 'ff-sheet-icon'}, [catalogIcon(doc, isHeroUnit ? 'hero' : unit.type)]),
+    el('span', {class: 'ff-sheet-icon'}, [catalogIcon(doc, 'hero')]),
     el('div', {class: 'ff-sheet-titles'}, [
       el('div', {class: 'ff-sheet-name-row'}, [
         el('h3', {'data-testid': 'unit-name', text: name}),
         el('span', {
-          class: `ff-rank-pill${isHeroUnit ? ' is-hero' : ''}`,
+          class: 'ff-rank-pill is-hero',
           'data-testid': 'unit-rank',
-          text: isHeroUnit ? (lang === 'zh' ? '主炮英雄' : 'HERO') : `Lv.${unit.rank || 1} ${stars(unit.rank || 1)}`
+          text: totalLevels > 0
+            ? (lang === 'zh' ? `已强化 ${totalLevels} 级` : `${totalLevels} Upgrades`)
+            : (lang === 'zh' ? '自动瞄准' : 'AUTO-AIM')
         }),
       ]),
       el('span', {
@@ -294,22 +276,17 @@ function renderInspector(state, ui, lang, tr) {
   }
   sheet.append(statStrip);
 
-  // Hero active evolutions strip OR Turret 1-line description
-  if (isHeroUnit) {
-    const entries = Object.entries(unit.upgrades || {}).filter(([, lv]) => Number(lv) > 0);
-    if (entries.length) {
-      const mods = el('div', {class: 'ff-mod-chips', 'data-testid': 'hero-upgrades'});
-      for (const [id, lv] of entries) {
-        const u = HERO_UPGRADES[id];
-        mods.append(el('span', {
-          class: `ff-mod-chip${SUPERWEAPON_IDS.has(id) ? ' is-super' : ''}`,
-          text: `${loc(u?.name, lang) || id} Lv.${lv}`
-        }));
-      }
-      sheet.append(mods);
+  // Active Auto Skills & Gun Mods chips
+  if (upgEntries.length) {
+    const mods = el('div', {class: 'ff-mod-chips', 'data-testid': 'hero-upgrades'});
+    for (const [id, lv] of upgEntries) {
+      const u = HERO_UPGRADES[id];
+      mods.append(el('span', {
+        class: `ff-mod-chip${isAutoSkill(id) ? ' is-super' : ''}`,
+        text: `${loc(u?.name, lang) || id} Lv.${lv}`
+      }));
     }
-  } else if (spec?.description) {
-    sheet.append(el('p', {class: 'ff-sheet-desc', text: loc(spec.description, lang)}));
+    sheet.append(mods);
   }
 
   return sheet;

@@ -225,7 +225,7 @@ test('a failing fence uses the danger chip unless pause wins', () => {
   low.fence.maxHp = 600;
   const zh = mount(low, 'zh');
   try {
-    assert.equal(zh.text('hud-phase'), '防线危急');
+    assert.equal(zh.text('hud-phase'), '城墙危急');
     assert.match(zh.fenceFill(), /is-low/);
   } finally {
     zh.close();

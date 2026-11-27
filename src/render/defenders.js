@@ -1,1285 +1,479 @@
 /**
- * Fencefall defender sprites (logical pixels, bottom-center anchor).
+ * Fencefall v5 — PvZ2-Style Sharp Cel-Shaded Wall Gunner (Hero) Vector Renderer.
  *
- * drawDefender(ctx, unit, x, y) plants the sprite's feet — including the
- * contact-shadow row — on (x, y). The cached image is 40×40, inside the
- * 24–40px art range, and that body stays inside the slot.
- *
- * Base turret silhouettes draw each defender's distinct weapon — bow, flame
- * bowl, crystal, spark coil, flask, or banner. Rank 1–4 is shown as chevrons
- * on the plinth, one mark per level.
- * A defender whose stats include an aura wears a teal ring around the sprite.
- * Nothing here reads or writes gameplay RNG or run state.
+ * Bottom-center anchor (x, y) places the Gunner's boots & contact shadow right on
+ * the central Commander Gunnery Platform. Supports smooth continuous breathing,
+ * fluttering crimson scarf, 360° articulated weapon tracking (`options.aimAngle`),
+ * spring kickback (`options.recoil`), starburst muzzle flash, and live visual weapon
+ * evolutions as Gun Mods & Auto Skills are unlocked.
  */
-import {ARENA, BASE_TYPES, clamp} from '../shared.js';
-import {getUnitStats} from '../data/towers.js';
 
-const W = 40;
-const H = 40;
-const FRAMES = 4;
+const HERO_W = 50;
+const HERO_H = 54;
+const INK = '#11171d';
 
-const PALETTE = {
-  K: '#140e0c',
-  k: '#2a221c',
-  R: '#4a2c18',
-  r: '#8a552c',
-  Y: '#e0a05a',
-  N: '#3a4450',
-  n: '#8494a4',
-  M: '#e2eaf0',
-  B: '#7a4e18',
-  b: '#f0c14a',
-  X: '#322e2a',
-  x: '#6a635c',
-  w: '#c4bbb0',
-  d: '#3c1018',
-  C: '#6e2430',
-  e: '#8e3844',
-  c: '#c44a56',
-  H: '#e6c15a',
-  h: '#fff0c0',
-  s: '#c49068',
-  S: '#f0c4a0',
-  y: '#f6d8b4',
-  P: '#5c3818',
-  p: '#a06a38',
-  F: '#5c140c',
-  f: '#e04018',
-  A: '#ffb030',
-  a: '#fff4c8',
-  I: '#102e3c',
-  i: '#2a7c9c',
-  L: '#8ae4f8',
-  l: '#f6feff',
-  V: '#1c1438',
-  v: '#6840d0',
-  Z: '#ffe050',
-  z: '#fffce8',
-  U: '#7a4018',
-  u: '#e08840',
-  G: '#142010',
-  g: '#3c882c',
-  Q: '#b0e848',
-  q: '#f0ffd0',
-  o: '#7aa090',
-  O: '#d8f0e4',
-  T: '#145850',
-  t: '#38a898',
-  D: '#e0fff6',
-  E: '#f6f2e6',
-  W: '#ffffff',
-  J: '#1c1612',
-  j: '#4a3c2c',
-  m: '#d8c4a4'
-};
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.ellipse === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+  );
+}
 
-const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
-const BASE_SET = new Set(BASE_TYPES);
-
-const ALIASES = {
-  hero: 'hero',
-  warden: 'hero',
-  champion: 'hero',
-  keeper: 'hero',
-  sentinel: 'hero',
-  bolt: 'bolt',
-  arrow: 'bolt',
-  arrows: 'bolt',
-  projectile: 'bolt',
-  ballista: 'bolt',
-  crossbow: 'bolt',
-  quarrel: 'bolt',
-  archer: 'bolt',
-  fire: 'fire',
-  flame: 'fire',
-  burn: 'fire',
-  ember: 'fire',
-  frost: 'frost',
-  ice: 'frost',
-  cold: 'frost',
-  slow: 'frost',
-  lightning: 'lightning',
-  lightening: 'lightning',
-  lighning: 'lightning',
-  shock: 'lightning',
-  thunder: 'lightning',
-  electric: 'lightning',
-  spark: 'lightning',
-  poison: 'poison',
-  posion: 'poison',
-  toxin: 'poison',
-  venom: 'poison',
-  plague: 'poison',
-  support: 'support',
-  aura: 'support',
-  banner: 'support',
-  buff: 'support',
-  buffer: 'support',
-  healer: 'support'
-};
-
-const FLAVOR_PAIRS = {};
-const recipeById = new Map();
-
-const cache = new Map();
-
-const TOWER_PAINTERS = {
-  bolt: paintBolt,
-  fire: paintFire,
-  frost: paintFrost,
-  lightning: paintLightning,
-  poison: paintPoison,
-  support: paintSupport
-};
-
-const HYBRID_PAINTERS = {
-  'bolt+fire': paintCinderQuarrel,
-  'bolt+frost': paintHailSpike,
-  'bolt+lightning': paintStormLance,
-  'bolt+poison': paintVenomSpine,
-  'bolt+support': paintSignalShot,
-  'fire+frost': paintSteamVent,
-  'fire+lightning': paintPlasmaBrazier,
-  'fire+poison': paintBlightKiln,
-  'fire+support': paintWarBeacon,
-  'frost+lightning': paintPrismCoil,
-  'frost+poison': paintRimeUrn,
-  'frost+support': paintWardBell,
-  'lightning+poison': paintAcidArc,
-  'lightning+support': paintRelayStandard,
-  'poison+support': paintPlagueAltar
-};
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
 
 export function defenderSize(unit) {
-  void unit;
-  return {width: W, height: H};
-}
-
-function statsHaveAura(stats) {
-  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return false;
-  const aura = stats.aura;
-  if (aura && typeof aura === 'object' && !Array.isArray(aura)) return true;
-  const mechanics = stats.mechanics;
-  if (!Array.isArray(mechanics)) return false;
-  for (let i = 0; i < mechanics.length; i++) {
-    if (String(mechanics[i]).trim().toLowerCase() === 'aura') return true;
+  if (unit && (unit.kind === 'hero' || unit.type === 'hero')) {
+    return {width: HERO_W, height: HERO_H};
   }
-  return false;
+  return {width: 40, height: 40};
 }
 
-function unitHasAura(unit) {
-  if (statsHaveAura(unit.stats)) return true;
-  try {
-    return statsHaveAura(getUnitStats(unit));
-  } catch {
-    return false;
+function drawMuzzleStar(ctx, x, y, radius, tint) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Outer luminous burst
+  const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.45);
+  glow.addColorStop(0, '#ffffff');
+  glow.addColorStop(0.42, tint);
+  glow.addColorStop(1, 'rgba(255, 190, 70, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 1.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Sharp PvZ2 cartoon 6-point starburst
+  ctx.beginPath();
+  const spikes = 6;
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 === 0 ? radius : radius * 0.42;
+    const a = (i * Math.PI) / spikes;
+    const px = Math.cos(a) * r;
+    const py = Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
   }
+  ctx.closePath();
+  ctx.fillStyle = '#fff9d8';
+  ctx.fill();
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.restore();
 }
 
-function drawPixelCircle(ctx, cx, cy, radius, color) {
-  const r = Math.round(radius);
-  if (r <= 0 || typeof ctx.fillRect !== 'function') return;
-  let x = r;
-  let y = 0;
-  let decision = 1 - r;
-  ctx.fillStyle = color;
-  while (x >= y) {
-    ctx.fillRect(cx + x, cy + y, 1, 1);
-    ctx.fillRect(cx + y, cy + x, 1, 1);
-    ctx.fillRect(cx - x, cy + y, 1, 1);
-    ctx.fillRect(cx - y, cy + x, 1, 1);
-    ctx.fillRect(cx + x, cy - y, 1, 1);
-    ctx.fillRect(cx + y, cy - x, 1, 1);
-    ctx.fillRect(cx - x, cy - y, 1, 1);
-    ctx.fillRect(cx - y, cy - x, 1, 1);
-    y += 1;
-    if (decision <= 0) decision += 2 * y + 1;
-    else {
-      x -= 1;
-      decision += 2 * (y - x) + 1;
-    }
-  }
-}
-
-// Halo in the slot padding, outside the 40px body. Outer radius stays inside
-// the slot and off the silhouette, chevrons, and contact shadow.
-function drawAuraRing(ctx, dx, dy, dw, dh) {
-  const cx = Math.round(dx + dw / 2);
-  const cy = Math.round(dy + dh / 2);
-  const reach = Math.round(Math.min(dw, dh) / 2);
-  const wanted = reach + Math.max(4, Math.round(Math.min(dw, dh) * 0.12));
-  const slotLimit = Math.floor(Math.min(ARENA.slotWidth, ARENA.slotHeight) / 2) - 1;
-  const outer = Math.min(wanted, slotLimit);
-  if (!(outer > reach + 1)) return;
-  drawPixelCircle(ctx, cx, cy, outer, '#0c3f36');
-  drawPixelCircle(ctx, cx, cy, outer - 1, '#7dcec0');
-  drawPixelCircle(ctx, cx, cy, outer - 2, '#e7fff8');
-}
-
-export function drawDefender(ctx, unit, x, y, options = {}) {
-  if (!ctx || !unit || typeof unit !== 'object' || typeof ctx.save !== 'function') return;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  const opts = options || {};
+function drawHeroGunner(ctx, unit, x, y, opts) {
   const time = Number.isFinite(opts.time) ? opts.time : 0;
   const scale = Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1;
   const flash = Number.isFinite(opts.flash) && opts.flash > 0 ? Math.min(1, opts.flash) : 0;
-  const visual = resolveVisual(unit);
-  const rank = clamp(Math.round(Number.isFinite(unit.rank) ? unit.rank : 1), 1, 4);
-  const stars = visual.family === 'hero' ? starCount(unit) : 0;
-  const frame = frameOf(time);
-  const sprite = getSprite(visual, rank, stars, frame);
-  const dw = Math.max(1, Math.round(W * scale));
-  const dh = Math.max(1, Math.round(H * scale));
-  const dx = Math.round(x - dw / 2);
-  const dy = Math.round(y - dh);
-  const aura = unitHasAura(unit);
+  const recoil = Number.isFinite(opts.recoil) ? Math.max(0, Math.min(1, opts.recoil)) : 0;
+  const aimAngle = Number.isFinite(opts.aimAngle) ? opts.aimAngle : -Math.PI / 2;
+  const upg = (opts.upgrades && typeof opts.upgrades === 'object') ? opts.upgrades : (unit.upgrades || {});
+
+  const hasMulti = (upg.volley || 0) > 0 || (upg.split_shot || 0) > 0;
+  const hasFire = (upg.shrapnel || 0) > 0 || (upg.napalm || 0) > 0;
+  const hasFrost = (upg.frostbite || 0) > 0 || (upg.cryo_barrage || 0) > 0;
+  const hasArc = (upg.ricochet || 0) > 0 || (upg.orbital_beam || 0) > 0;
+  const totalLevels = Object.values(upg).reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+  const eliteTrim = totalLevels >= 6;
+
+  const bob = Math.sin(time * 3.4) * 1.3;
+  const sway = Math.cos(time * 2.1) * 0.6;
+  const aimCos = Math.cos(aimAngle);
+  const aimSin = Math.sin(aimAngle);
+  const kickX = -aimCos * recoil * 3.6;
+  const kickY = -aimSin * recoil * 2.4;
+
   ctx.save();
-  try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* older contexts */ }
-    blit(ctx, sprite, dx, dy, dw, dh);
-    if (flash > 0) {
-      ctx.globalAlpha = flash;
-      ctx.globalCompositeOperation = 'lighter';
-      blit(ctx, sprite, dx, dy, dw, dh);
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+
+  // 1. Soft Ground Contact Shadow
+  ctx.fillStyle = 'rgba(6, 10, 14, 0.52)';
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 18, 7.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle Hero Commander Aura when heavily upgraded
+  if (totalLevels >= 4) {
+    const auraAlpha = 0.14 + 0.08 * Math.sin(time * 4.2);
+    const auraColor = hasArc ? `rgba(96, 236, 255, ${auraAlpha})`
+      : hasFire ? `rgba(255, 138, 56, ${auraAlpha})`
+      : hasFrost ? `rgba(128, 232, 255, ${auraAlpha})`
+      : `rgba(248, 206, 94, ${auraAlpha})`;
+    ctx.strokeStyle = auraColor;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.ellipse(0, -3, 21.5, 8.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 2. Fluttering Crimson Commander Scarf (behind torso)
+  const wave1 = Math.sin(time * 5.6) * 3.2;
+  const wave2 = Math.cos(time * 6.8) * 2.6;
+  ctx.save();
+  ctx.translate(kickX * 0.5, bob * 0.8 + kickY * 0.5);
+  const scarfGrad = ctx.createLinearGradient(-16, -24, -22, -6);
+  scarfGrad.addColorStop(0, '#e8464c');
+  scarfGrad.addColorStop(1, '#981e28');
+  ctx.fillStyle = scarfGrad;
+  ctx.beginPath();
+  ctx.moveTo(-6, -25);
+  ctx.quadraticCurveTo(-15 + wave1 * 0.5, -21, -21 + wave1, -12 + wave2 * 0.5);
+  ctx.lineTo(-15 + wave2, -9 + wave1 * 0.3);
+  ctx.quadraticCurveTo(-10, -16, -3, -21);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  // 3. Sturdy Armored Tactical Boots & Legs
+  for (const side of [-1, 1]) {
+    const lx = side * 6.5;
+    // Armored shin + boot
+    const bootGrad = ctx.createLinearGradient(lx - 4, -15, lx + 4, -3);
+    bootGrad.addColorStop(0, '#465866');
+    bootGrad.addColorStop(1, '#1e2830');
+    rRect(ctx, lx - 4.4, -14.5, 8.8, 11.5, 3.2);
+    ctx.fillStyle = bootGrad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.9;
+    ctx.stroke();
+
+    // Brass knee-pad highlight
+    ctx.fillStyle = eliteTrim ? '#f4cc62' : '#7b92a2';
+    rRect(ctx, lx - 3, -13.2, 6, 3.6, 1.5);
+    ctx.fill();
+  }
+
+  // 4. Torso Armor & Brass Shoulder Pauldrons
+  ctx.save();
+  ctx.translate(sway + kickX * 0.7, bob + kickY * 0.7);
+
+  // Chest cuirass (3-tone cel shaded steel blue)
+  const torsoGrad = ctx.createLinearGradient(-12, -31, 12, -13);
+  torsoGrad.addColorStop(0, '#4e7898');
+  torsoGrad.addColorStop(0.55, '#2b4a62');
+  torsoGrad.addColorStop(1, '#182b3a');
+  rRect(ctx, -11.5, -30, 23, 18.5, 6);
+  ctx.fillStyle = torsoGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  // Tactical Utility Belt & Brass Buckle
+  ctx.fillStyle = '#3b2c20';
+  ctx.fillRect(-10.5, -16, 21, 4.2);
+  ctx.fillStyle = '#f4cb62';
+  rRect(ctx, -3.5, -16.4, 7, 5, 1.4);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // Glowing chest power core (reflects strongest Auto Skill element!)
+  const coreColor = hasArc ? '#62f2ff' : hasFire ? '#ff7c34' : hasFrost ? '#86eeff' : '#f8d264';
+  ctx.fillStyle = '#121d24';
+  ctx.beginPath();
+  ctx.arc(0, -22.5, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = coreColor;
+  ctx.beginPath();
+  ctx.arc(0, -22.5, 2.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(-0.8, -23.3, 1.0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Left & Right Gold/Brass Shoulder Pauldrons
+  for (const side of [-1, 1]) {
+    const px = side * 12.2;
+    const py = -25.5;
+    const pGrad = ctx.createLinearGradient(px - 4, py - 5, px + 4, py + 5);
+    pGrad.addColorStop(0, '#fae08a');
+    pGrad.addColorStop(0.5, '#d69c36');
+    pGrad.addColorStop(1, '#7c5116');
+    ctx.fillStyle = pGrad;
+    ctx.beginPath();
+    ctx.ellipse(px, py, 5.2, 6.2, side * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.9;
+    ctx.stroke();
+    // Specular rim dot
+    ctx.fillStyle = 'rgba(255, 252, 232, 0.72)';
+    ctx.beginPath();
+    ctx.ellipse(px - side * 1.2, py - 2.2, 1.8, 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Crimson Neck Scarf Collar
+  rRect(ctx, -8.5, -31.5, 17, 5, 2.5);
+  ctx.fillStyle = '#d93d44';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // 5. Oversized Expressive PvZ2-Style Combat Helmet & Glowing Visor
+  const headX = aimCos * 1.6;
+  const headY = -39.5 + aimSin * 0.8;
+
+  // Helmet Dome (glossy cel-shaded tactical steel-blue with warm gold brow trim)
+  const helmGrad = ctx.createRadialGradient(headX - 4, headY - 5, 2, headX, headY, 13.5);
+  helmGrad.addColorStop(0, '#78a8c8');
+  helmGrad.addColorStop(0.55, '#3b6482');
+  helmGrad.addColorStop(1, '#1c3346');
+  ctx.fillStyle = helmGrad;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 11.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.1;
+  ctx.stroke();
+
+  // Golden Helmet Crest Stripe
+  ctx.fillStyle = '#f6cf66';
+  ctx.beginPath();
+  ctx.moveTo(headX - 2.6, headY - 11.2);
+  ctx.lineTo(headX + 2.6, headY - 11.2);
+  ctx.lineTo(headX + 1.8, headY - 3.5);
+  ctx.lineTo(headX - 1.8, headY - 3.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // Glossy Specular Highlight on Helmet Crown
+  ctx.fillStyle = 'rgba(235, 250, 255, 0.55)';
+  ctx.beginPath();
+  ctx.ellipse(headX - 4.8, headY - 5.2, 3.2, 1.7, -0.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tactical Glowing Visor Goggles (points subtly toward aim direction!)
+  const visorX = headX + aimCos * 2.2;
+  const visorY = headY - 0.5 + aimSin * 1.4;
+  rRect(ctx, visorX - 7.8, visorY - 3.4, 15.6, 6.8, 3.2);
+  const vGrad = ctx.createLinearGradient(visorX - 7, visorY - 3, visorX + 7, visorY + 3);
+  vGrad.addColorStop(0, '#9cf8ff');
+  vGrad.addColorStop(0.5, '#38c8ec');
+  vGrad.addColorStop(1, '#166e92');
+  ctx.fillStyle = vGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Visor diagonal glossy glint
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.beginPath();
+  ctx.moveTo(visorX - 4.8, visorY - 2.2);
+  ctx.lineTo(visorX - 1.8, visorY - 2.2);
+  ctx.lineTo(visorX - 3.5, visorY + 2.1);
+  ctx.lineTo(visorX - 6.0, visorY + 2.1);
+  ctx.closePath();
+  ctx.fill();
+
+  // 6. ARTICULATED ROTATING HEAVY ASSAULT CANNON / RAILGUN
+  ctx.save();
+  ctx.translate(6.5, -23.5);
+  ctx.rotate(aimAngle);
+  const gunBack = -recoil * 5.2;
+
+  // Heavy Assault Rifle / Railgun Receiver Body
+  const recGrad = ctx.createLinearGradient(gunBack - 4, -5.5, gunBack - 4, 5.5);
+  recGrad.addColorStop(0, '#96aebc');
+  recGrad.addColorStop(0.45, '#526876');
+  recGrad.addColorStop(1, '#243038');
+  rRect(ctx, gunBack - 6, -5.2, 22, 10.4, 3);
+  ctx.fillStyle = recGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.9;
+  ctx.stroke();
+
+  // Brass / Gold tactical receiver rail
+  ctx.fillStyle = '#f2c862';
+  ctx.fillRect(gunBack - 2, -4.4, 13, 2.2);
+
+  // Extended Gun Barrel(s) — evolves visually with Volley/Split!
+  const barrelLen = hasMulti ? 26 : 24;
+  if (hasMulti) {
+    // Twin heavy barrels
+    for (const by of [-3.3, 1.1]) {
+      rRect(ctx, gunBack + 12, by, barrelLen - 10, 3.0, 1.2);
+      ctx.fillStyle = '#6c8492';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-    if (aura) {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      drawAuraRing(ctx, dx, dy, dw, dh);
-    }
-  } finally {
+  } else {
+    // Sleek single heavy rail barrel
+    rRect(ctx, gunBack + 12, -2.5, barrelLen - 10, 5.0, 1.5);
+    ctx.fillStyle = '#738b9a';
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // Elemental Evolution Visual Attachments on the Cannon!
+  if (hasFire) {
+    // Glowing orange thermal cooling vents
+    ctx.fillStyle = '#ff7228';
+    ctx.fillRect(gunBack + 14, -1.2, 7, 2.4);
+    ctx.fillStyle = '#ffe27a';
+    ctx.fillRect(gunBack + 15.5, -0.6, 4, 1.2);
+  }
+  if (hasFrost) {
+    // Gleaming cyan cryo fins flanking barrel
+    ctx.fillStyle = '#7ceeff';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 13, -4.8);
+    ctx.lineTo(gunBack + 21, -7.2);
+    ctx.lineTo(gunBack + 20, -3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 13, 4.8);
+    ctx.lineTo(gunBack + 21, 7.2);
+    ctx.lineTo(gunBack + 20, 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  if (hasArc) {
+    // Electric cyan/gold rail coils near muzzle
+    ctx.strokeStyle = '#62f2ff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 18, -4.5);
+    ctx.lineTo(gunBack + 24, -4.5);
+    ctx.moveTo(gunBack + 18, 4.5);
+    ctx.lineTo(gunBack + 24, 4.5);
+    ctx.stroke();
+  }
+
+  // Heavy Muzzle Brake Tip
+  rRect(ctx, gunBack + barrelLen, -3.8, 4.5, 7.6, 1.4);
+  ctx.fillStyle = '#2d3a42';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Armored Glove Gripping the Gun
+  ctx.fillStyle = '#d49a38';
+  ctx.beginPath();
+  ctx.arc(gunBack + 2, 3.2, 3.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Crisp Cartoon Muzzle Flash Starburst on Shot!
+  if (recoil > 0.25) {
+    const flashSize = 9 + recoil * 9;
+    const flashTint = hasFire ? '#ff7c32' : hasFrost ? '#7aefff' : hasArc ? '#ffe858' : '#ffb848';
+    drawMuzzleStar(ctx, gunBack + barrelLen + 7, 0, flashSize, flashTint);
+  }
+
+  ctx.restore(); // end gun rotation
+  ctx.restore(); // end torso bob
+
+  // Subtle warm radial muzzle bounce glow
+  if (flash > 0.05) {
+    ctx.save();
+    const glow = ctx.createRadialGradient(0, -28, 2, 0, -28, 22);
+    glow.addColorStop(0, `rgba(255, 244, 198, ${(flash * 0.28).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(255, 244, 198, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, -28, 22, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
+
+  ctx.restore();
 }
 
-function frameOf(time) {
-  if (!Number.isFinite(time) || time <= 0) return 0;
-  return Math.floor(time * 6) % FRAMES;
-}
-
-function starCount(unit) {
-  const upgrades = unit.upgrades;
-  if (!upgrades || typeof upgrades !== 'object') return 0;
-  let count = 0;
-  for (const key of Object.keys(upgrades)) {
-    const value = upgrades[key];
-    if (typeof value === 'number' && Number.isFinite(value)) count += Math.max(0, Math.min(6, Math.round(value)));
-    else if (value) count += 1;
-    if (count >= 6) return 6;
-  }
-  return count;
-}
-
-function indexRecipes(catalog) {
-  const list = Array.isArray(catalog)
-    ? catalog
-    : (catalog && typeof catalog === 'object'
-      ? Object.entries(catalog).map(([id, value]) => ({id, ...(value && typeof value === 'object' ? value : {})}))
-      : []);
-  for (const recipe of list) {
-    if (!recipe || typeof recipe !== 'object') continue;
-    const pair = parentsOfRecipe(recipe);
-    const id = String(recipe.id ?? '').trim().toLowerCase();
-    if (!id || !pair) continue;
-    recipeById.set(id, pair);
-    recipeById.set(id.replace(/[^a-z0-9]/g, ''), pair);
-  }
-}
-
-function parentsOfRecipe(recipe) {
-  return pairFromList(recipe.parents)
-    || pairFromList(recipe.ingredients)
-    || pairFromList(recipe.types)
-    || pairFromList(recipe.components)
-    || pairFromList(recipe.pair)
-    || (recipe.a != null && recipe.b != null ? pairFromList([recipe.a, recipe.b]) : null)
-    || (recipe.left != null && recipe.right != null ? pairFromList([recipe.left, recipe.right]) : null);
-}
-
-function canonToken(value) {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (!raw) return '';
-  return ALIASES[raw] || raw;
-}
-
-function canonBase(value) {
-  const mapped = canonToken(value);
-  return BASE_SET.has(mapped) ? mapped : '';
-}
-
-function pairKey(a, b) {
-  return BASE_TYPES.indexOf(a) < BASE_TYPES.indexOf(b) ? `${a}+${b}` : `${b}+${a}`;
-}
-
-function pairFromList(list) {
-  if (typeof list === 'string') return pairFromIdString(list);
-  if (!Array.isArray(list) || list.length < 2) return null;
-  const bases = [];
-  for (const entry of list) {
-    const base = canonBase(entry && typeof entry === 'object' ? (entry.type || entry.id || entry.kind) : entry);
-    if (base && !bases.includes(base)) bases.push(base);
-  }
-  if (bases.length < 2) return null;
-  return pairKey(bases[0], bases[1]);
-}
-
-function pairFromIdString(id) {
-  const raw = String(id ?? '').trim().toLowerCase();
-  if (!raw) return null;
-  const compact = raw.replace(/[^a-z0-9]/g, '');
-  if (recipeById.has(raw)) return recipeById.get(raw);
-  if (recipeById.has(compact)) return recipeById.get(compact);
-  if (FLAVOR_PAIRS[compact]) return pairFromList(FLAVOR_PAIRS[compact]);
-  const found = [];
-  const push = (base) => { if (base && !found.includes(base)) found.push(base); };
-  for (const part of raw.split(/[^a-z0-9]+/)) push(canonBase(part));
-  if (found.length >= 2) return pairKey(found[0], found[1]);
-  const tokens = [...BASE_TYPES, ...Object.keys(ALIASES).filter((key) => BASE_SET.has(ALIASES[key]))];
-  tokens.sort((a, b) => b.length - a.length);
-  const hits = [];
-  for (const token of tokens) {
-    if (!raw.includes(token)) continue;
-    const base = BASE_SET.has(token) ? token : ALIASES[token];
-    if (base && !hits.includes(base)) hits.push(base);
-  }
-  if (hits.length >= 2) return pairKey(hits[0], hits[1]);
-  return null;
-}
-
-function findPair(unit, typeName) {
-  return pairFromList(unit.parents)
-    || pairFromList(unit.ingredients)
-    || pairFromList(unit.components)
-    || pairFromList(unit.sourceTypes)
-    || pairFromIdString(typeName);
-}
-
-function accentFor(name) {
-  const accents = ['f', 'L', 'Z', 'Q', 't', 'b', 'c', 'v'];
-  let hash = 2166136261;
-  const text = String(name || 'unknown');
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return accents[(hash >>> 0) % accents.length];
-}
-
-function resolveVisual(unit) {
-  const typeName = canonToken(unit.type);
-  const kind = typeof unit.kind === 'string' ? unit.kind.toLowerCase() : '';
-  if (kind === 'hero' || typeName === 'hero') return {family: 'hero', key: 'hero'};
-  const base = BASE_SET.has(typeName) ? typeName : '';
-  if (base && kind !== 'hybrid') return {family: 'tower', key: base};
-  const pair = findPair(unit, typeName);
-  if (pair) return {family: 'hybrid', key: pair};
-  const accent = accentFor(typeName || kind || 'hybrid');
-  return {family: 'unknown', key: `unknown:${accent}`, accent};
-}
-
-function createPainter(frame) {
-  const cells = Array.from({length: H}, () => Array(W).fill('.'));
-  return {
-    frame,
-    cells,
-    px(x, y, color) {
-      const ix = Math.round(x);
-      const iy = Math.round(y);
-      if (ix < 0 || iy < 0 || ix >= W || iy >= H || !color || color === '.' || !PALETTE[color]) return;
-      cells[iy][ix] = color;
-    },
-    fill(x, y, w, h, color) {
-      for (let j = 0; j < h; j++) {
-        for (let i = 0; i < w; i++) this.px(x + i, y + j, color);
-      }
-    },
-    hline(x, y, w, color) { this.fill(x, y, w, 1, color); },
-    vline(x, y, h, color) { this.fill(x, y, 1, h, color); }
+/** Crisp vector fallback if a legacy tower unit is ever drawn directly by a test. */
+function drawLegacyTurret(ctx, unit, x, y, opts) {
+  const scale = Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+  const type = String(unit.type || 'bolt').toLowerCase();
+  const colorMap = {
+    bolt: '#f2d56a',
+    fire: '#ff6c30',
+    frost: '#7ce8ff',
+    lightning: '#ffe14a',
+    poison: '#7dce6a',
+    support: '#68d8c4',
   };
+  const accent = colorMap[type] || '#f0cb72';
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  rRect(ctx, -12, -26, 24, 22, 6);
+  ctx.fillStyle = '#334652';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.arc(0, -16, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
-function mx(x) {
-  return W - 1 - x;
-}
+export function drawDefender(ctx, unit, x, y, options = {}) {
+  if (!ctx || !unit || typeof unit !== 'object') return;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const opts = options || {};
 
-function speckle(p, x, y, w, h, base, dark, light) {
-  for (let j = 0; j < h; j++) {
-    for (let i = 0; i < w; i++) {
-      const n = (i * 17 + j * 11) & 15;
-      p.px(x + i, y + j, n === 0 ? light : n < 3 ? dark : base);
-    }
-  }
-}
-
-function oval(p, cx, cy, rx, ry, color, test) {
-  if (!(rx > 0) || !(ry > 0)) return;
-  const y0 = Math.floor(cy - ry);
-  const y1 = Math.ceil(cy + ry);
-  const x0 = Math.floor(cx - rx);
-  const x1 = Math.ceil(cx + rx);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const nx = (x + 0.5 - cx) / rx;
-      const ny = (y + 0.5 - cy) / ry;
-      if (nx * nx + ny * ny <= 1 && (!test || test(x, y))) p.px(x, y, color);
-    }
-  }
-}
-
-function drawFlame(p, cx, top, height, style) {
-  const cols = {
-    fire: ['a', 'A', 'f', 'F'],
-    green: ['q', 'Q', 'g', 'G'],
-    steam: ['l', 'L', 'E', 'i'],
-    plasma: ['z', 'Z', 'a', 'f']
-  }[style] || ['a', 'A', 'f', 'F'];
-  const sway = [0, 1, 0, -1][p.frame] || 0;
-  const tall = Math.max(3, height - (p.frame === 2 ? 1 : 0));
-  for (let i = 0; i < tall; i++) {
-    const t = tall <= 1 ? 0 : i / (tall - 1);
-    const wobble = (i + p.frame * 2) % 4 === 0 ? 1 : 0;
-    const half = Math.max(0, Math.round((1 - t) * 3.4 + wobble * (1 - t)));
-    const y = top + i;
-    const x = cx + (t > 0.4 ? sway : 0);
-    const col = cols[t < 0.2 ? 0 : t < 0.48 ? 1 : t < 0.75 ? 2 : 3];
-    p.hline(x - half, y, half * 2 + 1, col);
-    if (half > 0 && (i + p.frame) % 3 === 0) p.px(x, y, cols[0]);
-  }
-}
-
-function drawCrystal(p, cx, top, height, wide) {
-  const mid = top + Math.max(1, Math.floor(height * 0.42));
-  const bot = top + height - 1;
-  for (let y = top; y <= bot; y++) {
-    const span = y <= mid ? (y - top) / Math.max(1, mid - top) : (bot - y) / Math.max(1, bot - mid);
-    const half = Math.max(0, Math.round(span * wide));
-    for (let x = cx - half; x <= cx + half; x++) {
-      let color = 'L';
-      if (x === cx - half || x === cx + half) color = 'I';
-      else if (x < cx - 1) color = 'i';
-      else if ((y + p.frame * 3) % 7 === 0 && x === cx) color = 'W';
-      else if (x === cx) color = 'l';
-      p.px(x, y, color);
-    }
-  }
-  p.px(cx, top, 'W');
-}
-
-function drawCoils(p, cx, top, count, gap) {
-  for (let i = 0; i < count; i++) {
-    const y = top + i * gap;
-    p.hline(cx - 5, y, 11, 'U');
-    p.hline(cx - 4, y + 1, 9, 'u');
-    p.px(cx - 5, y + 1, 'B');
-    p.px(cx + 5, y + 1, 'B');
-    p.hline(cx - 2, y + 2, 5, 'V');
-    p.px(cx, y + 1, (i + p.frame) % 2 === 0 ? 'Z' : 'z');
-  }
-  p.vline(cx, top - 1, count * gap + 1, 'n');
-  p.vline(cx + 1, top - 1, count * gap, 'N');
-}
-
-function drawSparks(p, points) {
-  const cols = ['z', 'Z', 'h', 'v'];
-  for (let i = 0; i < points.length; i++) {
-    const shift = (i + p.frame) % 2;
-    p.px(points[i][0] + (i % 2 === 0 ? shift : -shift), points[i][1] - (p.frame === 3 && i === 0 ? 1 : 0), cols[(i + p.frame) % cols.length]);
-  }
-}
-
-function drawZig(p, points, color, hot) {
-  for (let i = 0; i < points.length - 1; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[i + 1];
-    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      p.px(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t), (s + p.frame) % 3 === 0 ? hot : color);
-    }
-  }
-}
-
-function drawFlag(p, x, y, w, h) {
-  const ox = [0, 1, 1, 0][p.frame];
-  speckle(p, x + ox, y, w, h, 't', 'T', 'D');
-  p.hline(x + ox, y, w, 'D');
-  p.vline(x + ox, y, h, 'T');
-  p.vline(x + ox + w - 1, y, h, 'T');
-  const cx = x + ox + Math.floor(w / 2);
-  const cy = y + Math.floor(h / 2);
-  p.px(cx, cy - 1, 'h');
-  p.px(cx, cy, p.frame % 2 === 0 ? 'H' : 'b');
-  p.px(cx - 1, cy + 1, 'E');
-  p.px(cx + 1, cy + 1, 'E');
-  p.px(cx, cy + 2, 'T');
-  p.px(x + ox + 2, y + 3, 'E');
-  p.px(x + ox + w - 3, y + h - 3, 'T');
-}
-
-function drawBow(p, limbHi, limb, limbDk, stringC, stock) {
-  const pts = [[5, 23], [6, 22], [7, 21], [8, 20], [9, 19], [10, 18], [11, 17], [12, 16], [13, 16], [14, 15], [15, 15]];
-  for (const [x, y] of pts) {
-    p.px(x, y, limbHi);
-    p.px(x, y + 1, limb);
-    p.px(x, y + 2, limbDk);
-    p.px(mx(x), y, limbHi);
-    p.px(mx(x), y + 1, limb);
-    p.px(mx(x), y + 2, limbDk);
-  }
-  p.fill(4, 24, 3, 2, 'N');
-  p.fill(mx(6), 24, 3, 2, 'N');
-  p.px(5, 24, 'M');
-  p.px(mx(5), 24, 'M');
-  p.hline(12, 17, 16, stringC);
-  speckle(p, 14, 20, 12, 11, stock, 'R', 'Y');
-  p.hline(14, 22, 12, 'N');
-  p.hline(14, 27, 12, 'n');
-  p.fill(18, 17, 4, 4, 'r');
-  p.vline(18, 17, 4, 'N');
-  p.vline(21, 17, 4, 'N');
-  p.px(15, 22, 'b');
-  p.px(24, 22, 'b');
-}
-
-function drawQuarrel(p, tip, shaft, lift = 0) {
-  const y = 4 + lift;
-  p.px(19, y, tip);
-  p.px(20, y, tip);
-  p.px(18, y + 1, tip);
-  p.px(21, y + 1, tip);
-  p.px(19, y + 1, 'M');
-  p.px(20, y + 1, 'W');
-  p.vline(19, y + 2, 10, shaft);
-  p.vline(20, y + 2, 10, 'n');
-  p.px(17, y + 10, 'Y');
-  p.px(18, y + 9, 'Y');
-  p.px(22, y + 10, 'Y');
-  p.px(21, y + 9, 'r');
-}
-
-function drawWinch(p, rank) {
-  p.fill(16, 23, 5, 5, 'N');
-  p.fill(17, 24, 3, 3, 'n');
-  p.px(18, 25, p.frame % 2 === 0 ? 'M' : 'b');
-  p.px(17, 24, 'K');
-  p.px(19, 26, 'K');
-  if (rank >= 3) p.px(21, 23, 'H');
-  if (rank >= 4) p.px(18, 22, 'h');
-}
-
-function drawFlask(p, cx, top, liquid, glassHi) {
-  p.fill(cx - 1, top, 4, 2, 'Y');
-  p.px(cx, top, 'y');
-  p.fill(cx - 2, top + 2, 6, 2, 'r');
-  p.vline(cx - 2, top + 2, 2, 'R');
-  p.fill(cx - 1, top + 4, 4, 3, 'O');
-  p.vline(cx - 1, top + 4, 3, 'o');
-  p.vline(cx + 2, top + 4, 3, 'o');
-  oval(p, cx + 0.5, top + 14, 8, 8, 'O');
-  oval(p, cx + 0.5, top + 16, 6.2, 5.2, liquid, (_x, y) => y >= top + 14);
-  p.hline(cx - 5, top + 14, 12, liquid === 'g' ? 'Q' : 'L');
-  p.vline(cx - 4, top + 10, 4, glassHi);
-  p.px(cx - 3, top + 11, 'W');
-  const bubbleY = top + 12 + ((4 - p.frame + 8) % 5);
-  p.px(cx - 2, bubbleY, 'q');
-  p.px(cx + 2, bubbleY + 1, 'W');
-  p.px(cx, top + 17, p.frame % 2 === 0 ? 'q' : 'Q');
-}
-
-function drawPlinth(p, rank) {
-  speckle(p, 9, 31, 22, 7, 'x', 'X', 'w');
-  p.fill(10, 32, 20, 2, 'w');
-  p.fill(10, 35, 20, 2, 'X');
-  p.fill(6, 33, 4, 5, 'X');
-  p.fill(30, 33, 4, 5, 'X');
-  p.px(7, 34, 'w');
-  p.px(32, 34, 'w');
-  p.px(13, 33, 'X');
-  p.px(22, 36, 'k');
-  p.px(18, 37, 'X');
-  p.px(25, 34, 'k');
-  if (rank >= 2) {
-    p.px(10, 32, 'b');
-    p.px(29, 32, 'b');
-  }
-  if (rank >= 4) {
-    p.hline(10, 32, 20, 'b');
-    p.px(6, 33, 'H');
-    p.px(33, 33, 'H');
-    p.px(6, 37, 'h');
-    p.px(33, 37, 'h');
-  }
-}
-
-function drawRankGems(p, rank) {
-  // One upward chevron per rank. White reads on the ink plaque and on dark
-  // stone. The crimson edge reads on gold trim, so the count stays a mark
-  // rather than another gold highlight. An ink row sits between the marks
-  // and the rank-4 band.
-  const mark = 3;
-  const gap = 2;
-  const total = rank * mark + (rank - 1) * gap;
-  let x = Math.floor((W - total) / 2);
-  p.fill(x - 1, 34, total + 2, 4, 'K');
-  for (let i = 0; i < rank; i++) {
-    p.px(x, 35, 'W');
-    p.px(x + 2, 35, 'W');
-    p.px(x + 1, 36, 'W');
-    p.px(x, 36, 'c');
-    p.px(x + 2, 36, 'c');
-    p.px(x + 1, 37, 'c');
-    x += mark + gap;
-  }
-}
-
-function drawLineage(p, pair) {
-  const [a, b] = pair.split('+');
-  // Sit on the plinth highlight, above the rank gems, so the two marks stay separate.
-  p.fill(11, 32, 2, 2, ROLE[a] || 'E');
-  p.fill(27, 32, 2, 2, ROLE[b] || 'E');
-  p.px(11, 32, 'W');
-  p.px(27, 32, 'W');
-}
-
-function drawHeroSeal(p) {
-  p.fill(16, 17, 8, 7, 'H');
-  p.fill(17, 18, 6, 5, 'B');
-  p.vline(19, 18, 5, 'K');
-  p.vline(20, 18, 5, 'K');
-  p.px(17, 17, 'h');
-  p.px(22, 17, 'W');
-  p.px(16, 19, 'b');
-  p.px(23, 20, 'b');
-}
-
-function drawStars(p, stars) {
-  for (let i = 0; i < stars; i++) {
-    const x = 3 + i * 3;
-    p.px(x, 2, 'h');
-    p.px(x - 1, 3, 'b');
-    p.px(x, 3, 'H');
-    p.px(x + 1, 3, 'b');
-  }
-}
-
-function drawShadow(p) {
-  p.hline(10, 39, 20, 'k');
-  p.px(9, 39, 'k');
-  p.px(30, 39, 'k');
-}
-
-function applyOutline(cells) {
-  const marks = [];
-  for (let y = 0; y < H - 1; y++) {
-    for (let x = 0; x < W; x++) {
-      if (cells[y][x] !== '.') continue;
-      const near = (x > 0 && cells[y][x - 1] !== '.')
-        || (x + 1 < W && cells[y][x + 1] !== '.')
-        || (y > 0 && cells[y - 1][x] !== '.')
-        || (y + 1 < H && cells[y + 1][x] !== '.');
-      if (near) marks.push(x, y);
-    }
-  }
-  for (let i = 0; i < marks.length; i += 2) cells[marks[i + 1]][marks[i]] = 'K';
-}
-
-function paintHero(p) {
-  const glow = ['A', 'a', 'h', 'f'][p.frame];
-  p.vline(28, 5, 14, 'N');
-  p.vline(29, 8, 10, 'n');
-  p.px(28, 2, p.frame % 2 === 0 ? 'W' : 'M');
-  p.px(27, 3, 'n');
-  p.px(28, 3, 'M');
-  p.px(29, 3, 'n');
-  p.px(27, 4, 'N');
-  p.px(28, 4, 'M');
-  p.px(29, 4, 'N');
-  // Pointed hood, narrow face, sloping shoulders — not a rectangular block.
-  p.px(19, 5, 'd');
-  p.hline(18, 6, 3, 'C');
-  p.hline(17, 7, 5, 'C');
-  p.hline(16, 8, 7, 'd');
-  p.hline(18, 8, 3, 'H');
-  p.px(19, 8, 'h');
-  p.fill(15, 9, 9, 3, 'C');
-  p.px(14, 10, 'd');
-  p.px(24, 10, 'd');
-  p.px(14, 11, 'C');
-  p.px(24, 11, 'e');
-  p.fill(17, 9, 5, 4, 'S');
-  p.px(17, 9, 's');
-  p.px(21, 9, 's');
-  p.px(18, 10, 'K');
-  p.px(20, 10, 'K');
-  p.px(18, 9, 'W');
-  p.px(19, 11, 's');
-  p.hline(16, 12, 8, 'C');
-  p.hline(14, 13, 12, 'e');
-  p.hline(13, 14, 14, 'C');
-  speckle(p, 12, 15, 16, 8, 'C', 'd', 'e');
-  p.vline(19, 15, 8, 'd');
-  p.hline(11, 23, 7, 'c');
-  p.hline(22, 23, 7, 'e');
-  p.hline(10, 24, 8, 'C');
-  p.hline(22, 24, 8, 'd');
-  p.px((p.frame === 1 || p.frame === 2) ? 9 : 31, 23, 'C');
-  p.fill(24, 14, 4, 5, 'p');
-  p.px(27, 15, 'S');
-  p.px(27, 16, 'y');
-  p.px(8, 15, 'b');
-  p.fill(7, 16, 5, 2, 'B');
-  p.fill(6, 18, 7, 6, 'O');
-  p.fill(8, 19, 3, 4, glow);
-  p.px(7, 19, 'W');
-  p.vline(7, 20, 3, 'a');
-  p.fill(7, 24, 5, 2, 'B');
-  p.px(6, 20, 'n');
-  p.px(12, 20, 'n');
-  p.fill(14, 26, 4, 7, 'P');
-  p.fill(22, 26, 4, 7, 'P');
-  p.vline(15, 26, 6, 'p');
-  p.vline(23, 26, 6, 'p');
-  p.fill(13, 32, 5, 4, 'J');
-  p.fill(22, 32, 5, 4, 'J');
-  p.hline(13, 32, 5, 'j');
-  p.hline(22, 32, 5, 'j');
-  p.px(14, 33, 'j');
-  p.px(23, 34, 'y');
-}
-
-function paintBolt(p, rank) {
-  drawBow(p, 'Y', 'r', 'R', rank >= 3 ? 'b' : 'M', 'r');
-  drawQuarrel(p, 'M', 'N', p.frame === 1 ? -1 : 0);
-  drawWinch(p, rank);
-  if (rank >= 4) {
-    p.px(19, 3, 'h');
-    p.px(20, 3, 'W');
-  }
-}
-
-function drawCoupling(p, rank) {
-  p.fill(3, 27, 34, 3, 'X');
-  p.hline(3, 27, 34, 'n');
-  p.hline(5, 29, 30, 'k');
-  p.fill(16, 17, 6, 7, 'N');
-  p.hline(16, 17, 6, 'n');
-  p.px(18, 19, p.frame % 2 ? 'b' : 'M');
-  p.px(19, 21, 'k');
-  if (rank >= 3) p.px(17, 18, 'H');
-  if (rank >= 4) p.px(20, 18, 'h');
-}
-
-function drawCompactBow(p, ox, oy, rank) {
-  const lift = p.frame === 1 ? -1 : 0;
-  const cx = ox + 8;
-  const y0 = oy + lift;
-  p.fill(ox + 4, oy + 16, 9, 13, 'r');
-  p.vline(ox + 4, oy + 16, 13, 'R');
-  p.vline(ox + 12, oy + 16, 13, 'R');
-  p.hline(ox + 4, oy + 16, 9, 'Y');
-  p.hline(ox + 4, oy + 22, 9, 'N');
-  p.hline(ox + 5, oy + 27, 7, 'n');
-  p.fill(ox + 6, oy + 14, 5, 4, 'R');
-  p.px(ox + 7, oy + 15, 'Y');
-  p.fill(ox + 6, oy + 19, 5, 4, 'N');
-  p.fill(ox + 7, oy + 20, 3, 2, 'n');
-  p.px(ox + 8, oy + 20, p.frame % 2 ? 'b' : 'M');
-  const limb = [[0, 18], [1, 17], [2, 16], [3, 15], [4, 14], [5, 13], [6, 12], [7, 12]];
-  for (const [dx, dy] of limb) {
-    p.px(ox + dx, oy + dy, 'Y');
-    p.px(ox + dx, oy + dy + 1, 'r');
-    p.px(ox + dx, oy + dy + 2, 'R');
-    const right = ox + 16 - dx;
-    p.px(right, oy + dy, 'Y');
-    p.px(right, oy + dy + 1, 'r');
-    p.px(right, oy + dy + 2, 'R');
-  }
-  p.fill(ox, oy + 19, 3, 2, 'N');
-  p.fill(ox + 14, oy + 19, 3, 2, 'N');
-  p.px(ox, oy + 19, 'n');
-  p.px(ox + 16, oy + 19, 'n');
-  p.hline(ox + 3, oy + 13, 11, 'N');
-  p.px(cx, oy + 13, 'n');
-  p.px(cx, y0, 'W');
-  p.px(cx - 1, y0 + 1, 'n');
-  p.px(cx, y0 + 1, 'M');
-  p.px(cx + 1, y0 + 1, 'n');
-  p.vline(cx, y0 + 2, 8, 'N');
-  p.vline(cx + 1, y0 + 2, 8, 'k');
-  p.px(cx - 2, y0 + 9, 'Y');
-  p.px(cx - 1, y0 + 8, 'r');
-  p.px(cx + 2, y0 + 8, 'r');
-  p.px(cx + 3, y0 + 9, 'Y');
-  if (rank >= 3) p.px(cx, Math.max(0, y0 - 1), 'h');
-  if (rank >= 4) p.px(cx + 1, Math.max(0, y0 - 1), 'W');
-}
-
-function drawEmberBowl(p, cx, top, flameH, wide) {
-  drawFlame(p, cx, top, flameH, 'fire');
-  const rim = top + flameH;
-  const depth = Math.max(6, 27 - rim);
-  for (let i = 0; i < depth; i++) {
-    const t = depth <= 1 ? 0 : i / (depth - 1);
-    const half = Math.max(3, Math.round(wide * (1 - t * 0.2)));
-    const y = rim + i;
-    if (y > 29) break;
-    let color = 'F';
-    if (i === 0) color = 'n';
-    else if (i === 2 || i === Math.floor(depth * 0.55)) color = 'X';
-    else if (i === depth - 1) color = 'k';
-    p.hline(cx - half, y, half * 2 + 1, color);
-    if (color === 'F') p.px(cx - half + 1, y, 'u');
-    if (i === 1) {
-      p.px(cx - 1, y, p.frame % 2 ? 'a' : 'A');
-      p.px(cx + 1, y, 'f');
-    }
-  }
-  const baseY = Math.min(30, rim + depth);
-  if (baseY <= 30) {
-    const bw = Math.max(4, wide * 2 - 3);
-    const bx = cx - Math.floor(bw / 2);
-    p.fill(bx, baseY, bw, Math.max(1, 31 - baseY), 'N');
-    p.hline(bx, baseY, bw, 'n');
-  }
-}
-
-function drawCrystalMount(p, cx, top, height, wide) {
-  const tall = Math.max(14, Math.min(height, 27 - top));
-  drawCrystal(p, cx, top, tall, wide);
-  const seat = top + tall;
-  if (seat <= 30) {
-    p.hline(cx - 4, seat, 9, 'N');
-    p.px(cx - 4, seat, 'M');
-    p.px(cx + 4, seat, 'M');
-    if (seat + 1 <= 30) p.fill(cx - 2, seat + 1, 5, 30 - seat, 'I');
-  }
-}
-
-function drawSparkColumn(p, cx, top, rank) {
-  const sag = p.frame % 2;
-  const rise = rank >= 4 ? 0 : 1;
-  drawZig(p, [
-    [cx, top + rise],
-    [cx + 4, top + 3],
-    [cx - 3, top + 6],
-    [cx + 3, top + 9 + sag],
-    [cx, top + 12]
-  ], 'Z', 'W');
-  drawSparks(p, [[cx - 4, top + 4], [cx + 4, top + 7], [cx, top + rise]]);
-  drawCoils(p, cx, top + 13, 3, 4);
-  p.fill(cx - 4, 26, 9, 4, 'X');
-  p.hline(cx - 4, 26, 9, 'U');
-  p.px(cx, 27, p.frame % 2 ? 'Z' : 'u');
-  if (rank >= 4) p.px(cx + (p.frame % 2 ? 4 : -4), top + 2, 'h');
-}
-
-function drawVial(p, cx, top, liquid, rank) {
-  p.fill(cx - 1, top, 3, 2, 'Y');
-  p.px(cx, top, rank >= 4 ? 'h' : 'y');
-  p.fill(cx - 1, top + 2, 3, 3, 'r');
-  p.px(cx - 1, top + 2, 'R');
-  p.px(cx + 1, top + 3, 'Y');
-  p.fill(cx - 1, top + 5, 3, 2, 'O');
-  p.vline(cx - 1, top + 5, 2, 'o');
-  p.vline(cx + 1, top + 5, 2, 'o');
-  oval(p, cx, top + 12, 6, 6, 'O');
-  oval(p, cx, top + 13, 4.3, 4, liquid, (_x, y) => y >= top + 11);
-  p.hline(cx - 3, top + 11, 7, liquid === 'g' ? 'Q' : 'L');
-  p.px(cx - 4, top + 10, 'W');
-  p.px(cx - 3, top + 12, 'q');
-  const bubble = top + 14 + ((p.frame + 4) % 3);
-  p.px(cx + 2, bubble, 'W');
-  if (rank >= 3) p.px(cx - 1, bubble + 1, 'q');
-  const foot = top + 18;
-  if (foot <= 30) {
-    p.fill(cx - 3, foot, 7, Math.max(1, 30 - foot), 'x');
-    p.hline(cx - 3, foot, 7, 'o');
-  }
-  p.px(cx, Math.min(29, top + 17), p.frame % 2 ? 'Q' : 'g');
-}
-
-function drawBanner(p, ox, top, clothW, clothH) {
-  const poleTop = top + 3;
-  p.vline(ox, poleTop, Math.max(4, 31 - poleTop), 'n');
-  p.vline(ox + 1, poleTop + 1, Math.max(3, 30 - poleTop), 'N');
-  p.fill(ox - 1, top, 4, 3, 'H');
-  p.px(ox, top, p.frame % 2 ? 'W' : 'h');
-  p.px(ox + 1, top + 1, 'b');
-  drawFlag(p, ox + 2, top + 4, clothW, clothH);
-}
-
-function paintFire(p, rank) {
-  const flameH = rank >= 4 ? 14 : 12;
-  const wide = rank >= 3 ? 8 : 7;
-  drawEmberBowl(p, 20, 1, flameH, wide);
-  if (rank >= 2) {
-    p.px(20 - 4, 1 + flameH, 'b');
-    p.px(20 + 4, 1 + flameH, 'b');
-  }
-  if (rank >= 4) p.px(20, 0, 'W');
-}
-
-function paintFrost(p, rank) {
-  const wide = rank >= 3 ? 7 : 6;
-  const tall = rank >= 4 ? 24 : 22;
-  p.fill(12, 24, 16, 6, 'I');
-  p.hline(11, 24, 18, 'i');
-  p.hline(13, 29, 14, 'N');
-  p.px(14, 25, 'l');
-  p.px(25, 26, 'L');
-  p.px(20, 27, p.frame % 2 ? 'W' : 'l');
-  if (rank >= 2) {
-    p.px(11, 24, 'b');
-    p.px(28, 24, 'b');
-  }
-  drawCrystal(p, 20, 1, tall, wide);
-}
-
-function paintLightning(p, rank) {
-  const sag = p.frame === 2 ? 1 : 0;
-  drawZig(p, [[20, 1], [31, 5], [11, 9], [29, 13], [15, 17 + sag]], 'Z', 'W');
-  drawSparks(p, [[9, 4], [33, 7], [10, 13], [32, 15], [20, 2]]);
-  drawCoils(p, 20, 18, 3, 4);
-  p.hline(12, 29, 16, 'U');
-  p.vline(13, 26, 5, 'V');
-  p.vline(26, 26, 5, 'V');
-  p.px(15, 27, 'Z');
-  p.px(24, 28, 'v');
-  if (rank >= 3) p.px(20, 0, 'h');
-  if (rank >= 4) {
-    p.px(8, 6, 'W');
-    p.px(34, 10, 'z');
-  }
-}
-
-function paintPoison(p, rank) {
-  drawFlask(p, 18, 2, 'g', 'E');
-  if (rank >= 2) {
-    p.px(14, 8, 'Q');
-    p.px(24, 8, 'Q');
-  }
-  if (rank >= 4) {
-    p.px(20, 30, 'Q');
-    p.px(21, 29, 'g');
-  }
-  p.hline(14, 30, 12, 'o');
-}
-
-function paintSupport(p, rank) {
-  p.vline(12, 3, 28, 'n');
-  p.vline(13, 4, 26, 'N');
-  p.fill(11, 2, 4, 3, 'H');
-  p.px(12, 2, p.frame % 2 ? 'W' : 'h');
-  drawFlag(p, 15, 6, 16, 15);
-  p.fill(15, 22, 4, 3, 'B');
-  p.px(16, 23, 'H');
-  const pulse = 28 + (p.frame % 2);
-  p.px(16, pulse, 'D');
-  p.px(20, pulse, 't');
-  p.px(24, 28, p.frame === 0 ? 'E' : 'D');
-  if (rank >= 3) p.hline(15, 6, 16, 'H');
-  if (rank >= 4) p.px(13, 1, 'W');
-}
-
-function paintHarvest(p, rank) {
-  const sway = [0, 0, 1, 0][p.frame];
-  const pulse = p.frame % 2 === 0;
-  const cx = 20 + sway;
-  const cy = 12;
-
-  // Carved bronze & wood planter basin resting on the plinth
-  p.fill(14, 26, 12, 5, 'R');
-  p.fill(15, 26, 10, 4, 'r');
-  p.hline(13, 25, 14, rank >= 2 ? 'H' : 'Y');
-  p.hline(14, 26, 12, 'B');
-  p.px(15, 27, 'Y');
-  p.px(24, 27, 'R');
-  if (rank >= 2) {
-    p.hline(15, 28, 10, 'b');
-    p.px(19, 28, 'h');
-    p.px(20, 28, 'h');
-  }
-
-  // Living emerald stalk & curling twin leaves
-  p.vline(19 + sway, 17, 9, 'g');
-  p.vline(20 + sway, 17, 9, 'G');
-  p.px(19 + sway, 19, 'Q');
-  // Left curling leaf
-  p.hline(12, 22, 7, 'g');
-  p.hline(11, 23, 6, 'G');
-  p.hline(13, 21, 5, 'Q');
-  p.px(11, 22, 'Q');
-  // Right curling leaf
-  p.hline(21, 21, 7, 'g');
-  p.hline(22, 22, 7, 'G');
-  p.hline(22, 20, 5, 'Q');
-  p.px(28, 21, 'Q');
-
-  // Rank 3+ twin side sun-buds blooming off the leaves
-  if (rank >= 3) {
-    for (const bx of [10, 29]) {
-      p.fill(bx - 1, 17, 3, 3, 'A');
-      p.px(bx, 18, pulse ? 'W' : 'h');
-      p.px(bx, 16, 'Z');
-      p.px(bx, 20, 'g');
-    }
-  }
-
-  // Radiant golden solar petal ring (8 petals around the blossom)
-  const petals = [
-    [0, -7, 3, 3], [0, 5, 3, 3],
-    [-7, -1, 3, 3], [5, -1, 3, 3],
-    [-5, -5, 3, 3], [3, -5, 3, 3],
-    [-5, 3, 3, 3], [3, 3, 3, 3]
-  ];
-  for (let i = 0; i < petals.length; i++) {
-    const [dx, dy, pw, ph] = petals[i];
-    const outer = (i + p.frame) % 2 === 0 ? 'Z' : 'A';
-    const tip = (i + p.frame) % 2 === 0 ? 'h' : 'b';
-    p.fill(cx + dx - 1, cy + dy, pw, ph, outer);
-    p.px(cx + dx, cy + dy + 1, tip);
-  }
-  // Cardinal sunlit petal tips
-  p.px(cx, cy - 8, pulse ? 'W' : 'h');
-  p.px(cx, cy + 8, 'A');
-  p.px(cx - 8, cy, pulse ? 'h' : 'Z');
-  p.px(cx + 8, cy, pulse ? 'h' : 'Z');
-
-  // Warm solar core & luminous heart
-  oval(p, cx, cy, 4.5, 4.5, 'B');
-  oval(p, cx, cy, 3.3, 3.3, 'u');
-  oval(p, cx, cy, 2.2, 2.2, pulse ? 'a' : 'A');
-  p.px(cx, cy, pulse ? 'W' : 'h');
-  p.px(cx - 1, cy - 1, 'h');
-  p.px(cx + 1, cy + 1, 'b');
-
-  // Rising golden pollen / repair motes
-  const lift = p.frame % 3;
-  p.px(cx - 5, 4 - (lift & 1), 'h');
-  p.px(cx + 5, 5 - ((lift + 1) & 1), rank >= 2 ? 'q' : 'Z');
-  if (rank >= 4) {
-    // Gilded solar crown halo rays
-    p.px(cx - 6, cy - 7, 'W');
-    p.px(cx + 6, cy - 7, 'W');
-    p.px(cx, 1, 'W');
-    p.px(cx - 9, cy - 2, 'h');
-    p.px(cx + 9, cy - 2, 'h');
-  }
-}
-
-function paintCinderQuarrel(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-}
-
-function paintHailSpike(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawCrystalMount(p, 29, 2, rank >= 4 ? 25 : 23, 6);
-}
-
-function paintStormLance(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawSparkColumn(p, 28, 1, rank);
-}
-
-function paintVenomSpine(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawVial(p, 29, 4, 'g', rank);
-}
-
-function paintSignalShot(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintSteamVent(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-  p.px(18, 7 + (p.frame % 3), 'l');
-  p.px(20, 10, 'E');
-  p.px(19, 12, p.frame % 2 ? 'L' : 'a');
-  p.px(21, 14, 'A');
-}
-
-function paintPlasmaBrazier(p, rank) {
-  drawCoupling(p, rank);
-  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
-  drawSparkColumn(p, 29, 1, rank);
-}
-
-function paintBlightKiln(p, rank) {
-  drawCoupling(p, rank);
-  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
-  drawVial(p, 29, 4, 'g', rank);
-  p.px(16, 12, 'Q');
-  p.px(18, 15, 'g');
-  p.px(22, 18, p.frame % 2 ? 'Q' : 'q');
-}
-
-function paintWarBeacon(p, rank) {
-  drawCoupling(p, rank);
-  drawBanner(p, 1, 2, 12, rank >= 4 ? 15 : 13);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-}
-
-function paintPrismCoil(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawSparkColumn(p, 29, 1, rank);
-  p.px(16, 10, 'Z');
-  p.px(18, 13, p.frame % 2 ? 'W' : 'z');
-}
-
-function paintRimeUrn(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 22 : 20, 5);
-  drawVial(p, 29, 4, 'g', rank);
-  p.px(24, 16, 'L');
-  p.px(33, 18, 'l');
-}
-
-function paintWardBell(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawBanner(p, 21, 2, 13, 14);
-}
-
-function paintAcidArc(p, rank) {
-  drawCoupling(p, rank);
-  drawSparkColumn(p, 10, 1, rank);
-  drawVial(p, 29, 4, 'g', rank);
-  const sag = p.frame % 2;
-  drawZig(p, [[15, 7], [20, 4 - sag], [25, 7]], 'Z', 'Q');
-}
-
-function paintRelayStandard(p, rank) {
-  drawCoupling(p, rank);
-  drawSparkColumn(p, 10, 1, rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintPlagueAltar(p, rank) {
-  drawCoupling(p, rank);
-  drawVial(p, 10, 4, 'g', rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintReliquary(p, rank, accent) {
-  const gem = PALETTE[accent] ? accent : 'b';
-  speckle(p, 11, 16, 18, 14, 'x', 'X', 'w');
-  p.fill(12, 12, 16, 5, 'X');
-  p.px(14, 11, 'N');
-  p.px(25, 11, 'N');
-  p.px(16, 10, 'n');
-  p.px(23, 10, 'n');
-  p.hline(15, 9, 10, 'N');
-  p.fill(17, 18, 6, 7, gem);
-  p.px(18, 19, 'W');
-  p.px(21, 22, 'h');
-  p.fill(18, 20, 4, 4, 'K');
-  p.vline(19, 21, 3, gem);
-  p.fill(13, 24, 5, 5, 'N');
-  p.fill(14, 25, 3, 3, 'n');
-  p.px(15, 26, p.frame % 2 ? 'M' : 'b');
-  p.px(12, 18, 'b');
-  p.px(27, 18, 'b');
-  if (rank >= 3) {
-    p.px(16, 14, 'H');
-    p.px(23, 14, 'H');
-  }
-  if (rank >= 4) p.px(20, 8, 'h');
-}
-
-function paintGrid(visual, rank, stars, frame) {
-  const p = createPainter(frame);
-  if (visual.family === 'hero') paintHero(p);
-  else if (visual.family === 'tower') (TOWER_PAINTERS[visual.key] || paintReliquary)(p, rank, visual.accent);
-  else if (visual.family === 'hybrid') (HYBRID_PAINTERS[visual.key] || paintReliquary)(p, rank, visual.accent);
-  else paintReliquary(p, rank, visual.accent);
-  if (visual.family !== 'hero') {
-    drawPlinth(p, rank);
-    if (rank >= 4) {
-      p.px(14, 30, 'H');
-      p.px(25, 30, 'H');
-      p.px(15, 29, 'h');
-      p.px(24, 29, 'h');
-    }
-  }
-  applyOutline(p.cells);
-  if (visual.family === 'hero') {
-    drawHeroSeal(p);
-    drawStars(p, stars);
-  } else {
-    drawRankGems(p, rank);
-    if (visual.key.includes('+')) drawLineage(p, visual.key);
-  }
-  drawShadow(p);
-  return p.cells;
-}
-
-function getSprite(visual, rank, stars, frame) {
-  const key = `${visual.family}|${visual.key}|${rank}|${stars}|${frame}`;
-  const cached = cache.get(key);
-  if (cached) return cached;
-  const grid = paintGrid(visual, rank, stars, frame);
-  const sprite = {grid, canvas: rasterize(grid), width: W, height: H};
-  cache.set(key, sprite);
-  if (cache.size > 480) cache.delete(cache.keys().next().value);
-  return sprite;
-}
-
-function createSurface(width, height) {
-  if (typeof OffscreenCanvas === 'function') {
-    try { return new OffscreenCanvas(width, height); } catch { /* fall through */ }
-  }
-  const doc = globalThis.document;
-  if (doc && typeof doc.createElement === 'function') {
-    const canvas = doc.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-  return null;
-}
-
-function rasterize(grid) {
-  const canvas = createSurface(W, H);
-  if (!canvas || typeof canvas.getContext !== 'function') return null;
-  const context = canvas.getContext('2d');
-  if (!context) return null;
-  try { context.imageSmoothingEnabled = false; } catch { /* ignore */ }
-  blitGrid(context, grid, 0, 0, W, H);
-  return canvas;
-}
-
-function blit(ctx, sprite, dx, dy, dw, dh) {
-  if (sprite.canvas && typeof ctx.drawImage === 'function') {
-    ctx.drawImage(sprite.canvas, dx, dy, dw, dh);
+  if (!isRichCtx(ctx)) {
+    const sz = defenderSize(unit);
+    ctx.save?.();
+    ctx.fillStyle = '#f0cb72';
+    ctx.fillRect?.(Math.round(x - sz.width / 2), Math.round(y - sz.height), sz.width, sz.height);
+    ctx.restore?.();
     return;
   }
-  blitGrid(ctx, sprite.grid, dx, dy, dw, dh);
-}
 
-function blitGrid(ctx, grid, dx, dy, dw, dh) {
-  if (typeof ctx.fillRect !== 'function') return;
-  for (let y = 0; y < H; y++) {
-    const row = grid[y];
-    const y0 = Math.round(dy + (y * dh) / H);
-    const y1 = Math.round(dy + ((y + 1) * dh) / H);
-    const ph = Math.max(1, y1 - y0);
-    for (let x = 0; x < W; x++) {
-      const color = PALETTE[row[x]];
-      if (!color) continue;
-      const x0 = Math.round(dx + (x * dw) / W);
-      const x1 = Math.round(dx + ((x + 1) * dw) / W);
-      ctx.fillStyle = color;
-      ctx.fillRect(x0, y0, Math.max(1, x1 - x0), ph);
-    }
+  if (unit.kind === 'hero' || unit.type === 'hero') {
+    drawHeroGunner(ctx, unit, x, y, opts);
+  } else {
+    drawLegacyTurret(ctx, unit, x, y, opts);
   }
 }

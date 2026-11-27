@@ -2,18 +2,33 @@ import {clamp} from '../shared.js';
 import {getProfileBonuses} from './progression.js';
 
 export const HERO_BASE = Object.freeze({
-  damage: 14,
-  interval: 0.65,
-  range: 320,
-  critChance: 0.08,
+  damage: 18,
+  interval: 0.5,
+  range: 390,
+  critChance: 0.1,
   critMultiplier: 1.75,
-  projectileSpeed: 540,
+  projectileSpeed: 580,
   splash: 0,
   chain: 0,
-  chainRange: 70,
+  chainRange: 75,
   pierce: 0,
   mechanics: Object.freeze([]),
 });
+
+export const AUTO_SKILL_IDS = Object.freeze([
+  'split_shot',
+  'ricochet',
+  'napalm',
+  'armored_car',
+  'cryo_barrage',
+  'orbital_beam',
+]);
+
+const AUTO_SKILL_SET = new Set(AUTO_SKILL_IDS);
+
+export function isAutoSkill(id) {
+  return typeof id === 'string' && AUTO_SKILL_SET.has(id);
+}
 
 const BONUS_LIMITS = Object.freeze({
   damage: [-0.5, 2.5],
@@ -28,24 +43,128 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function upgrade(id, cap, en, zh, info, detail, effect) {
-  return deepFreeze({id,cap,name:{en,zh},description:{en:'Hero · '+info,zh:'英雄 · '+detail},effect});
+function upgrade(id, cap, category, en, zh, info, detail, effect) {
+  return deepFreeze({
+    id,
+    cap,
+    category,
+    name: {en, zh},
+    description: {en: info, zh: detail},
+    effect,
+  });
 }
+
 export const HERO_UPGRADES = deepFreeze({
-  volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
-  strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
-  cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
-  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级穿透 +1 名敌人，并忽略 25% 护甲。',{pierce:1}),
-  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds. Rank 2+ leaves scorch fire.','爆炸弹溅射并灼烧敌群 2.6 秒，2 级起留下灼烧火坑。',{splash:30,burn:{dps:4,duration:2.6}}),
-  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take. Rank 2+ shatters on death.','减速目标并使其易伤，2 级起击杀触发冰霜碎裂。',{brittle:{power:0.1,duration:2.6}}),
-  focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 100 wall HP, 40% surge power, and +1 Aegis wall immunity.','城墙生命 +100，冲击波威力 +40%，城墙免疫 +1 次。',{fence:100}),
-  split_shot:upgrade('split_shot',3,'Split Shrapnel','子母分裂弹','Gain 3 damage. Hits burst into 2/3/4 piercing shrapnel bolts.','伤害 +3，命中后向四周分裂出 2/3/4 发贯穿子母弹。',{damageAdd:3}),
-  ricochet:upgrade('ricochet',3,'EM Ricochet','电磁穿刺','Gain 2 damage. Shots chain to 2/3/4 foes and call periodic EM sky-strikes.','伤害 +2，子弹电弧弹射 2/3/4 名敌人，并周期降下自动雷击。',{damageAdd:2}),
-  napalm:upgrade('napalm',3,'Napalm Barrage','燃油弹火海','Gain 24 px blast radius and auto-lob Napalm canisters leaving a fire sea.','溅射范围 +24 像素，周期自动空投燃油弹形成大范围持续火海。',{splash:24}),
-  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 wall HP and periodically dispatch an Armored Sweeper truck up the densest lane.','城墙生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
-  cryo_barrage:upgrade('cryo_barrage',3,'Glacial Barrage','干冰连发柱','Apply brittle (+10%/rank) and periodically launch a sweeping fan of 5/7/9 piercing ice shards.','附加易伤（+10%/级），周期自动齐射 5/7/9 道贯穿干冰柱击退尸潮。',{brittle:{power:0.1,duration:2.6}}),
-  orbital_beam:upgrade('orbital_beam',3,'Orbital Laser','高能射线','Gain +0.25x crit multiplier and periodically fire a vertical piercing laser beam.','暴击倍率 +0.25，周期自动发射纵贯战场的高能激光柱重创整列与首领。',{critMultiplier:0.25})
+  // --- 枪械强化 (Gun Mods) ---
+  volley: upgrade(
+    'volley', 3, 'gun',
+    'Multi-Volley', '齐射弹道',
+    'Fire at +1 additional zombie every shot.',
+    '每次开火额外多打 1 个目标，弹幕铺满全屏。',
+    {multishot: 1}
+  ),
+  strike: upgrade(
+    'strike', 5, 'gun',
+    'Heavy Rounds', '重膛高爆弹',
+    'Gun damage +6. Crits knock back non-boss zombies.',
+    '子弹伤害 +6，暴击时将普通僵尸震退 18 像素。',
+    {damageAdd: 6}
+  ),
+  cadence: upgrade(
+    'cadence', 5, 'gun',
+    'Rapid Fire', '极速连射',
+    'Fire rate +16% for faster bullet streams.',
+    '枪械攻速 +16%，弹幕倾泻更密集。',
+    {haste: 0.16}
+  ),
+  pierce: upgrade(
+    'pierce', 4, 'gun',
+    'Armor Pierce', '穿甲弹芯',
+    'Bullets pierce +1 zombie and ignore 25% armor.',
+    '子弹穿透 +1 名僵尸，并无视 25% 护甲。',
+    {pierce: 1}
+  ),
+  shrapnel: upgrade(
+    'shrapnel', 4, 'gun',
+    'Flame Rounds', '烈焰爆裂弹',
+    'Explosive hits burn zombies for 2.6s. Lv.2+ leaves burning patches.',
+    '子弹命中爆炸溅射并灼烧 2.6 秒，2 级起留下地面火坑。',
+    {splash: 30, burn: {dps: 5, duration: 2.6}}
+  ),
+  frostbite: upgrade(
+    'frostbite', 4, 'gun',
+    'Frost Rounds', '急冻减速弹',
+    'Slows zombies and boosts damage taken. Lv.2+ shatters on kill.',
+    '减速僵尸并附加易伤，2 级起击杀触发范围冰爆。',
+    {brittle: {power: 0.1, duration: 2.6}}
+  ),
+  focus: upgrade(
+    'focus', 4, 'gun',
+    'Deadeye Crit', '致命暴击',
+    'Crit chance +10% & crit damage +30%. Lv.2+ executes low-HP foes.',
+    '暴击率 +10%、暴击伤害 +30%，2 级起解锁残血斩杀。',
+    {critChance: 0.1, critMultiplier: 0.3}
+  ),
+  bastion: upgrade(
+    'bastion', 3, 'gun',
+    'Fortified Wall', '钢铁城墙',
+    'Wall HP +120, shockwave +40%, and +1 wall shield block.',
+    '城墙血量 +120，危急冲击波 +40%，城墙免伤护盾 +1 次。',
+    {fence: 120}
+  ),
+
+  // --- 自动技能 (Auto Skills) ---
+  split_shot: upgrade(
+    'split_shot', 4, 'skill',
+    'Split Shrapnel', '子母分裂弹',
+    'Damage +3. Hits auto-burst into 2/3/4/5 piercing shrapnel shots.',
+    '子弹伤害 +3，命中后自动向四周分裂出 2/3/4/5 发贯穿弹片。',
+    {damageAdd: 3}
+  ),
+  ricochet: upgrade(
+    'ricochet', 4, 'skill',
+    'EM Chain Strike', '电磁连锁雷',
+    'Bullets arc to 2/3/4/5 zombies and auto-call stunning sky lightning.',
+    '子弹电弧弹射 2/3/4/5 名僵尸，并定时自动降下麻痹天雷。',
+    {damageAdd: 2}
+  ),
+  napalm: upgrade(
+    'napalm', 4, 'skill',
+    'Napalm Fire Sea', '燃油弹火海',
+    'Blast radius +24. Periodically auto-drops Napalm creating a burning sea.',
+    '溅射范围 +24，定时自动空投燃油弹形成大范围持续火海。',
+    {splash: 24}
+  ),
+  armored_car: upgrade(
+    'armored_car', 4, 'skill',
+    'Armored Sweeper', '重装装甲车',
+    'Wall HP +80. Periodically auto-sends an armored truck crushing a lane.',
+    '城墙血量 +80，定时自动派出装甲车碾压并击退整列尸潮。',
+    {fence: 80}
+  ),
+  cryo_barrage: upgrade(
+    'cryo_barrage', 4, 'skill',
+    'Glacial Barrage', '干冰齐射柱',
+    'Adds brittle. Periodically auto-fires a fan of 5/7/9/11 piercing ice spears.',
+    '附加易伤，定时自动齐射 5/7/9/11 道贯穿冰柱横扫减速尸潮。',
+    {brittle: {power: 0.1, duration: 2.6}}
+  ),
+  orbital_beam: upgrade(
+    'orbital_beam', 4, 'skill',
+    'Orbital Laser', '高能激光柱',
+    'Crit damage +25%. Periodically auto-fires a vertical beam melting elites & bosses.',
+    '暴击伤害 +25%，定时自动发射纵贯战场的激光柱重创精英与首领。',
+    {critMultiplier: 0.25}
+  ),
+
+  // --- Repeatable Late-Game Fallback ---
+  overclock: upgrade(
+    'overclock', 20, 'gun',
+    'Firepower Overclock', '火力超频',
+    'Gun and auto-skill damage +12% per rank.',
+    '枪械与所有自动技能伤害额外 +12%，持续叠加火力。',
+    {damage: 0.12}
+  ),
 });
 
 function finiteOr(value, fallback = 0) {
@@ -114,25 +233,28 @@ export function availableHeroUpgradeIds(unit) {
  */
 export function getHeroStats(unit, state) {
   const levels = upgradeLevels(unit);
-  const {strike, cadence, pierce, volley, shrapnel, frostbite, focus, split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam} = levels;
+  const {
+    strike, cadence, pierce, volley, shrapnel, frostbite, focus,
+    split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam, overclock
+  } = levels;
   const bonus = readBonuses(state);
   const rawBonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot) || {};
   const extraPierce = Math.max(0, Math.floor(finiteOr(rawBonus.heroPierce, 0)));
   const stats = {
     ...HERO_BASE,
     mechanics: [],
-    damage: round4((HERO_BASE.damage + 5 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage)),
-    interval: round4(HERO_BASE.interval / (1 + 0.14 * cadence + bonus.haste)),
+    damage: round4((HERO_BASE.damage + 6 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage + 0.12 * overclock)),
+    interval: round4(HERO_BASE.interval / (1 + 0.16 * cadence + bonus.haste)),
     range: HERO_BASE.range + bonus.range,
     critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
     critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
-    fence: levels.bastion * 100 + armored_car * 60,
+    fence: levels.bastion * 120 + armored_car * 80,
     pierce: pierce + extraPierce,
-    armorPen: pierce * 0.25,
+    armorPen: Math.min(0.95, pierce * 0.25),
     critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
     multishot: volley,
     chain: ricochet ? 1 + ricochet : 0,
-    chainRange: ricochet ? 105 : HERO_BASE.chainRange,
+    chainRange: ricochet ? 112 : HERO_BASE.chainRange,
     split: split_shot ? 1 + split_shot : 0,
     shrapnelRank: shrapnel,
     frostbiteRank: frostbite,
@@ -147,10 +269,10 @@ export function getHeroStats(unit, state) {
     stats.splash = (shrapnel ? 20 + 10 * shrapnel : 0) + 24 * napalm;
   }
   if (shrapnel) {
-    stats.burn = {dps: 4 * shrapnel, duration: 2.6};
+    stats.burn = {dps: 5 * shrapnel, duration: 2.6};
   }
   if (frostbite) {
-    stats.slow = {factor: round4(0.82 - 0.06 * frostbite), duration: 2.2};
+    stats.slow = {factor: round4(Math.max(0.5, 0.82 - 0.06 * frostbite)), duration: 2.2};
   }
   if (frostbite || cryo_barrage) {
     stats.brittle = {power: round4(0.1 * frostbite + 0.1 * cryo_barrage), duration: 2.6};
@@ -189,13 +311,13 @@ export function applyHeroUpgrade(state, id) {
   try {
     upgrades[id] = current + 1;
     if (id === 'bastion' && state.fence) {
-      state.fence.maxHp += 100;
-      state.fence.hp += 100;
+      state.fence.maxHp += 120;
+      state.fence.hp += 120;
       state.wallImmunity = Math.max(0, Math.floor(state.wallImmunity || 0)) + 1;
     }
     if (id === 'armored_car' && state.fence) {
-      state.fence.maxHp += 60;
-      state.fence.hp += 60;
+      state.fence.maxHp += 80;
+      state.fence.hp += 80;
     }
   } catch {
     return {ok: false, reason: 'invalid_state'};

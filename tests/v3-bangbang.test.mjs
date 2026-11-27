@@ -217,7 +217,7 @@ test('All 6 v3 BangBang Hero evolutions trigger automatically in combat', () => 
   for (const id of ['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']) {
     assert.equal(applyHeroUpgrade(state, id).ok, true, `apply ${id}`);
   }
-  assert.equal(state.fence.maxHp, fenceStart + 60, 'armored_car added +60 fence HP');
+  assert.equal(state.fence.maxHp, fenceStart + 80, 'armored_car added +80 fence HP');
 
   // Spawn a dense pack of tanky zombies so every auto super-weapon fires & hits
   for (let i = 0; i < 8; i++) {

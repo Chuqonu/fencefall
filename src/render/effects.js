@@ -1504,8 +1504,28 @@ export function createEffects() {
     }
   }
 
+  function isRich(ctx) {
+    return typeof ctx.beginPath === 'function' && typeof ctx.arc === 'function' && typeof ctx.stroke === 'function';
+  }
+
   function drawPixelRing(ctx, x, y, radius, color, alpha, weight) {
     if (!(radius > 0) || alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = (weight > 1 ? 4.2 : 2.6);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = (weight > 1 ? 2.2 : 1.4);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const size = weight > 1 ? 2 : 1;
     const steps = Math.max(8, Math.min(48, Math.round(radius * 1.15)));
     const cx = Math.round(x);
@@ -1520,14 +1540,37 @@ export function createEffects() {
 
   function drawStreak(ctx, particle, alpha) {
     if (alpha < 0.02) return;
-    const ox = Math.round(particle.x);
-    const oy = Math.round(particle.y);
     const ux = particle.ux | 0;
     const uy = particle.uy | 0;
     if (ux === 0 && uy === 0) return;
+    const len = particle.length | 0;
+    if (isRich(ctx)) {
+      const mag = Math.hypot(ux, uy) || 1;
+      const dx = (ux / mag) * len;
+      const dy = (uy / mag) * len;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.strokeStyle = particle.shaft;
+      ctx.lineWidth = particle.crit ? 4.0 : 2.8;
+      ctx.beginPath();
+      ctx.moveTo(particle.x, particle.y);
+      ctx.lineTo(particle.x + dx, particle.y + dy);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = particle.head;
+      ctx.lineWidth = particle.crit ? 2.0 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(particle.x + dx * 0.35, particle.y + dy * 0.35);
+      ctx.lineTo(particle.x + dx, particle.y + dy);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
     const px = -uy;
     const py = ux;
-    const len = particle.length | 0;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.edge;
     for (let i = 0; i <= len - 3; i++) {
@@ -1548,14 +1591,34 @@ export function createEffects() {
 
   function drawNeedle(ctx, particle, alpha) {
     if (alpha < 0.02) return;
-    const ox = Math.round(particle.x);
-    const oy = Math.round(particle.y);
     const ux = particle.ux | 0;
     const uy = particle.uy | 0;
     if (ux === 0 && uy === 0) return;
+    const len = particle.length | 0;
+    if (isRich(ctx)) {
+      const mag = Math.hypot(ux, uy) || 1;
+      const nx = ux / mag;
+      const ny = uy / mag;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = alpha * 0.65;
+      ctx.strokeStyle = particle.shaft;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(particle.x - nx * 5, particle.y - ny * 5);
+      ctx.lineTo(particle.x + nx * len, particle.y + ny * len);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
     const px = -uy;
     const py = ux;
-    const len = particle.length | 0;
     const back = 5;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.shaft;
@@ -1571,9 +1634,29 @@ export function createEffects() {
 
   function drawBurst(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    const radius = Math.max(5, particle.radius | 0);
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.fillStyle = particle.edge || particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = particle.core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
-    const radius = Math.max(5, particle.radius | 0);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.edge || particle.color;
     for (let i = 0; i < 12; i++) {
@@ -1595,6 +1678,30 @@ export function createEffects() {
 
   function drawJump(ctx, particle, alpha) {
     if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(particle.points[0].x, particle.points[0].y);
+      for (let i = 1; i < particle.points.length; i++) {
+        ctx.lineTo(particle.points[i].x, particle.points[i].y);
+      }
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.strokeStyle = particle.edge || '#58b8ff';
+      ctx.lineWidth = 5.0;
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.strokeStyle = particle.color || '#a6e4ff';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
     for (let i = 1; i < particle.points.length; i++) {
@@ -1621,6 +1728,36 @@ export function createEffects() {
 
   function drawFlash(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const cy = particle.y;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.globalAlpha = alpha;
+      // 4-point blazing cartoon golden crit star
+      ctx.beginPath();
+      const spikes = 4;
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? 12 : 4.2;
+        const a = (i * Math.PI) / spikes;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#ffe56a';
+      ctx.fill();
+      ctx.strokeStyle = '#5c340e';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
     ctx.globalAlpha = alpha;
@@ -1640,10 +1777,41 @@ export function createEffects() {
 
   function drawImpact(ctx, particle, alpha, short) {
     if (alpha < 0.02) return;
-    const cx = Math.round(particle.x);
-    const cy = Math.round(particle.y);
     let arm = Math.max(3, particle.arm | 0);
     if (short) arm = particle.crit ? 4 : 3;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const cy = particle.y;
+      const spikes = short ? 4 : 6;
+      const outer = arm + 2.5;
+      const inner = Math.max(2.2, outer * 0.42);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = (i * Math.PI) / spikes;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = short && particle.crit ? '#ffe56a' : particle.color;
+      ctx.fill();
+      ctx.strokeStyle = '#140e0c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = particle.core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(1.5, inner * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#140e0c';
     ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
@@ -1667,17 +1835,26 @@ export function createEffects() {
       ctx.fillRect(cx + arm, cy, 1, 1);
       ctx.fillRect(cx, cy - arm, 1, 1);
       ctx.fillRect(cx, cy + arm, 1, 1);
-      if (short) {
-        ctx.fillRect(cx - 2, cy - 2, 1, 1);
-        ctx.fillRect(cx + 2, cy - 2, 1, 1);
-        ctx.fillRect(cx - 2, cy + 2, 1, 1);
-        ctx.fillRect(cx + 2, cy + 2, 1, 1);
-      }
     }
   }
 
   function drawNotch(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const y = particle.y;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ff5a3c';
+      ctx.beginPath();
+      ctx.arc(cx, y, particle.heavy ? 8 : 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff2dd';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const y = Math.round(particle.y);
     const heavy = particle.heavy ? 1 : 0;
@@ -1706,6 +1883,25 @@ export function createEffects() {
 
   function drawPlus(ctx, x, y, arm, color, core, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x - arm, y);
+      ctx.lineTo(x + arm, y);
+      ctx.moveTo(x, y - arm);
+      ctx.lineTo(x, y + arm);
+      ctx.stroke();
+      ctx.fillStyle = core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(x);
     const cy = Math.round(y);
     const reach = Math.max(1, arm | 0);
@@ -1719,10 +1915,21 @@ export function createEffects() {
 
   function drawDot(ctx, particle, alpha) {
     if (alpha < 0.02 || !Number.isFinite(particle.x) || !Number.isFinite(particle.y)) return;
-    const size = particle.life < particle.maxLife * 0.35 ? 1 : (particle.size || 2);
+    const size = particle.life < particle.maxLife * 0.35 ? 1.2 : (particle.size || 2.2);
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, Math.max(1, size * 0.68), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    const s = Math.max(1, Math.round(size));
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
-    ctx.fillRect(Math.round(particle.x - size / 2), Math.round(particle.y - size / 2), size, size);
+    ctx.fillRect(Math.round(particle.x - s / 2), Math.round(particle.y - s / 2), s, s);
   }
 
   function drawSegment(ctx, x0, y0, x1, y1) {
@@ -1748,6 +1955,26 @@ export function createEffects() {
 
   function drawArc(ctx, particle, alpha) {
     if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(particle.points[0].x, particle.points[0].y);
+      for (let i = 1; i < particle.points.length; i++) {
+        ctx.lineTo(particle.points[i].x, particle.points[i].y);
+      }
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 4.6;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
     for (let i = 1; i < particle.points.length; i++) {
@@ -1785,6 +2012,18 @@ export function createEffects() {
 
   function drawGlowline(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(8, particle.y);
+      ctx.lineTo(ARENA.width - 8, particle.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha * 0.9;
     ctx.fillStyle = particle.color;
     const y = Math.round(particle.y);
@@ -1795,8 +2034,25 @@ export function createEffects() {
     }
   }
 
-  function drawText(ctx, text, x, y, color, scale, alpha) {
+  function drawText(ctx, text, x, y, color, scale, alpha, pop = 1) {
     if (!text || alpha < 0.02) return;
+    if (typeof ctx.fillText === 'function' && typeof ctx.strokeText === 'function') {
+      const isCritNum = (scale || 1) >= 2;
+      const fontSize = Math.round((isCritNum ? 13 : 10) * pop);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = isCritNum ? 3.2 : 2.5;
+      ctx.strokeStyle = '#11161b';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+      ctx.restore();
+      return;
+    }
     const size = Math.max(1, scale | 0);
     const advance = 3 * size + size;
     const origin = Math.round(x - (text.length * advance - size) / 2);
@@ -1829,11 +2085,21 @@ export function createEffects() {
     const alpha = fade(floater);
     const x = reduced ? floater.originX : floater.x;
     const y = reduced ? floater.originY : floater.y;
-    drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
+    const age = floater.maxLife > 0 ? 1 - floater.life / floater.maxLife : 1;
+    const pop = reduced ? 1 : (age < 0.16 ? 1 + (1 - age / 0.16) * 0.32 : 1);
+    drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha, pop);
     if (floater.execute === true && alpha >= 0.02) {
+      ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#ff3a32';
-      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+      if (isRich(ctx)) {
+        ctx.beginPath();
+        ctx.arc(x, y - 9, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+      }
+      ctx.restore();
     }
   }
 
@@ -1914,7 +2180,7 @@ export function createEffects() {
     const reduced = Boolean(options && options.reducedMotion);
     ctx.save();
     try {
-      try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
+      try { ctx.imageSmoothingEnabled = true; } catch { /* partial mock contexts */ }
       for (let i = 0; i < rings.length; i++) {
         const ring = rings[i];
         const veil = Number.isFinite(ring.veil) ? ring.veil : 0.95;

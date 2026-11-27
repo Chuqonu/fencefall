@@ -6,64 +6,64 @@ import {spawnEnemy} from './movement.js';
 
 const INTRO_HINTS = {
   shambler: {
-    en: 'Ash shamblers are crossing the field. Defeat these six to open the first draft.',
-    zh: '灰烬蹒者正在过场。击倒这六只就能拿到第一次整备。',
+    en: 'Ash shamblers are crossing the field. Defeat these six to open the first upgrade.',
+    zh: '灰烬蹒者正在逼近城墙。击倒 6 只即可触发首次升级选卡！',
   },
   runner: {
-    en: 'Wire runners are in the line. They reach the fence early, so shoot them first.',
-    zh: '线驰者混进了队列。它们会更早贴上栅栏，优先打掉。',
+    en: 'Wire runners are in the line. They reach the wall early, so drop them fast.',
+    zh: '线驰者混进了尸潮。它们移动很快会先贴近城墙，优先清理。',
   },
   swarm: {
-    en: 'Dust gnawers arrive in bunches. One is nothing; the bunch chews the fence.',
-    zh: '尘啮成群出现。一只不足为惧，一群就会啃栅栏。',
+    en: 'Dust gnawers arrive in bunches. Area skills sweep them away cleanly.',
+    zh: '尘啮成群涌来，靠火海和范围自动技能一波清场！',
   },
   spitter: {
-    en: 'Stops 135 px from the fence and spits acid. Set Priority targeting to drop it fast.',
-    zh: '在距防线 135 像素处停步喷酸，切换「高危」索敌优先集火清理。',
+    en: 'Stops 135 px from the wall and spits acid. Set Priority targeting to drop it fast.',
+    zh: '腐浆喷者会在中距离停步喷酸，切「高危」索敌优先集火清理。',
   },
   armored: {
-    en: 'Plate walkers shrug off more than half of each hit. Focus them down.',
-    zh: '板甲行者能挡下每次攻击的一半多。集火拆掉它们。',
+    en: 'Plate walkers block over half of each hit. Armor Pierce and burns melt them.',
+    zh: '板甲行者护甲极厚，用穿甲弹芯或燃烧伤害快速击穿。',
   },
   brute: {
-    en: 'Gate brutes are slow, huge, and hit the fence very hard.',
-    zh: '闸门蛮兽缓慢、巨大，对栅栏的打击非常重。',
+    en: 'Gate brutes are slow, huge, and slam the wall very hard.',
+    zh: '闸门蛮兽体型巨大，贴墙后每次重击都会大幅损耗城墙血量。',
   },
   boss: {
-    en: 'A Crown Breach calls dust gnawers while alive. Half health only enrages it. It only attacks the fence.',
-    zh: '冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。它只攻击栅栏。',
+    en: 'Crown Breach summons dust gnawers and enrages at half HP. Focus all firepower!',
+    zh: '冠裂兽会不断召唤尘啮，半血后狂暴！集中所有火力与激光柱击溃它。',
   },
   leaper: {
-    en: 'Crouches briefly then leaps forward. Frost slow and Lightning stun stop its charge.',
-    zh: '短暂蹲伏后向前扑跃，寒霜减速与电弧麻痹可有效打断其突进。',
+    en: 'Crouches briefly then vaults forward. Frost slow and EM lightning stop its leap.',
+    zh: '灰跃者蹲伏后会向前扑跃，急冻减速与电磁麻痹可有效打断其突袭。',
   },
   splitter: {
-    en: 'Crack broods release two dust gnawers when they die.',
-    zh: '裂巢死后会放出两只尘啮。',
+    en: 'Crack broods burst into two dust gnawers when killed.',
+    zh: '裂巢阵亡后会分裂出两只尘啮，注意用范围火力清扫。',
   },
   mender: {
-    en: 'Ash menders heal the most wounded ally. They do not heal themselves.',
-    zh: '烬补者会治疗伤得最重的同伴，不会治疗自己。',
+    en: 'Ash menders heal wounded allies nearby. Take them out early.',
+    zh: '烬补者会持续治疗周围重伤僵尸，建议优先点杀。',
   },
   shade: {
-    en: 'Fades every 1.4 s to dodge direct shots. Burn and poison clouds still hurt it while faded.',
-    zh: '每 1.4 秒虚化规避直射，但灼烧与毒雾在虚化期间依然生效。',
+    en: 'Phases every 1.4s to dodge direct bullets. Fire sea and burn still hurt it.',
+    zh: '幽影每 1.4 秒虚化躲避直射，火海与持续灼烧在虚化期间依然有效。',
   },
   banner: {
-    en: 'A standard wretch triples the pace of enemies near it. Kill it before that pack arrives.',
-    zh: '旗孽会让附近的敌人变为三倍速。在那队人抵达前打掉它。',
+    en: 'Standard wretches accelerate nearby zombies. Snipe the flag-bearer first!',
+    zh: '旗孽会让周围尸群疯狂加速冲锋，务必优先点杀旗手！',
   },
   warden: {
-    en: 'An ash warden weakens hits on a nearby ally. It is not shielded itself. Kill it first.',
-    zh: '烬卫会减弱对附近同伴的打击。它自己没有这层护盾。先打掉它。',
+    en: 'Ash wardens shield a nearby ally. Kill the warden first to break the shield.',
+    zh: '烬卫会为附近同伴施加减伤护盾，先打掉它瓦解防御。',
   },
   charge: {
-    en: 'A cinder charge bites once at the fence, then the fuse burns. Kill it before the blast.',
-    zh: '烬爆贴上栅栏后先啃一口，然后引线燃烧。爆炸前打掉它。',
+    en: 'Cinder charges light an explosive fuse at the wall. Kill them before the blast!',
+    zh: '烬爆者贴墙后会点燃自爆引线，务必在爆炸前击杀或震退！',
   },
   hush: {
-    en: 'While an ash hush is on the fence, defenders recharge more slowly. Kill it to restore the board.',
-    zh: '烬寂贴在栅栏上时，防守者充能变慢。打掉它，阵列就会恢复。',
+    en: 'While Ash Hush clamps to the wall, your fire rate drops. Clear it quickly!',
+    zh: '烬寂贴墙时会拖慢攻速与技能充能，尽快将其击杀恢复火力！',
   },
 };
 
@@ -290,8 +290,8 @@ export function getWaveInfo(state) {
     if (Number.isFinite(at)) nextIn = Math.max(0, at - time);
   }
   const quiet = {
-    en: 'The fence is quiet. Ash shamblers will crest the field in a moment.',
-    zh: '栅栏还安静。灰烬蹒者马上就会出现在场上。',
+    en: 'The wall is quiet. Zombies will crest the field in a moment.',
+    zh: '城墙前一片寂静，第一波尸潮即将涌入！',
   };
   const name = current?.name || {en: 'Before the ash', zh: '灰烬未至'};
   const hint = current?.hint || quiet;
@@ -397,7 +397,7 @@ function autoHint(groups) {
   for (const group of groups) if (!kinds.includes(group.kind)) kinds.push(group.kind);
   const en = kinds.map(kind => ENEMIES[kind].name.en).join(', ');
   const zh = kinds.map(kind => ENEMIES[kind].name.zh).join('、');
-  return {en: `${en} advance on the fence.`, zh: `${zh}正向栅栏推进。`};
+  return {en: `${en} advance on the wall.`, zh: `${zh}正向城墙推进。`};
 }
 
 function lastSpawnTime(waves) {

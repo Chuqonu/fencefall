@@ -1266,11 +1266,11 @@ function combatStats(unit,state) {
   return stats;
 }
 const SW_BASE_CD = Object.freeze({
-  napalm: [7.2, 5.8, 4.6],
-  armored_car: [9.4, 7.6, 6.0],
-  cryo_barrage: [7.6, 6.2, 4.9],
-  orbital_beam: [8.2, 6.7, 5.3],
-  ricochet: [7.4, 6.0, 4.8],
+  napalm: [7.0, 5.6, 4.4, 3.5],
+  armored_car: [9.0, 7.2, 5.8, 4.6],
+  cryo_barrage: [7.4, 6.0, 4.8, 3.8],
+  orbital_beam: [8.0, 6.5, 5.2, 4.1],
+  ricochet: [7.2, 5.8, 4.6, 3.6],
 });
 
 export function superweaponCooldown(id, rank, haste = 0) {

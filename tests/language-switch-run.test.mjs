@@ -109,15 +109,13 @@ test('switching language during a run keeps fence HP, units, seed, and time', as
   assert.equal(state.phase, 'draft');
   flip(api, state);
 
-  const choice = state.draft.options.findIndex(option => option.kind === 'tower');
+  const choice = state.draft.options.findIndex(option => option.kind === 'hero_upgrade');
   assert.ok(choice >= 0);
   const picked = state.draft.options[choice];
   assert.equal(api.act('chooseDraft', {index: choice}).ok, true);
   assert.equal(state.phase, 'playing');
   assert.equal(state.slots[2].unit, hero);
-  const deployed = state.slots.find(slot => slot.unit && slot.unit.type === picked.type);
-  assert.ok(deployed);
-  assert.equal(deployed.unit.kind, 'tower');
+  assert.equal(hero.upgrades[picked.upgradeId], 1);
   markFence(state, 500);
   flip(api, state);
 
@@ -129,9 +127,9 @@ test('switching language during a run keeps fence HP, units, seed, and time', as
   assert.equal(kept.fenceHp, 470);
   assert.equal(kept.seed, 42);
   assert.ok(kept.time > 4);
-  assert.equal(kept.units.filter(Boolean).length, 2);
+  assert.equal(kept.units.filter(Boolean).length, 1);
   assert.equal(kept.units[2].id, hero.id);
-  assert.equal(kept.units[deployed.index].kind, 'tower');
+  assert.equal(kept.units[2].upgrades[picked.upgradeId], 1);
 });
 
 test('a run started in zh keeps its clock, fence, units, and seed when switched to en', async () => {

@@ -272,6 +272,10 @@ export async function createController(options = {}) {
         return {ok: true, index: -1};
       }
       if (!integerSlot(index)) return {ok: false, reason: 'bad-slot'};
+      if (!run.slots?.[index]?.unit) {
+        ui.selectedSlot = -1;
+        return {ok: true, index: -1};
+      }
       const previous = ui.selectedSlot;
       ui.selectedSlot = previous === index ? -1 : index;
       return {ok: true, index: ui.selectedSlot};
@@ -292,28 +296,17 @@ export async function createController(options = {}) {
   }
 
   function moveUnits(from, to) {
+    void from;
+    void to;
     if (!run) return {ok: false, reason: 'no-run'};
-    if (!integerSlot(from) || !integerSlot(to) || from === to) return {ok: false, reason: 'bad-slot'};
-    if (!canPlan(run)) return {ok: false, reason: 'not-planning'};
-    const origin = run.slots[from].unit;
-    const target = run.slots[to].unit;
-    if (!origin && !target) return {ok: false, reason: 'emptySlot'};
-    const swapped = Boolean(origin && target);
-    run.slots[from].unit = target;
-    run.slots[to].unit = origin;
-    ui.selectedSlot = to;
-    saveRun();
-    return swapped ? {ok: true, swapped: true} : {ok: true};
+    return {ok: false, reason: 'heroFixed'};
   }
 
   function dragDrop(from, to) {
+    void from;
+    void to;
     if (!run) return {ok: false, reason: 'no-run'};
-    if (!integerSlot(from) || !integerSlot(to)) return {ok: false, reason: 'bad-slot', snapped: true};
-    if (from === to) return {ok: false, reason: 'same-slot', snapped: true};
-    if (!canPlan(run)) return {ok: false, reason: 'not-planning', snapped: true};
-    const origin = run.slots[from]?.unit;
-    if (!origin) return {ok: false, reason: 'emptySlot', snapped: true};
-    return moveUnits(from, to);
+    return {ok: false, reason: 'heroFixed', snapped: true};
   }
 
   function chooseDraft(index) {

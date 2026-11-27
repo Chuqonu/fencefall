@@ -93,9 +93,9 @@ function render(language, phase) {
 
 test('a victory result offers endless in the active language and hides it on defeat', () => {
   const zh = render('zh', 'victory');
-  assert.equal(findByTestId(zh, 'btn-endless')?.textContent, '进入无尽');
+  assert.equal(findByTestId(zh, 'btn-endless')?.textContent, '继续无尽模式');
   const en = render('en', 'victory');
-  assert.equal(findByTestId(en, 'btn-endless')?.textContent, 'Enter endless');
+  assert.equal(findByTestId(en, 'btn-endless')?.textContent, 'Enter Endless');
   assert.equal(findByTestId(render('zh', 'defeat'), 'btn-endless'), null);
 });
 

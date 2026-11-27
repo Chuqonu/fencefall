@@ -25,8 +25,8 @@ export const ENEMIES = {
   shambler: {
     name: {en: 'Ash Shambler', zh: '灰烬蹒者'},
     description: {
-      en: 'The common body: ordinary pace and health, no armor, and a steady bite on the shared fence.',
-      zh: '最常见的敌人：步速与生命都普通，没有护甲，以稳定的节奏啃咬共享栅栏。',
+      en: 'Standard frontline zombie with steady speed and no armor, chewing steadily at the wall.',
+      zh: '最常见的普通僵尸：步速和血量适中，没有护甲，贴墙后持续啃咬城墙。',
     },
     role: {en: 'Grunt', zh: '步兵'},
     threat: 1,
@@ -41,8 +41,8 @@ export const ENEMIES = {
   runner: {
     name: {en: 'Wire Runner', zh: '线驰者'},
     description: {
-      en: 'The fastest body. Thin health, a light bite, and it reaches the shared fence well ahead of the ash shamblers, so shoot it early.',
-      zh: '最快的敌人。生命很薄、啃咬很轻，会远早于灰烬蹒者贴上共享栅栏，需要提前打掉。',
+      en: 'Fast sprinter with thin health that rushes the wall ahead of the horde.',
+      zh: '移动极快的突进僵尸，血量薄但会抢先冲到城墙前，适合用减速或速射拦截。',
     },
     role: {en: 'Raider', zh: '突进'},
     threat: 2,
@@ -57,8 +57,8 @@ export const ENEMIES = {
   brute: {
     name: {en: 'Gate Brute', zh: '闸门蛮兽'},
     description: {
-      en: 'Huge and slow. Each bite tears a deep chunk from the shared fence, and its long health takes a focused fight.',
-      zh: '体型巨大、步速很慢。每一口都从共享栅栏撕下很深的一块，厚实的生命需要长时间集火。',
+      en: 'Huge and slow siege zombie with high health and heavy wall slams.',
+      zh: '体型巨大的重型攻城僵尸，移速慢但血量厚实，每一击都能重创城墙。',
     },
     role: {en: 'Siege', zh: '攻城'},
     threat: 5,
@@ -73,8 +73,8 @@ export const ENEMIES = {
   armored: {
     name: {en: 'Plate Walker', zh: '板甲行者'},
     description: {
-      en: 'Thick plate sheds a bit more than half of every hit. It walks up and keeps biting the shared fence until that plate is focused down.',
-      zh: '厚甲会挡下略多于一半的每一击。它走向共享栅栏并持续啃咬，直到这层甲被集火拆掉。',
+      en: 'Heavy armor blocks over half of incoming damage. Use Armor Pierce or elemental burns.',
+      zh: '身披厚重铁甲，能减免一半以上伤害，用穿甲弹芯或燃烧火海可快速熔化。',
     },
     role: {en: 'Bulwark', zh: '重甲'},
     threat: 4,
@@ -91,8 +91,8 @@ export const ENEMIES = {
     attackRange:135, projectileSpeed:190,
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
-      en: 'Stops 135 px from the fence and spits acid. Set Priority targeting to focus it down early.',
-      zh: '在距防线 135 像素处停步喷酸，可用「高危」索敌优先集火清理。',
+      en: 'Stops 135 px from the wall and spits acid. Switch Priority targeting to drop it early.',
+      zh: '在距城墙 135 像素处停步喷酸，切「高危」索敌可优先将其点杀。',
     },
     role: {en: 'Sapper', zh: '工兵'},
     threat: 3,
@@ -107,8 +107,8 @@ export const ENEMIES = {
   swarm: {
     name: {en: 'Dust Gnawer', zh: '尘啮'},
     description: {
-      en: 'Tiny and weak alone, with a small bite. They arrive in bunches and smother the shared fence by numbers.',
-      zh: '单只又小又弱，啃咬也很轻。它们成群涌来，靠数量淹没共享栅栏。',
+      en: 'Tiny and fragile alone, but arrives in huge packs to overwhelm the wall.',
+      zh: '单只脆弱矮小，但会成群结队涌来，靠燃油火海与分裂弹幕割草极爽。',
     },
     role: {en: 'Swarm', zh: '虫群'},
     threat: 1,
@@ -124,8 +124,8 @@ export const ENEMIES = {
     statusResist:{slow:0.5,stun:0.65},
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. At or below half (0.5) of its maximum health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
-      zh: '首领。生命降至最大生命的一半（0.5）或以下时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
+      en: 'Boss. At or below half (0.5) of its maximum health it enrages, moving faster and striking the wall harder while summoning dust gnawers.',
+      zh: '首领。生命降至最大生命的一半（0.5）或以下时会狂暴，移速加快、重击城墙更凶猛，并定时召唤尘啮。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,
@@ -143,8 +143,8 @@ export const ENEMIES = {
   leaper: {
     name: {en: 'Ash Leaper', zh: '灰跃者'},
     description: {
-      en: 'Crouches briefly then leaps forward. Frost slow and Lightning stun break its charge.',
-      zh: '短暂蹲伏后向前扑跃，寒霜减速与电弧麻痹可有效打断其突进。',
+      en: 'Crouches briefly then vaults toward the wall. Frost slow and EM lightning break its jump.',
+      zh: '短暂蹲伏后向前扑跃直逼城墙，急冻减速与电磁麻痹可有效打断其突袭。',
     },
     role: {en: 'Leaper', zh: '跃袭'},
     threat: 3,
@@ -160,8 +160,8 @@ export const ENEMIES = {
   splitter: {
     name: {en: 'Crack Brood', zh: '裂巢'},
     description: {
-      en: 'On death it releases two dust gnawers. It only bites the shared fence.',
-      zh: '死后放出两只尘啮。它只啃共享栅栏。',
+      en: 'Bursts into two dust gnawers when killed. Area fire and ice skills clean them up fast.',
+      zh: '死亡后会分裂出两只尘啮，配合火海与范围自动技能一网打尽。',
     },
     role: {en: 'Brood', zh: '裂变'},
     threat: 4,
@@ -178,8 +178,8 @@ export const ENEMIES = {
     priority:true,
     name: {en: 'Ash Mender', zh: '烬补者'},
     description: {
-      en: 'Heals the most wounded enemy within range. It does not heal itself. It only bites the shared fence.',
-      zh: '治疗射程内伤得最重的敌人，不治疗自己。它只啃共享栅栏。',
+      en: 'Heals the most wounded zombie nearby (never itself). Snipe it early with Priority targeting.',
+      zh: '持续治疗附近受伤最重的僵尸（不治自己），建议切「高危」优先击杀。',
     },
     role: {en: 'Mender', zh: '治疗'},
     threat: 4,
@@ -193,10 +193,10 @@ export const ENEMIES = {
     mend: {every: 1.8, amount: 46, range: 110},
   },
   shade: {
-    name: {en: 'Fence Shade', zh: '栅影'},
+    name: {en: 'Wall Shade', zh: '幽影'},
     description: {
-      en: 'Fades every 1.4 s to dodge direct hits. Poison clouds and burning areas still hurt it while faded.',
-      zh: '每 1.4 秒虚化规避直射，毒雾与持续灼烧在虚化期间依然生效。',
+      en: 'Phases every 1.4s to dodge direct bullets. Napalm fire seas and burn still hurt it.',
+      zh: '每 1.4 秒虚化躲避直射子弹，但火海与持续灼烧在虚化期间依然有效。',
     },
     role: {en: 'Shade', zh: '虚化'},
     threat: 3,
@@ -213,8 +213,8 @@ export const ENEMIES = {
     priority:true,
     name: {en: 'Standard Wretch', zh: '旗孽'},
     description: {
-      en: 'While it lives, nearby enemies move three times as fast. It does not hurry itself. Kill it before the pack arrives. It only bites the shared fence.',
-      zh: '它存活时，附近的敌人变为三倍速。它不会加快自己。在那队人抵达前打掉它。它只啃共享栅栏。',
+      en: 'Drastically speeds up nearby zombies while alive. Take out the flag-bearer first!',
+      zh: '存活时让周围尸群疯狂加速冲锋，务必优先点杀旗手阻止尸潮撞墙！',
     },
     role: {en: 'Banner', zh: '旗手'},
     threat: 4,
@@ -231,8 +231,8 @@ export const ENEMIES = {
     priority:true,
     name: {en: 'Ash Warden', zh: '烬卫'},
     description: {
-      en: 'Hits on one nearby ally are weaker while it lives. The warden itself is not shielded. Kill it first. It only bites the shared fence.',
-      zh: '它存活时，附近一名同伴受到的打击会变弱。烬卫自己没有这层护盾。先打掉它。它只啃共享栅栏。',
+      en: 'Projects a damage-reducing shield onto a nearby ally (not itself). Drop the warden first.',
+      zh: '为附近一名同伴提供强力减伤护盾（自己无盾），先打掉它瓦解防线。',
     },
     role: {en: 'Ward', zh: '护卫'},
     threat: 4,
@@ -247,10 +247,10 @@ export const ENEMIES = {
   },
   charge: {
     priority:true,
-    name: {en: 'Cinder Charge', zh: '烬爆'},
+    name: {en: 'Cinder Charge', zh: '烬爆者'},
     description: {
-      en: 'Once it reaches the shared fence it bites once and lights a fuse. Kill it before the fuse ends. Otherwise it blows one heavy hole in the fence and dies.',
-      zh: '贴上共享栅栏后先啃一口并点燃引线。引线燃尽前打掉它。否则它会在栅栏上炸开一个大口然后死去。',
+      en: 'Lights an explosive fuse upon reaching the wall. Kill or knock it back before detonation!',
+      zh: '贴近城墙后点燃引线，倒计时结束会炸出巨额伤害，务必在爆炸前击杀或震退！',
     },
     role: {en: 'Charge', zh: '爆弹'},
     threat: 4,
@@ -267,8 +267,8 @@ export const ENEMIES = {
     priority:true,
     name: {en: 'Ash Hush', zh: '烬寂'},
     description: {
-      en: 'Light bites. While it is on the shared fence, every defender recharges more slowly. Kill it and the board fires at full speed again.',
-      zh: '啃咬很轻。它贴在共享栅栏上时，所有防守者的充能都会变慢。打掉它，阵列就会恢复全速。',
+      en: 'Slows your reload speed while clamped to the wall. Clear it swiftly to keep full fire rate.',
+      zh: '贴墙时会拖慢枪手攻速与技能充能，尽快击杀以恢复全速倾泻火力。',
     },
     role: {en: 'Hush', zh: '静场'},
     threat: 4,

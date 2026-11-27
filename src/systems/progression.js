@@ -37,23 +37,23 @@ const NEXT_BUY_RANK = Object.freeze({
   bounty_seal: 11,
 });
 const BONUS_LABELS = {
-  damage: ['team damage', '全队伤害', '%'],
-  haste: ['team attack speed', '全队攻速', '%'],
-  critChance: ['team crit chance', '全队暴击率', '%'],
+  damage: ['gun damage', '枪械伤害', '%'],
+  haste: ['fire rate', '枪械攻速', '%'],
+  critChance: ['crit chance', '暴击率', '%'],
   reward: ['reward', '结算奖励', '%'],
-  superweaponHaste: ['super-weapon cooldown', '超武冷却', '%'],
-  surgePower: ['surge power', '冲击波威力', '%'],
+  superweaponHaste: ['auto-skill cooldown', '技能冷却', '%'],
+  surgePower: ['shockwave power', '冲击波威力', '%'],
   statusDamage: ['status damage', '异常增伤', '%'],
   shredPercent: ['max HP shred', '斩血比例', '%'],
   critKnockback: ['critical knockback', '暴击击退', 'px'],
   fence: ['starting wall HP', '开局城墙生命', ''],
   thorns: ['wall thorns', '城墙反伤', ''],
   freeRerolls: ['extra rerolls', '额外刷新次数', ''],
-  surgeCharges: ['surge charges', '冲击波充能', ''],
-  wallImmunity: ['wall immunity', '城墙免疫', ''],
-  openingDraft: ['opening airdrop', '开局免费空投', ''],
-  heroPierce: ['hero pierce', '英雄穿透', ''],
-  starterWeapon: ['starter evolution', '开局赠送进化', '']
+  surgeCharges: ['shockwave charges', '冲击波充能', ''],
+  wallImmunity: ['wall shield blocks', '城墙免伤次数', ''],
+  openingDraft: ['opening airdrop', '开局免费选卡', ''],
+  heroPierce: ['bullet pierce', '子弹穿透', ''],
+  starterWeapon: ['starter auto skill', '开局赠送技能', '']
 };
 const FRACTION_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] === '%');
 const ABSOLUTE_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] !== '%');
@@ -86,12 +86,12 @@ const equipmentNames = {
   splinter_bow: {en: 'Splinter Rifle', zh: '裂片步枪'},
   kinetic_core: {en: 'Kinetic Core', zh: '动能弹芯'},
   prism_lens: {en: 'Prism Overdrive', zh: '棱镜超频器'},
-  runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
+  runner_charm: {en: 'Runner Charm', zh: '疾射护符'},
   sun_spindle: {en: 'Pulse Spindle', zh: '脉冲核心'},
-  bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
-  fence_nails: {en: 'Bastion Bolts', zh: '堡垒钢钉'},
+  bounty_seal: {en: 'Bounty Seal', zh: '赏金印章'},
+  fence_nails: {en: 'Bastion Bolts', zh: '城墙钢钉'},
   vanguard_kit: {en: 'Reactive Plating', zh: '反应装甲'},
-  surge_capacitor: {en: 'Surge Capacitor', zh: '脉冲电容'}
+  surge_capacitor: {en: 'Surge Capacitor', zh: '冲击电容'}
 };
 const rawEquipment = [
   gear('splinter_bow', 'weapon', 60, {damage: 0.08}),
@@ -123,10 +123,10 @@ function track(id, cap, costs, bonuses, name, flavorEn, flavorZh) {
 }
 
 const permanentRecord = {
-  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.04}, {en: 'Firepower', zh: '火力强化'}, 'Permanent combat power across every run.', '跨对局生效的全队火力训练。'),
-  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.04}, {en: 'Quick Reload', zh: '迅捷装填'}, 'Shorten firing intervals for hero and turrets.', '缩短英雄与炮塔的射击间隔。'),
-  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 30}, {en: 'Steel Wall', zh: '钢铁城墙'}, 'Reinforce the bastion wall with extra HP.', '加固城墙结构，提高开局城墙生命。'),
-  economy: track('economy', 5, [40, 70, 110, 170, 240], {reward: 0.05, superweaponHaste: 0.04}, {en: 'War Chest', zh: '战备增幅'}, 'Boost currency payout and auto super-weapon recharge.', '提升结算货币并加快全自动超武充能。')
+  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.04}, {en: 'Firepower', zh: '枪械火力'}, 'Permanent gun firepower across every stage.', '跨关卡永久生效的枪械伤害训练。'),
+  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.04}, {en: 'Quick Reload', zh: '极速装填'}, 'Fire bullets faster in every stage.', '永久缩短枪手射击间隔，火力更密集。'),
+  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 30}, {en: 'Steel Wall', zh: '钢铁城墙'}, 'Reinforce the wall with extra starting HP.', '加固城墙结构，永久提高开局城墙血量。'),
+  economy: track('economy', 5, [40, 70, 110, 170, 240], {reward: 0.05, superweaponHaste: 0.04}, {en: 'War Chest', zh: '战备补给'}, 'Boost coin payout and auto-skill recharge speed.', '提升通关金币收益，并加快所有自动技能冷却。')
 };
 
 function deepFreeze(value) {
@@ -185,10 +185,10 @@ export const GEMS = deepFreeze({
     id: 'gem_opening_drop',
     cost: 25,
     tier: 'epic',
-    name: {en: 'Opening Airdrop Gem', zh: '空投先锋宝石'},
+    name: {en: 'Opening Airdrop Gem', zh: '开局空投宝石'},
     description: {
-      en: 'Start every battle with 1 free instant 3-choice airdrop draft.',
-      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞。'
+      en: 'Start every stage with 1 free instant 3-of-1 upgrade pick.',
+      zh: '每关开场立即送 1 次免费三选一，开局直接起飞。'
     },
     bonuses: {openingDraft: 1},
   },
@@ -196,10 +196,10 @@ export const GEMS = deepFreeze({
     id: 'gem_aegis_wall',
     cost: 40,
     tier: 'epic',
-    name: {en: 'Aegis Bastion Gem', zh: '城墙免疫宝石'},
+    name: {en: 'Wall Shield Gem', zh: '城墙免伤宝石'},
     description: {
-      en: 'Negate the first 5 hits on the wall and knock back attackers.',
-      zh: '城墙每局前 5 次受击完全免疫，并震退贴墙尸群。'
+      en: 'Block the first 5 hits on the wall and knock back nearby zombies.',
+      zh: '城墙每关前 5 次受击完全免伤，并震退贴墙尸群。'
     },
     bonuses: {wallImmunity: 5},
   },
@@ -207,10 +207,10 @@ export const GEMS = deepFreeze({
     id: 'gem_pierce_core',
     cost: 45,
     tier: 'epic',
-    name: {en: 'Pierce Core Gem', zh: '贯穿核心宝石'},
+    name: {en: 'Pierce Core Gem', zh: '子弹穿透宝石'},
     description: {
-      en: 'Hero shots gain +1 pierce and +8% team damage.',
-      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松穿透尸潮。'
+      en: 'Bullets gain +1 pierce and +8% gun damage.',
+      zh: '子弹基础穿透 +1，枪械伤害 +8%，一发贯穿整排尸群。'
     },
     bonuses: {heroPierce: 1, damage: 0.08},
   },
@@ -218,10 +218,10 @@ export const GEMS = deepFreeze({
     id: 'gem_elemental',
     cost: 55,
     tier: 'legend',
-    name: {en: 'Elemental Surge Gem', zh: '冰火共鸣宝石'},
+    name: {en: 'Elemental Surge Gem', zh: '冰火增伤宝石'},
     description: {
-      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned foes.',
-      zh: '攻击燃烧、减速、易伤或中毒敌人时，伤害额外 +25%。'
+      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned zombies.',
+      zh: '攻击燃烧、减速、易伤或中毒僵尸时，伤害额外 +25%。'
     },
     bonuses: {statusDamage: 0.25},
   },
@@ -229,7 +229,7 @@ export const GEMS = deepFreeze({
     id: 'gem_shredder',
     cost: 65,
     tier: 'legend',
-    name: {en: 'HP Shredder Gem', zh: '百分比斩杀宝石'},
+    name: {en: 'HP Shredder Gem', zh: '暴击斩血宝石'},
     description: {
       en: 'Crits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
       zh: '暴击附带目标 4% 最大生命额外伤害（对首领上限 180）。'
@@ -240,10 +240,10 @@ export const GEMS = deepFreeze({
     id: 'gem_overdrive',
     cost: 75,
     tier: 'legend',
-    name: {en: 'Overdrive Arsenal Gem', zh: '超武充能宝石'},
+    name: {en: 'Skill Haste Gem', zh: '技能急速宝石'},
     description: {
-      en: 'Auto super-weapons cycle 25% faster and start with 1 random evolution.',
-      zh: '全自动超武冷却缩短 25%，开局免费附带 1 项随机超武进化。'
+      en: 'Auto skills recharge 25% faster and start every stage with 1 random Auto Skill.',
+      zh: '所有自动技能冷却缩短 25%，开局免费赠送 1 个随机自动技能。'
     },
     bonuses: {superweaponHaste: 0.25, starterWeapon: 1},
   },

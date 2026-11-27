@@ -1,169 +1,77 @@
 /**
- * Battlefield backdrop, logical 360×640.
- * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
- * then the ground both defender rows stand on, with exactly two rows of five slots.
- * The deck beside that block stays open. A thin sill continues the fence to the
- * edge, and the side rooms are left clear for a later element.
- * Fence art follows hp/maxHp: intact above about 60%, cracked below that, failing below about 30%.
- * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
- * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
- * Animation uses the `time` argument.
- * When state.director.hasBoss is true, the sky, the top edge, and the open field
- * take a boss-wave tint. The wash stays translucent so the night sky still reads,
- * and every boss band stays dimmer than the fence rail, which remains the brightest
- * full-width band. The cached night backdrop stays unchanged for other waves.
- * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
+ * Fencefall v5 — PvZ2-Style Sharp HD Vector Battlefield Backdrop (360×640 logical space).
+ *
+ * Rendered directly at native device pixel ratio (2×/3× Retina) with smooth gradients,
+ * bold dark ink outlines, warm spotlight cones, progressive steel wall damage, glowing
+ * energy wall shield, and a dramatic Central Commander Gunnery Platform framing the
+ * permanently anchored solo Wall Gunner. ZERO 2×5 grid drawn.
  */
-import { ARENA, slotGeometry } from '../shared.js';
+import {ARENA} from '../shared.js';
 
 const W = ARENA.width;
 const H = ARENA.height;
-const PICKETS = 30;
-// Shared fence stages, as fractions of maxHp. Cracks open through the first line.
-// Boards, posts, and the rail give way through the second. Ruin is the last sliver.
-const FENCE_CRACKED = 0.6;
-const FENCE_FAILING = 0.3;
-const FENCE_RUIN = 0.12;
-const BREAK_SEQUENCE = Object.freeze([
-  0, 29, 2, 27, 5, 24, 8, 21, 1, 28, 4, 25, 11, 18, 7, 22,
-  10, 19, 3, 26, 6, 23, 9, 20, 12, 17, 13, 16, 14, 15
-]);
-const BREAK_RANK = (() => {
-  const rank = new Array(PICKETS).fill(-1);
-  BREAK_SEQUENCE.forEach((index, order) => { rank[index] = order; });
-  if (BREAK_SEQUENCE.length !== PICKETS || rank.includes(-1)) {
-    throw new Error('Fencefall world: fence damage order is not a permutation');
-  }
-  return rank;
-})();
+const FENCE_Y = ARENA.fenceY; // 512
 
-const FENCE_ART_Y = 450;
-const FENCE_DY = ARENA.fenceY - FENCE_ART_Y;
-const SLEEPER_ART_Y = 466;
-const SLEEPER_Y = SLEEPER_ART_Y + FENCE_DY;
-const APPROACH_TOP = 418 + FENCE_DY;
-const TUFTS = Object.freeze([
-  [5, 120], [10, 188], [4, 252], [13, 318], [8, 378],
-  [354, 142], [348, 214], [353, 286], [344, 348], [350, 396],
-  [22, APPROACH_TOP - 48], [338, APPROACH_TOP - 28]
-]);
-const TREES = Object.freeze([
-  [8, 22], [28, 14], [50, 18], [96, 9], [154, 7], [214, 8], [270, 10], [318, 15], [340, 22], [354, 12]
-]);
 const STARS = Object.freeze([
-  [16, 6, 0], [42, 11, 0], [74, 5, 1], [108, 12, 0], [146, 7, 0],
-  [188, 4, 0], [228, 10, 1], [262, 6, 0], [330, 9, 0], [348, 5, 0], [22, 13, 0]
-]);
-const POSTS = Object.freeze([0, 86, 174, 262, 348]);
-const ENTRY_Y = 46;
-const SCUFFS = Object.freeze([
-  [28, 128, 42], [196, 168, 34], [64, 214, 30], [236, 258, 40],
-  [36, 304, 28], [176, 346, 32], [88, 392, 24], [214, 418, 22]
+  [22, 10, 1.3, false], [58, 16, 1.1, false], [92, 8, 1.5, true],
+  [136, 14, 1.0, false], [178, 7, 1.2, false], [218, 15, 1.5, true],
+  [254, 9, 1.1, false], [326, 12, 1.2, false], [346, 7, 1.0, false],
+  [40, 26, 0.9, false], [156, 24, 0.9, false], [272, 22, 1.0, false],
 ]);
 
-const PAL = {
-  k: '#12181c',
-  n: '#243038',
-  w: '#f1eee2',
-  g: '#d3b984',
-  G: '#7a6240',
-  y: '#f0cb72',
-  m: '#c5d0d4',
-  M: '#4d5c64',
-  r: '#e25822',
-  R: '#8a3018',
-  f: '#ffb060',
-  a: '#7ec8d8',
-  c: '#2f6f80',
-  C: '#e7f7fb',
-  b: '#3fba6a',
-  B: '#1c5a38',
-  p: '#c4504a',
-  d: '#e23b4a',
-  e: '#c4a06a',
-  E: '#6e5432',
-  u: '#6d8794'
-};
+const SCRUBS = Object.freeze([
+  [12, 118, 1.0], [18, 198, 0.85], [10, 278, 1.1], [16, 356, 0.95], [13, 434, 1.05],
+  [348, 134, 0.95], [343, 218, 1.1], [350, 304, 0.9], [344, 386, 1.0], [348, 450, 0.85],
+]);
 
-const ALIASES = {
-  projectile: 'bolt', arrow: 'bolt', crossbow: 'bolt',
-  ice: 'frost', cold: 'frost',
-  shock: 'lightning', electric: 'lightning', thunder: 'lightning',
-  toxin: 'poison', acid: 'poison', venom: 'poison', poisonstatus: 'poison', statuspoison: 'poison',
-  aura: 'support', lantern: 'support', banner: 'support', heal: 'support',
-  heroupgrade: 'hero',
-  flame: 'fire',
-  heart: 'hp', health: 'hp',
-  experience: 'xp', star: 'xp',
-  sword: 'damage', attack: 'damage',
-  attackspeed: 'haste', speed: 'haste',
-  coin: 'currency', gold: 'currency',
-  shield: 'armor',
-  vital: 'vitality',
-  cracked: 'brittle', fragile: 'brittle',
-  freeze: 'slow', frozen: 'slow', chill: 'slow',
-  skull: 'defeat', dead: 'defeat', lose: 'defeat',
-  win: 'victory',
-  lock: 'locked',
-  empty: 'plus', emptyslot: 'plus', place: 'plus',
-  critical: 'crit', critchance: 'crit',
-  soundoff: 'mute', soundon: 'sound'
-};
+const CRACKS = Object.freeze([
+  [[62, 118], [76, 130], [70, 144], [84, 152]],
+  [[264, 164], [250, 178], [262, 194], [248, 206]],
+  [[112, 248], [126, 258], [120, 274], [134, 284]],
+  [[282, 312], [268, 326], [276, 342]],
+  [[88, 378], [102, 392], [96, 408], [110, 418]],
+  [[234, 416], [248, 428], [240, 444]],
+]);
 
-let backdropReady = false;
-let backdrop = null;
+const PEBBLES = Object.freeze([
+  [44, 102, 3.2, 2.0], [312, 124, 3.8, 2.2], [52, 178, 2.6, 1.7], [306, 202, 3.0, 1.9],
+  [40, 260, 3.6, 2.1], [318, 282, 2.8, 1.8], [48, 342, 3.1, 2.0], [308, 366, 3.5, 2.2],
+  [54, 424, 2.9, 1.8], [304, 442, 3.4, 2.0], [132, 196, 2.4, 1.5], [228, 276, 2.6, 1.6],
+  [144, 352, 2.2, 1.4], [216, 398, 2.5, 1.5],
+]);
 
-function hash2(x, y) {
-  let n = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) >>> 0;
-  n = (n ^ (n >>> 13)) >>> 0;
-  return Math.imul(n, 1274126177) >>> 0;
+const SCORCH_MARKS = Object.freeze([
+  [104, 174, 18, 10], [246, 238, 22, 12], [148, 322, 20, 11], [266, 386, 19, 10],
+]);
+
+const SKID_MARKS = Object.freeze([
+  [124, 126, 128, 184], [134, 126, 138, 184],
+  [218, 286, 224, 352], [228, 286, 234, 352],
+]);
+
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+    && typeof ctx.createRadialGradient === 'function'
+  );
 }
 
-function hashString(text) {
-  let h = 2166136261;
-  const value = String(text);
-  for (let i = 0; i < value.length; i++) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function horizonY(x) {
-  const wave = Math.sin(x * 0.02) * 6 + Math.sin(x * 0.053 + 1.1) * 3 + Math.sin(x * 0.11) * 2;
-  return 40 + Math.round(wave);
-}
-
-function makeCanvas(width, height) {
-  if (typeof OffscreenCanvas === 'function') {
-    try { return new OffscreenCanvas(width, height); } catch { /* use a DOM canvas if present */ }
-  }
-  const doc = globalThis.document;
-  if (doc && typeof doc.createElement === 'function') {
-    const canvas = doc.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-  return null;
-}
-
-function readAlpha(ctx) {
-  return Number.isFinite(ctx.globalAlpha) ? ctx.globalAlpha : 1;
-}
-
-function wearOf(index) {
-  return BREAK_RANK[index] / (PICKETS - 1);
-}
-
-function breakAt(index) {
-  const wear = wearOf(index);
-  return FENCE_FAILING * (1 - wear * wear);
-}
-
-function crackAt(index) {
-  const wear = wearOf(index);
-  return FENCE_CRACKED - FENCE_FAILING * wear * wear * wear;
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
 }
 
 function fenceRatio(state) {
@@ -176,1905 +84,849 @@ function fenceRatio(state) {
   return hp / max;
 }
 
-function woodKit(ratio) {
-  if (ratio > FENCE_CRACKED) {
-    return {
-      light: '#e2ebf0', mid: '#92a4b0', dark: '#4f606c', edge: '#1e2830',
-      iron: '#eef5f8', ironDark: '#384650', strap: '#6f8290', hazard: '#f0cb72',
-    };
-  }
-  if (ratio > FENCE_FAILING) {
-    return {
-      light: '#c2cbd0', mid: '#74828a', dark: '#424d54', edge: '#1a2024',
-      iron: '#c6d0d4', ironDark: '#303a40', strap: '#5c6a72', hazard: '#d4a84e',
-    };
-  }
-  if (ratio > FENCE_RUIN) {
-    return {
-      light: '#8e847e', mid: '#5a504c', dark: '#362e2c', edge: '#161212',
-      iron: '#889094', ironDark: '#2a3034', strap: '#4a5256', hazard: '#9e7238',
-    };
-  }
-  return {
-    light: '#6e524c', mid: '#402c28', dark: '#261a18', edge: '#100c0a',
-    iron: '#5c6064', ironDark: '#22282c', strap: '#3a4044', hazard: '#72442e',
-  };
-}
-
-function paintSky(ctx) {
-  const stops = [[0, '#070d12'], [14, '#0f1b24'], [28, '#1b2c2e'], [48, '#364a46']];
-  ctx.fillStyle = '#070d12';
-  ctx.fillRect(0, 0, W, H);
-  for (let y = 0; y < 56; y += 2) {
-    let upper = stops[0];
-    let lower = stops[stops.length - 1];
-    for (let i = 0; i < stops.length - 1; i++) {
-      if (y >= stops[i][0] && y <= stops[i + 1][0]) {
-        upper = stops[i];
-        lower = stops[i + 1];
-        break;
-      }
-    }
-    const span = Math.max(1, lower[0] - upper[0]);
-    const t = Math.round(((y - upper[0]) / span) * 4) / 4;
-    ctx.fillStyle = mixHex(upper[1], lower[1], t);
-    ctx.fillRect(0, y, W, 2);
-  }
-}
-
-function mixHex(a, b, t) {
-  const pa = hexRgb(a);
-  const pb = hexRgb(b);
-  const q = Math.max(0, Math.min(1, t));
-  const channel = index => Math.round((pa[index] + (pb[index] - pa[index]) * q) / 8) * 8;
-  return `rgb(${channel(0)},${channel(1)},${channel(2)})`;
-}
-
-function hexRgb(hex) {
-  const value = parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
-
-function drawMoon(ctx) {
-  const x = 292;
-  const y = 3;
-  const base = readAlpha(ctx);
-  ctx.globalAlpha = base * 0.14;
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x - 6, y - 2, 19, 13);
-  ctx.globalAlpha = base * 0.22;
-  ctx.fillStyle = '#f8e9c6';
-  ctx.fillRect(x - 3, y - 1, 13, 11);
-  ctx.globalAlpha = base;
-  ctx.fillStyle = '#f5e8c8';
-  const cells = [
-    [3, 0], [4, 0], [5, 0], [6, 0],
-    [2, 1], [3, 1], [4, 1], [5, 1], [6, 1],
-    [1, 2], [2, 2], [3, 2], [4, 2], [5, 2],
-    [1, 3], [2, 3], [3, 3], [4, 3],
-    [0, 4], [1, 4], [2, 4], [3, 4],
-    [0, 5], [1, 5], [2, 5], [3, 5],
-    [1, 6], [2, 6], [3, 6], [4, 6], [5, 6],
-    [2, 7], [3, 7], [4, 7], [5, 7], [6, 7],
-    [3, 8], [4, 8], [5, 8], [6, 8]
-  ];
-  for (const [cx, cy] of cells) ctx.fillRect(x + cx, y + cy, 1, 1);
-  ctx.fillStyle = '#d9c89a';
-  ctx.fillRect(x + 1, y + 4, 1, 2);
-  ctx.fillRect(x + 2, y + 3, 1, 1);
-  ctx.fillStyle = '#c4b48a';
-  ctx.fillRect(x + 5, y + 6, 1, 1);
-}
-
-function drawTree(ctx, x, height) {
-  const base = horizonY(x);
-  const top = base - height;
-  const trunk = height > 16 ? 3 : 2;
-  ctx.fillStyle = '#0e1612';
-  ctx.fillRect(x, top + 2, trunk, Math.max(2, height - 2));
-  ctx.fillStyle = '#1a2820';
-  ctx.fillRect(x - 4, top + 4, 4, 2);
-  ctx.fillRect(x + trunk, top + 7, 4, 2);
-  if (height > 14) ctx.fillRect(x - 2, top + 2, 2, 2);
-  ctx.fillStyle = '#243028';
-  ctx.fillRect(x - 1, base - 2, trunk + 2, 2);
-}
-
-function paintEntryEdge(ctx) {
-  const y = ENTRY_Y;
-  ctx.fillStyle = '#101816';
-  ctx.fillRect(0, y + 10, W, 6);
-  ctx.fillStyle = '#6a8074';
-  ctx.fillRect(0, y + 3, W, 8);
-  ctx.fillStyle = '#314038';
-  ctx.fillRect(0, y + 8, W, 4);
-  ctx.fillStyle = '#d5e2d6';
-  ctx.fillRect(0, y + 1, W, 2);
-  let x = 0;
-  let stone = 0;
-  while (x < W) {
-    const n = hash2(stone * 3 + 1, 41);
-    const span = 7 + (n % 11);
-    const rise = (n >>> 3) & 1;
-    ctx.fillStyle = (n & 32) ? '#d5e2d6' : '#b7c8ba';
-    ctx.fillRect(x, y + rise, span, 1);
-    ctx.fillStyle = (n & 32) ? '#5e7268' : '#4a5c52';
-    ctx.fillRect(x, y + 2 + rise, Math.max(1, span - 1), 2);
-    ctx.fillStyle = '#1a2420';
-    ctx.fillRect(x + span - 1, y + 1, 1, 10);
-    if ((n % 4) === 0) {
-      ctx.fillStyle = '#101816';
-      ctx.fillRect(x + 2, y + 5, 1, 4);
-    }
-    if ((n % 6) === 0) {
-      ctx.fillStyle = '#2a342e';
-      ctx.fillRect(x + 1, y - 4, 2, 5);
-      ctx.fillStyle = '#d5e2d6';
-      ctx.fillRect(x + 1, y - 4, 2, 1);
-    }
-    x += span;
-    stone += 1;
-  }
-  ctx.fillStyle = '#0e1612';
-  ctx.fillRect(0, y + 12, W, 2);
-  ctx.fillStyle = '#6a7e72';
-  ctx.fillRect(0, y + 14, W, 1);
-}
-
-function paintApproach(ctx) {
-  const top = APPROACH_TOP;
-  ctx.fillStyle = '#161e1c';
-  ctx.fillRect(0, top, W, 48);
-  ctx.fillStyle = '#4a5c52';
-  ctx.fillRect(0, top, W, 1);
-  ctx.fillStyle = '#101816';
-  ctx.fillRect(0, top + 36, W, 12);
-  for (let x = 0; x < W; x += 4) {
-    const n = hash2(x, 422);
-    if ((n & 3) !== 0) continue;
-    const y = top + 4 + ((n >>> 2) & 7) * 2;
-    ctx.fillStyle = (n & 16) ? '#2a3830' : '#101816';
-    ctx.fillRect(x, y, 3 + (n & 1), 1);
-  }
-}
-
-function fillStandingGround(ctx, x, y, width, height) {
-  ctx.fillStyle = '#3a2c22';
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = '#a08058';
-  ctx.fillRect(x, y, width, 1);
-  if (height > 6 && width > 8) {
-    ctx.fillStyle = '#5c4634';
-    ctx.fillRect(x + 4, y + 4, width - 8, 1);
-  }
-  if (height > 3) {
-    ctx.fillStyle = '#241c16';
-    ctx.fillRect(x, y + height - 3, width, 3);
-  }
-}
-
-function paintField(ctx) {
-  for (let x = 0; x < W; x += 2) {
-    const near = horizonY(x);
-    const far = near - 7 - ((x >> 3) & 1);
-    ctx.fillStyle = '#0e1718';
-    ctx.fillRect(x, far, 2, near - far);
-    ctx.fillStyle = '#1e2c2c';
-    ctx.fillRect(x, far, 2, 1);
-  }
-  for (let x = 0; x < W; x += 2) {
-    const y0 = horizonY(x);
-    const edge = Math.min(x, W - 1 - x);
-    const margin = edge < 18 ? 0 : edge < 42 ? 1 : 2;
-    const far = margin === 0 ? '#141e1e' : margin === 1 ? '#1d2927' : '#263430';
-    const mid = margin === 0 ? '#121a1a' : margin === 1 ? '#192422' : '#212e2a';
-    const near = margin === 0 ? '#101718' : margin === 1 ? '#161f1e' : '#1d2825';
-    const farEnd = 176;
-    const midEnd = 330;
-    const lip = ENTRY_Y + 16;
-    ctx.fillStyle = margin === 0 ? '#0d1516' : '#141e1c';
-    ctx.fillRect(x, y0, 2, Math.max(0, lip - y0));
-    ctx.fillStyle = far;
-    ctx.fillRect(x, lip, 2, farEnd - lip);
-    ctx.fillStyle = mid;
-    ctx.fillRect(x, farEnd, 2, midEnd - farEnd);
-    ctx.fillStyle = near;
-    ctx.fillRect(x, midEnd, 2, SLEEPER_Y - midEnd);
-    ctx.fillStyle = '#7b9188';
-    ctx.fillRect(x, y0, 2, 1);
-  }
-  for (const [x, height] of TREES) drawTree(ctx, x, height);
-  // Subtle moonlit ground pebbles and tactical clearing texture
-  for (let y = 64; y < APPROACH_TOP; y += 4) {
-    for (let x = 8; x < 352; x += 4) {
-      const dx = Math.abs(x - 180) / 180;
-      const n = hash2(x, y);
-      if ((n % 100) > 48 + dx * 48) {
-        ctx.fillStyle = (n & 3) === 0 ? '#31423c' : '#283632';
-        ctx.fillRect(x, y, 1, 1);
-      } else if ((n % 19) === 0) {
-        ctx.fillStyle = '#121a19';
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-  }
-  for (let y = APPROACH_TOP - 14; y < SLEEPER_Y - 8; y += 3) {
-    for (let x = 0; x < W; x += 3) {
-      if ((hash2(x + 19, y) & 3) === 0) {
-        ctx.fillStyle = '#182220';
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-  }
-  const patches = [
-    [36, 156, 22, 3, '#1e2824'], [248, 188, 26, 3, '#323c36'],
-    [110, 236, 16, 2, '#1e2824'], [292, 274, 18, 3, '#2c3630'],
-    [58, 328, 24, 3, '#222a26'], [186, 366, 20, 2, '#303a34'],
-    [24, 412, 28, 3, '#1c2420'], [250, 404, 22, 3, '#1c2420']
-  ];
-  for (const [x, y, width, height, color] of patches) {
-    const py = y >= 390 ? y + FENCE_DY : y;
-    ctx.fillStyle = color;
-    ctx.fillRect(x, py, width, height);
-  }
-  ctx.fillStyle = '#1a2420';
-  for (const [x, y, width] of SCUFFS) {
-    const sy = y >= 380 ? y + FENCE_DY : y;
-    ctx.fillRect(x, sy, width, 1);
-    ctx.fillRect(x + 5, sy + 2, Math.max(8, width - 12), 1);
-  }
-  drawEdgeRuins(ctx);
-  for (let i = 0; i < 16; i++) {
-    const n = hash2(80 + i, 17);
-    const x = i % 2 === 0 ? 12 + (n % 22) : 328 + (n % 22);
-    const y = 150 + ((n >>> 8) % 250);
-    ctx.fillStyle = '#3a463e';
-    ctx.fillRect(x, y, 3, 2);
-    ctx.fillStyle = '#141c18';
-    ctx.fillRect(x, y + 2, 3, 1);
-  }
-  paintApproach(ctx);
-  paintEntryEdge(ctx);
-}
-
-function drawEdgeRuins(ctx) {
-  const marks = [[16, 214, 16], [340, 248, 20], [22, 336, 12], [334, 372, 14]];
-  for (const [x, y, height] of marks) {
-    ctx.fillStyle = '#3a342c';
-    ctx.fillRect(x, y - height, 3, height);
-    ctx.fillStyle = '#2a241c';
-    ctx.fillRect(x - 2, y - 3, 7, 3);
-    ctx.fillStyle = '#4a4034';
-    ctx.fillRect(x, y - height, 1, 2);
-  }
-}
-
-function paintYard(ctx) {
-  const front = slotGeometry(0);
-  const back = slotGeometry(ARENA.cols);
-  const groundY = SLEEPER_Y + 6;
-  fillStandingGround(ctx, 0, groundY, W, H - groundY);
-  for (let y = groundY + 4; y < H - 8; y += 4) {
-    ctx.fillStyle = ((y >> 2) & 1) ? '#34281f' : '#463628';
-    ctx.fillRect(0, y, W, 1);
-  }
-  // Footing under each row, then the open board between the rows and at the heel.
-  const foot = (slot) => {
-    const height = Math.min(14, Math.max(8, Math.round(slot.height * 0.3)));
-    const y = slot.top + slot.height - height - 2;
-    fillStandingGround(ctx, 0, y, W, height);
-  };
-  foot(front);
-  foot(back);
-  const gapTop = front.top + front.height;
-  const gapH = back.top - gapTop;
-  if (gapH > 0) fillStandingGround(ctx, 0, gapTop, W, gapH);
-  const heel = back.top + back.height;
-  if (heel < H - 1) fillStandingGround(ctx, heel, W, Math.min(10, H - heel));
-  const blockLeft = front.left;
-  const blockRight = slotGeometry(ARENA.cols - 1).left + front.width;
-  const gapMark = gapTop + Math.floor(Math.max(gapH, 1) / 2);
-  const heelMark = Math.min(H - 6, heel + 2);
-  for (let x = blockLeft; x < blockRight; x += 13) {
-    const n = hash2(x, front.y);
-    ctx.fillStyle = (n & 1) ? '#c4a06a' : '#6e5432';
-    ctx.fillRect(x + (n & 3), gapMark, 1, 1);
-    ctx.fillRect(x + ((n >>> 2) & 3), heelMark, 1, 1);
-  }
-  ctx.fillStyle = '#1c1612';
-  ctx.fillRect(0, H - 4, W, 4);
-}
-
-function paintBackdrop(ctx) {
-  paintSky(ctx);
-  drawMoon(ctx);
-  paintField(ctx);
-  paintYard(ctx);
-}
-
-function backdropCanvas() {
-  if (backdropReady) return backdrop;
-  backdropReady = true;
-  const canvas = makeCanvas(W, H);
-  if (!canvas || typeof canvas.getContext !== 'function') return null;
-  const context = canvas.getContext('2d');
-  if (!context) return null;
-  try { context.imageSmoothingEnabled = false; } catch { /* direct pixels still work */ }
-  paintBackdrop(context);
-  backdrop = canvas;
-  return backdrop;
-}
-
-function drawStars(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  for (let i = 0; i < STARS.length; i++) {
-    const [x, y, gold] = STARS[i];
-    const twinkle = reduced ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(time * 1.7 + i * 1.3));
-    ctx.globalAlpha = base * twinkle;
-    ctx.fillStyle = gold ? '#f0cb72' : (i % 3 === 0 ? '#d5e6ea' : '#8fb0b8');
-    const span = i % 5 === 0 ? 2 : 1;
-    ctx.fillRect(x, y, span, span);
-  }
-  ctx.globalAlpha = base;
-}
-
-function drawMist(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  const shift = reduced ? 6 : Math.floor(time * 7) % 48;
-  ctx.globalAlpha = base * 0.16;
-  ctx.fillStyle = '#d5e6ea';
-  for (let i = 0; i < 7; i++) {
-    const x = ((i * 58 + shift) % 420) - 24;
-    const y = 14 + (i % 3) * 4;
-    ctx.fillRect(x, y, 26, 1);
-    ctx.fillRect(x + 6, y + 1, 12, 1);
-  }
-  ctx.globalAlpha = base;
-}
-
 function directorHasBoss(state) {
-  return !!(state && state.director && state.director.hasBoss === true);
+  return Boolean(state && state.director && state.director.hasBoss === true);
 }
 
-// Wash laid over the cached night, only while a boss wave is current.
-// Full-width bands, never columns. Fence posts begin just above the rail, so the veil stops above them.
-// The sky and the open field stay translucent so the moon, stars, and tree line still read.
-// The pale entry stones are the one bright band above the fence; a dark crimson cover
-// keeps that lip under the fence rail, including after the rail has worn down.
-function drawBossWave(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  const pulse = reduced ? 0 : (0.5 + 0.5 * Math.sin(time * 1.15));
-  const sky = 0.44 + pulse * 0.08;
-  ctx.globalAlpha = base * sky;
-  ctx.fillStyle = '#9a3040';
-  ctx.fillRect(0, 0, W, 24);
-  ctx.fillStyle = '#b03848';
-  ctx.fillRect(0, 24, W, 16);
-  ctx.globalAlpha = base * (0.28 + pulse * 0.06);
-  ctx.fillStyle = '#8a2838';
-  ctx.fillRect(0, 64, W, 154);
-  ctx.globalAlpha = base * 0.2;
-  ctx.fillStyle = '#6a2030';
-  const veilTop = 218;
-  const veilBottom = 418 + FENCE_DY - 10;
-  ctx.fillRect(0, veilTop, W, Math.max(0, veilBottom - veilTop));
-  // The entry stones are a pale full-width band. Cover them, then lay a short
-  // crimson lip whose row stays under the fence rail, worn or intact.
-  ctx.globalAlpha = base * 0.86;
-  ctx.fillStyle = '#30141c';
-  ctx.fillRect(0, 40, W, 24);
-  ctx.globalAlpha = base * (0.46 + pulse * 0.08);
-  ctx.fillStyle = '#a04048';
-  ctx.fillRect(0, ENTRY_Y, W, 2);
-  const shift = reduced ? 12 : Math.floor(time * 6) % 48;
-  ctx.globalAlpha = base * 0.28;
-  ctx.fillStyle = '#a04840';
-  for (let i = 0; i < 4; i++) {
-    const x = ((i * 96 + shift) % 420) - 24;
-    const y = 10 + (i % 2) * 6;
-    ctx.fillRect(x, y, 12, 1);
-  }
-  ctx.globalAlpha = base;
-  drawMoon(ctx);
-}
-
-function drawTuft(ctx, x, y, sway) {
-  ctx.fillStyle = '#1a2824';
-  ctx.fillRect(x, y, 1, 4);
-  ctx.fillStyle = '#2a5040';
-  ctx.fillRect(x + sway, y - 4, 1, 4);
-  ctx.fillRect(x - 2 - sway, y - 2, 1, 3);
-  ctx.fillRect(x + 2 + sway, y - 3, 1, 3);
-  ctx.fillStyle = '#6a9460';
-  ctx.fillRect(x + sway, y - 5, 1, 1);
-}
-
-function drawGrass(ctx, time, reduced) {
-  for (let i = 0; i < TUFTS.length; i++) {
-    const [x, y] = TUFTS[i];
-    const sway = reduced ? 0 : Math.round(Math.sin(time * 1.4 + i) );
-    drawTuft(ctx, x, y, sway);
-  }
-}
-
-function drawPicket(ctx, index, ratio, kit) {
-  const x = index * 12;
-  const broken = ratio <= breakAt(index);
-  const merlon = (index % 2) === 0;
-  const top = merlon ? 429 : 434;
-  const base = 466;
-  if (broken) {
-    if (((index * 5 + 3) % 4) === 0 || (ratio <= FENCE_RUIN && (index % 2) === 0)) {
-      ctx.fillStyle = kit.edge;
-      ctx.fillRect(x + 2, 461, 3, 4);
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 7, 459, 1, 6);
-      return false;
-    }
-    const stump = (ratio <= FENCE_RUIN ? 5 + (index % 3) : 9 + (index % 4) * 3);
-    const y = base - stump;
-    ctx.fillStyle = kit.edge;
-    ctx.fillRect(x + 1, y, 10, stump);
-    ctx.fillStyle = kit.dark;
-    ctx.fillRect(x + 2, y + 2, 8, Math.max(0, stump - 2));
-    ctx.fillStyle = kit.light;
-    ctx.fillRect(x + 2, y, 6, 1);
-    // Exposed steel rebar prongs
-    ctx.fillStyle = kit.iron;
-    ctx.fillRect(x + 3, y - 3, 1, 3);
-    ctx.fillRect(x + 8, y - 2, 1, 2);
-    return false;
-  }
-  // Fortified concrete-and-steel bastion armor block
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, top, 12, base - top);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, top + 2, 10, base - (top + 2));
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 1, top + 2, 10, 7);
-  // Bright beveled top armor lip
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 1, top, 10, 2);
-  // Recessed firing slit on embrasure blocks
-  if (!merlon) {
-    ctx.fillStyle = '#0c1216';
-    ctx.fillRect(x + 3, top + 4, 6, 2);
-    ctx.fillStyle = kit.ironDark;
-    ctx.fillRect(x + 2, top + 3, 8, 1);
-  }
-  // Horizontal riveted steel reinforcement girder
-  ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x, 446, 12, 6);
-  ctx.fillStyle = kit.strap;
-  ctx.fillRect(x, 447, 12, 3);
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 447, 12, 1);
-  ctx.fillRect(x + 2, 449, 2, 1);
-  ctx.fillRect(x + 8, 449, 2, 1);
-  // Lower armor plate seams & corner bolts
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 454, 8, 10);
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x + 2, 455, 1, 1);
-  ctx.fillRect(x + 9, 455, 1, 1);
-  ctx.fillRect(x + 2, 462, 1, 1);
-  ctx.fillRect(x + 9, 462, 1, 1);
-  if (ratio <= crackAt(index)) {
-    ctx.fillStyle = '#121010';
-    ctx.fillRect(x + 5, top + 4, 1, 6);
-    ctx.fillRect(x + 4, top + 10, 1, 8);
-    ctx.fillRect(x + 6, top + 16, 1, 7);
-    if (ratio <= (FENCE_CRACKED + FENCE_FAILING) / 2) {
-      ctx.fillRect(x + 8, top + 7, 1, 6);
-      ctx.fillRect(x + 7, top + 13, 1, 6);
+function heroUpgrades(state) {
+  const slots = state?.slots;
+  if (!Array.isArray(slots)) return {};
+  for (const s of slots) {
+    if (s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero')) {
+      return s.unit.upgrades || {};
     }
   }
-  if (ratio <= FENCE_FAILING && (index % 3) === 0) {
-    ctx.fillStyle = '#241410';
-    ctx.fillRect(x + 2, 455, 8, 5);
-    ctx.fillStyle = '#e25822';
-    ctx.fillRect(x + 4, 457, 2, 1);
-  }
-  return true;
+  return {};
 }
 
-function drawWire(ctx, intact, kit, ratio) {
-  // Razor-wire concertina coils along the upper parapet
-  for (let i = 0; i < PICKETS; i++) {
-    const x = i * 12;
-    const top = (i % 2) === 0 ? 429 : 434;
-    if (intact[i]) {
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 1, 425, 10, 1);
-      ctx.fillRect(x + 5, 425, 1, top - 425);
-      ctx.fillStyle = kit.iron;
-      ctx.fillRect(x + 3, 424, 2, 1);
-      ctx.fillRect(x + 8, 426, 2, 1);
-      if (intact[i + 1]) {
-        ctx.fillStyle = kit.ironDark;
-        ctx.fillRect(x + 10, 425, 4, 1);
-      }
-    } else if (ratio > FENCE_RUIN) {
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 2, 437 + (i % 3) * 2, 7, 1);
-    }
-  }
-}
-
-function postFalls(x, ratio) {
-  if (x < 20 || x > 340) return ratio <= FENCE_FAILING;
-  if (x === 174) return ratio <= 0;
-  return ratio <= FENCE_RUIN;
-}
-
-function drawPost(ctx, x, ratio, kit) {
-  if (postFalls(x, ratio)) {
-    ctx.fillStyle = kit.dark;
-    ctx.fillRect(x, 461, 12, 5);
-    ctx.fillRect(x + 3, 457, 6, 4);
-    ctx.fillStyle = kit.edge;
-    ctx.fillRect(x + 1, 465, 10, 2);
-    return;
-  }
-  // Heavy armored steel buttress pylon
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, 417, 10, 53);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, 419, 8, 49);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 421, 5, 45);
-  // Beveled steel turret cap & twin rivets
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 417, 10, 3);
-  ctx.fillRect(x + 1, 446, 8, 5);
-  ctx.fillStyle = kit.hazard;
-  ctx.fillRect(x + 2, 423, 6, 2);
-  ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x + 1, 448, 8, 1);
-  if (ratio <= FENCE_CRACKED) {
-    ctx.fillStyle = '#141010';
-    ctx.fillRect(x + 4, 429, 1, 13);
-    if (ratio <= FENCE_FAILING) {
-      ctx.fillRect(x + 6, 433, 1, 11);
-      ctx.fillRect(x + 3, 438, 1, 6);
-    }
-  }
-}
-
-function drawRubble(ctx, kit, ratio) {
-  if (ratio > FENCE_RUIN) return;
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(36, 456, 26, 3);
-  ctx.fillRect(48, 453, 4, 3);
-  ctx.fillRect(188, 458, 34, 3);
-  ctx.fillRect(300, 455, 22, 3);
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(36, 459, 26, 1);
-  ctx.fillRect(188, 461, 34, 1);
-  ctx.fillRect(300, 458, 22, 1);
-}
-
-function shiftFenceArt(ctx, draw) {
-  const can = typeof ctx.save === 'function' && typeof ctx.restore === 'function' && typeof ctx.translate === 'function';
-  if (can) {
-    ctx.save();
-    ctx.translate(0, FENCE_DY);
-  }
-  try {
-    draw();
-  } finally {
-    if (can) ctx.restore();
-  }
-}
-
-function drawSleeper(ctx, ratio, kit) {
-  const y = SLEEPER_ART_Y;
-  // Heavy armored steel base sill with hazard caution chevrons
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(0, y, W, 6);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(0, y + 1, W, 4);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(0, y + 1, W, 2);
-  // Bright full-width bastion top rail (stays brightest full-width horizontal band)
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(0, y, W, 1);
-  // Caution hazard stripe blocks along the lower steel footing
-  for (let x = 6; x < W - 6; x += 16) {
-    ctx.fillStyle = kit.hazard;
-    ctx.fillRect(x, y + 2, 6, 2);
-  }
-  if (ratio <= FENCE_FAILING) {
-    for (let i = 0; i < PICKETS; i++) {
-      if (ratio > breakAt(i)) continue;
-      ctx.fillStyle = '#181412';
-      ctx.fillRect(i * 12 + 3, y + 1, 7, 4);
-    }
-  }
-  for (let x = 14; x < W; x += 16) {
-    ctx.fillStyle = kit.iron;
-    ctx.fillRect(x, y + 2, 1, 2);
-  }
-}
-
-function drawWallImmunity(ctx, count, time, reduced) {
-  if (!(count > 0)) return;
-  const base = readAlpha(ctx);
-  const pulse = reduced ? 0.85 : (0.7 + 0.3 * Math.sin(time * 6.5));
-  shiftFenceArt(ctx, () => {
-    // Luminous cyan Aegis energy rim across the center bastion parapet (strictly inside [60..300])
-    ctx.globalAlpha = base * 0.55 * pulse;
-    ctx.fillStyle = '#70e8ff';
-    ctx.fillRect(62, 427, 236, 2);
-    ctx.globalAlpha = base * 0.9 * pulse;
-    ctx.fillStyle = '#d8fbff';
-    ctx.fillRect(68, 428, 224, 1);
-    // Shield charge pips centered cleanly above the bastion rail
-    const pips = Math.min(8, Math.floor(count));
-    const step = 10;
-    const total = pips * step - 4;
-    const startX = Math.round(W / 2 - total / 2);
-    ctx.globalAlpha = base;
-    for (let i = 0; i < pips; i++) {
-      const px = startX + i * step;
-      ctx.fillStyle = '#0c1b22';
-      ctx.fillRect(px - 1, 439, 8, 6);
-      ctx.fillStyle = '#4ad8f8';
-      ctx.fillRect(px, 440, 6, 4);
-      ctx.fillStyle = '#e6fcff';
-      ctx.fillRect(px + 1, 441, 4, 2);
-    }
-  });
-  ctx.globalAlpha = base;
-}
-
-function drawFence(ctx, ratio, wallImmunity = 0, time = 0, reduced = false) {
-  shiftFenceArt(ctx, () => {
-    const kit = woodKit(ratio);
-    const intact = new Array(PICKETS);
-    for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
-    drawWire(ctx, intact, kit, ratio);
-    drawSleeper(ctx, ratio, kit);
-    for (const x of POSTS) drawPost(ctx, x, ratio, kit);
-    drawRubble(ctx, kit, ratio);
-  });
-  if (wallImmunity > 0) drawWallImmunity(ctx, wallImmunity, time, reduced);
-}
-
-function drawBanner(ctx, ratio, time, reduced, phase) {
-  if (ratio < FENCE_RUIN || postFalls(174, ratio)) return;
-  shiftFenceArt(ctx, () => drawBannerArt(ctx, ratio, time, reduced, phase));
-}
-
-function drawBannerArt(ctx, ratio, time, reduced, phase) {
-  const wave = reduced ? 0 : (Math.sin(time * 2.2) > 0 ? 1 : 0);
-  const y = 416 + wave;
-  ctx.fillStyle = '#6e5432';
-  ctx.fillRect(178, 414, 2, 34);
-  const torn = ratio <= FENCE_CRACKED;
-  const clothW = torn ? 11 : 15;
-  ctx.fillStyle = ratio <= FENCE_FAILING ? '#7a3030' : '#9a3a3a';
-  ctx.fillRect(180, y, clothW, 9);
-  ctx.fillStyle = '#6e2424';
-  ctx.fillRect(180, y + 8, clothW, 1);
-  ctx.fillStyle = '#d3b984';
-  ctx.fillRect(182, y + 3, torn ? 4 : 7, 2);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(184, y + 2, 2, 4);
-  if (torn) {
-    ctx.fillStyle = '#4e3820';
-    ctx.fillRect(180 + clothW, y + 5, 2, 2);
-    ctx.fillRect(180 + clothW - 1, y + 7, 3, 2);
-  }
-  if (phase === 'victory' && ratio > FENCE_FAILING) {
-    ctx.fillStyle = '#f0cb72';
-    ctx.fillRect(182, y + 1, 1, 1);
-    ctx.fillRect(188, y + 1, 1, 1);
-  }
-}
-
-function drawEmbers(ctx, ratio, time, reduced) {
-  if (ratio > FENCE_FAILING) return;
-  shiftFenceArt(ctx, () => drawEmberArt(ctx, ratio, time, reduced));
-}
-
-function drawEmberArt(ctx, ratio, time, reduced) {
-  const base = readAlpha(ctx);
-  for (let i = 0; i < PICKETS; i++) {
-    if (ratio > breakAt(i) || (i % 3) !== 0) continue;
-    const loop = reduced ? 0.35 : ((time * (7 + (i % 4)) + i * 1.7) % 16) / 16;
-    const x = i * 12 + 5;
-    const y = Math.round(462 - loop * 14);
-    ctx.globalAlpha = base * (1 - loop) * 0.9;
-    ctx.fillStyle = (i % 2) === 0 ? '#ffd08a' : '#e25822';
-    ctx.fillRect(x, y, 1, 1 + (i & 1));
-  }
-  ctx.globalAlpha = base;
-}
-
-function drawBrackets(ctx, x, y, w, h) {
-  const arm = Math.max(5, Math.min(8, Math.round(Math.min(w, h) * 0.16)));
-  ctx.fillStyle = '#d3b984';
-  ctx.fillRect(x + 1, y + 1, arm, 2);
-  ctx.fillRect(x + 1, y + 1, 2, arm);
-  ctx.fillRect(x + w - arm - 1, y + 1, arm, 2);
-  ctx.fillRect(x + w - 3, y + 1, 2, arm);
-  ctx.fillRect(x + 1, y + h - 3, arm, 2);
-  ctx.fillRect(x + 1, y + h - arm - 1, 2, arm);
-  ctx.fillRect(x + w - arm - 1, y + h - 3, arm, 2);
-  ctx.fillRect(x + w - 3, y + h - arm - 1, 2, arm);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x + 1, y + 1, 3, 1);
-  ctx.fillRect(x + w - 4, y + 1, 3, 1);
-  ctx.fillStyle = '#7a6240';
-  ctx.fillRect(x + 1, y + h - 2, arm, 1);
-  ctx.fillRect(x + w - arm - 1, y + h - 2, arm, 1);
-}
-
-function drawSlot(ctx, slot, time, reduced, phase) {
-  const x = slot.left;
-  const y = slot.top;
-  const w = slot.width;
-  const h = slot.height;
-  const unit = slot.unit;
-  const occupied = !!(unit && typeof unit === 'object');
-  const hero = occupied && (unit.kind === 'hero' || unit.type === 'hero');
-  const front = slot.row === 0;
-  ctx.fillStyle = '#070b0e';
-  ctx.fillRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
-  ctx.fillStyle = front ? '#20323c' : '#182830';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = hero ? '#8a7044' : (occupied ? '#4e6470' : '#9eb4be');
-  ctx.fillRect(x, y, w, 1);
-  ctx.fillRect(x, y, 1, h);
-  ctx.fillStyle = '#0c1216';
-  ctx.fillRect(x, y + h - 1, w, 1);
-  ctx.fillRect(x + w - 1, y, 1, h);
-  const pad = 3;
-  const wellH = Math.max(8, Math.round(h * 0.5));
-  ctx.fillStyle = occupied ? (front ? '#1a2c36' : '#14242c') : '#0e161c';
-  ctx.fillRect(x + pad, y + pad, w - pad * 2, wellH);
-  ctx.fillStyle = '#5c6a72';
-  ctx.fillRect(x + 2, y + 2, 2, 2);
-  ctx.fillRect(x + w - 4, y + 2, 2, 2);
-  ctx.fillRect(x + 2, y + pad + wellH - 2, 2, 2);
-  ctx.fillRect(x + w - 4, y + pad + wellH - 2, 2, 2);
-  const foot = y + Math.round(h / 2);
-  const footW = w - 12;
-  const footX = x + 6;
-  const footH = Math.min(10, y + h - foot - 4);
-  ctx.fillStyle = front ? '#314654' : '#283848';
-  ctx.fillRect(footX, foot - 1, footW, footH);
-  ctx.fillStyle = hero ? '#d3b984' : '#6a8490';
-  ctx.fillRect(footX, foot - 1, footW, 1);
-  ctx.fillStyle = '#10181c';
-  ctx.fillRect(footX + 2, foot + 5, footW - 4, 2);
-  ctx.fillStyle = '#243844';
-  ctx.fillRect(x + 4, foot, 3, 6);
-  ctx.fillRect(x + w - 7, foot, 3, 6);
-  const groundTop = foot + 4;
-  const groundH = Math.max(4, y + h - 2 - groundTop);
-  fillStandingGround(ctx, x + 2, groundTop, w - 4, groundH);
-  if (!occupied) {
-    const pulse = phase === 'placing' && !reduced && Math.sin(time * 3) > 0;
-    const cx = x + Math.round(w / 2) - 1;
-    const cy = y + Math.round(h * 0.28);
-    ctx.fillStyle = pulse ? '#d7f3f8' : '#6d8794';
-    ctx.fillRect(cx, cy - 5, 2, 10);
-    ctx.fillRect(cx - 5, cy, 12, 2);
-    ctx.fillStyle = '#d5e6ea';
-    ctx.fillRect(cx, cy, 2, 2);
+// =========================================================================
+// SKY, BLOOD MOON & RUINED OVERPASS HORIZON (y = 0 .. 66)
+// =========================================================================
+function drawSkyAndHorizon(ctx, time, reduced, hasBoss) {
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, 68);
+  if (hasBoss) {
+    skyGrad.addColorStop(0, '#180710');
+    skyGrad.addColorStop(0.55, '#421220');
+    skyGrad.addColorStop(1, '#782428');
   } else {
-    ctx.fillStyle = '#8aa0aa';
-    ctx.fillRect(footX, foot - 1, 2, 2);
-    ctx.fillRect(footX + footW - 2, foot - 1, 2, 2);
+    skyGrad.addColorStop(0, '#0a1524');
+    skyGrad.addColorStop(0.55, '#193148');
+    skyGrad.addColorStop(1, '#315460');
   }
-  if (hero) {
-    drawBrackets(ctx, x, y, w, h);
-    ctx.fillStyle = '#7a6240';
-    ctx.fillRect(footX, foot + 3, footW, 2);
-    ctx.fillStyle = '#f0cb72';
-    ctx.fillRect(footX, foot + 3, footW, 1);
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, 68);
+
+  // Soft horizon atmospheric glow
+  const glowGrad = ctx.createRadialGradient(W * 0.5, 58, 12, W * 0.5, 58, 210);
+  if (hasBoss) {
+    glowGrad.addColorStop(0, 'rgba(255, 86, 56, 0.36)');
+    glowGrad.addColorStop(1, 'rgba(255, 60, 40, 0)');
+  } else {
+    glowGrad.addColorStop(0, 'rgba(120, 214, 210, 0.22)');
+    glowGrad.addColorStop(1, 'rgba(60, 120, 140, 0)');
   }
-}
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(0, 0, W, 68);
 
-function drawTies(ctx, row) {
-  const y = slotGeometry(row * ARENA.cols).y + 6;
-  for (let col = 0; col < ARENA.cols - 1; col += 1) {
-    const slot = slotGeometry(row * ARENA.cols + col);
-    const seam = slot.left + slot.width - 1;
-    ctx.fillStyle = '#5c6a72';
-    ctx.fillRect(seam, y, 2, 2);
-    ctx.fillStyle = '#c5d0d4';
-    ctx.fillRect(seam, y, 2, 1);
+  // Twinkling stars
+  for (let i = 0; i < STARS.length; i++) {
+    const [sx, sy, sr, gold] = STARS[i];
+    const tw = reduced ? 0.85 : 0.45 + 0.55 * Math.sin(time * 1.8 + i * 1.7);
+    ctx.save();
+    ctx.globalAlpha = tw * (hasBoss ? 0.55 : 0.9);
+    ctx.fillStyle = gold ? '#ffe39a' : '#d8f1ff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
-}
 
-// The side rooms stay open for a later element. Only a thin sill continues
-// the fence footing to the edge, and it stops above the slot rows.
-function drawShoulders(ctx, ratio) {
-  const kit = woodKit(ratio);
-  const margin = ARENA.sideMargin;
-  drawSill(ctx, 0, margin, kit);
-  drawSill(ctx, W - margin, margin, kit);
-}
-
-function drawSill(ctx, x, width, kit) {
-  const y = SLEEPER_Y + 2;
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x, y, width, 1);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x, y + 1, width, 2);
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, y + 3, width, 1);
-}
-
-function readSlots(state) {
-  const slots = [];
-  for (let i = 0; i < 10; i++) {
-    const geo = slotGeometry(i);
-    const unit = state && state.slots && state.slots[i] ? state.slots[i].unit : null;
-    slots.push({ ...geo, unit: unit || null });
+  // Illustrated Crescent / Blood Moon
+  const mx = 296;
+  const my = 20;
+  const moonGlow = ctx.createRadialGradient(mx, my, 4, mx, my, 32);
+  if (hasBoss) {
+    moonGlow.addColorStop(0, 'rgba(255, 110, 82, 0.46)');
+    moonGlow.addColorStop(1, 'rgba(255, 70, 50, 0)');
+  } else {
+    moonGlow.addColorStop(0, 'rgba(255, 236, 178, 0.38)');
+    moonGlow.addColorStop(1, 'rgba(255, 224, 150, 0)');
   }
-  return slots;
+  ctx.fillStyle = moonGlow;
+  ctx.beginPath();
+  ctx.arc(mx, my, 32, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = hasBoss ? '#ff7662' : '#fff0c4';
+  ctx.beginPath();
+  ctx.arc(mx, my, 9.5, 0.35 * Math.PI, 1.65 * Math.PI, false);
+  ctx.quadraticCurveTo(mx - 3.2, my, mx + Math.cos(0.35 * Math.PI) * 9.5, my + Math.sin(0.35 * Math.PI) * 9.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Distant Wasteland Mesas & City Ruin Silhouette
+  ctx.fillStyle = hasBoss ? '#2c0d16' : '#12222d';
+  ctx.beginPath();
+  ctx.moveTo(0, 66);
+  ctx.lineTo(0, 44);
+  ctx.lineTo(24, 34);
+  ctx.lineTo(48, 42);
+  ctx.lineTo(66, 30);
+  ctx.lineTo(84, 30);
+  ctx.lineTo(94, 46);
+  ctx.lineTo(132, 40);
+  ctx.lineTo(154, 46);
+  ctx.lineTo(192, 36);
+  ctx.lineTo(222, 44);
+  ctx.lineTo(254, 32);
+  ctx.lineTo(278, 32);
+  ctx.lineTo(294, 45);
+  ctx.lineTo(324, 35);
+  ctx.lineTo(360, 42);
+  ctx.lineTo(360, 66);
+  ctx.closePath();
+  ctx.fill();
+
+  // Subtle rim highlight along mesa ridge
+  ctx.strokeStyle = hasBoss ? 'rgba(255, 118, 96, 0.35)' : 'rgba(148, 214, 218, 0.25)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Broken Highway Overpass Entrance Lip (where zombies pour onto the road)
+  const lipGrad = ctx.createLinearGradient(0, 50, 0, 68);
+  lipGrad.addColorStop(0, hasBoss ? '#4d2228' : '#3d5258');
+  lipGrad.addColorStop(0.45, hasBoss ? '#311418' : '#26353a');
+  lipGrad.addColorStop(1, '#121a1e');
+  ctx.fillStyle = lipGrad;
+  ctx.fillRect(0, 52, W, 14);
+
+  // Guardrail posts & top bevel along entry cliff
+  ctx.fillStyle = hasBoss ? '#99484e' : '#7ea0a6';
+  ctx.fillRect(0, 52, W, 2);
+  ctx.strokeStyle = '#0d1418';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 65.5);
+  ctx.lineTo(W, 65.5);
+  ctx.stroke();
+  for (let px = 18; px < W; px += 36) {
+    ctx.fillStyle = '#1b262c';
+    ctx.fillRect(px, 46, 5, 8);
+    ctx.fillStyle = '#8fa9b0';
+    ctx.fillRect(px + 1, 46, 3, 2);
+  }
+
+  // Drifting stylized atmospheric mist wisps
+  ctx.save();
+  ctx.globalAlpha = hasBoss ? 0.16 : 0.12;
+  ctx.fillStyle = hasBoss ? '#ff8b78' : '#d2f0f5';
+  const drift = reduced ? 0 : (time * 9) % (W + 80);
+  for (let i = 0; i < 4; i++) {
+    const mxp = ((i * 105 + drift) % (W + 80)) - 40;
+    const myp = 20 + (i % 2) * 14;
+    ctx.beginPath();
+    ctx.ellipse(mxp, myp, 26, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
-function drawFenceTorches(ctx, ratio, time, reduced) {
-  if (ratio <= FENCE_RUIN) return;
-  const base = readAlpha(ctx);
-  shiftFenceArt(ctx, () => {
-    const lanterns = [86, 262];
-    for (let i = 0; i < lanterns.length; i++) {
-      const px = lanterns[i];
-      if (postFalls(px, ratio)) continue;
-      const flicker = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 5.2 + i * 2.1));
-      const warm = ratio <= FENCE_FAILING ? 0.55 : 1;
-      // Soft stepped lantern light halo casting upward onto approach ground (stays strictly inside [60..300] and above fence)
-      ctx.globalAlpha = base * (0.09 + flicker * 0.04) * warm;
-      ctx.fillStyle = '#f0a848';
-      ctx.fillRect(px - 18, 398, 44, 34);
-      ctx.globalAlpha = base * (0.14 + flicker * 0.05) * warm;
-      ctx.fillStyle = '#ffd578';
-      ctx.fillRect(px - 9, 408, 26, 20);
-      ctx.globalAlpha = base;
-      // Iron sconce bracket + glowing flame
-      ctx.fillStyle = '#4e5c64';
-      ctx.fillRect(px + 2, 412, 4, 6);
-      ctx.fillStyle = '#e26a28';
-      ctx.fillRect(px + 2, 409, 4, 4);
-      ctx.fillStyle = flicker > 0.45 ? '#fff3c4' : '#f0cb72';
-      ctx.fillRect(px + 3, 410 - (flicker > 0.7 ? 1 : 0), 2, 2);
+// =========================================================================
+// WASTELAND HIGHWAY BATTLEFIELD (y = 66 .. 496)
+// =========================================================================
+function drawHighwayField(ctx, time, reduced, hasBoss) {
+  const fieldTop = 65;
+  const fieldBot = FENCE_Y - 12; // 500
+  const fieldH = fieldBot - fieldTop;
+
+  // Desert sandy-slate rocky shoulders (x = 0..28 and x = 332..360)
+  const shoulderGrad = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+  shoulderGrad.addColorStop(0, hasBoss ? '#312122' : '#2a3330');
+  shoulderGrad.addColorStop(0.55, hasBoss ? '#3a2624' : '#323c36');
+  shoulderGrad.addColorStop(1, hasBoss ? '#2c1c1a' : '#252e2a');
+  ctx.fillStyle = shoulderGrad;
+  ctx.fillRect(0, fieldTop, W, fieldH);
+
+  // Main Cracked Asphalt Wasteland Highway (x = 26..334)
+  const roadLeft = 26;
+  const roadW = W - roadLeft * 2;
+  const roadGrad = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+  roadGrad.addColorStop(0, hasBoss ? '#2c2228' : '#28363c');
+  roadGrad.addColorStop(0.45, hasBoss ? '#34272d' : '#314248');
+  roadGrad.addColorStop(0.88, hasBoss ? '#2e2226' : '#2b3a40');
+  roadGrad.addColorStop(1, '#1e282d');
+  ctx.fillStyle = roadGrad;
+  ctx.fillRect(roadLeft, fieldTop, roadW, fieldH);
+
+  // Subtle center lighting crown on asphalt for depth
+  const crownGrad = ctx.createLinearGradient(roadLeft, 0, roadLeft + roadW, 0);
+  crownGrad.addColorStop(0, 'rgba(8, 14, 18, 0.34)');
+  crownGrad.addColorStop(0.22, 'rgba(130, 175, 185, 0.06)');
+  crownGrad.addColorStop(0.5, 'rgba(170, 215, 222, 0.11)');
+  crownGrad.addColorStop(0.78, 'rgba(130, 175, 185, 0.06)');
+  crownGrad.addColorStop(1, 'rgba(8, 14, 18, 0.34)');
+  ctx.fillStyle = crownGrad;
+  ctx.fillRect(roadLeft, fieldTop, roadW, fieldH);
+
+  // Concrete road curbs with clean cartoon ink borders
+  for (const cx of [roadLeft - 5, roadLeft + roadW - 1]) {
+    ctx.fillStyle = '#536468';
+    ctx.fillRect(cx, fieldTop, 6, fieldH);
+    ctx.fillStyle = '#7b8f94';
+    ctx.fillRect(cx + 1, fieldTop, 2, fieldH);
+    ctx.strokeStyle = '#121a1e';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(cx, fieldTop, 6, fieldH);
+    // Curb expansion joints
+    ctx.fillStyle = '#1b262b';
+    for (let jy = fieldTop + 26; jy < fieldBot - 10; jy += 44) {
+      ctx.fillRect(cx, jy, 6, 2);
     }
-  });
-  ctx.globalAlpha = base;
+  }
+
+  // Faded painted amber highway edge lines & center dashed road stripe
+  ctx.save();
+  ctx.fillStyle = hasBoss ? 'rgba(235, 142, 92, 0.24)' : 'rgba(232, 194, 108, 0.22)';
+  ctx.fillRect(roadLeft + 10, fieldTop + 4, 3, fieldH - 12);
+  ctx.fillRect(roadLeft + roadW - 13, fieldTop + 4, 3, fieldH - 12);
+
+  // Center dashed highway stripe
+  ctx.fillStyle = hasBoss ? 'rgba(248, 168, 96, 0.26)' : 'rgba(242, 206, 114, 0.24)';
+  for (let dy = fieldTop + 18; dy < fieldBot - 36; dy += 44) {
+    rRect(ctx, W / 2 - 2.5, dy, 5, 22, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Tire skid marks
+  ctx.save();
+  ctx.strokeStyle = 'rgba(14, 20, 24, 0.26)';
+  ctx.lineWidth = 3.2;
+  ctx.lineCap = 'round';
+  for (const [x1, y1, x2, y2] of SKID_MARKS) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Subtle scorch patches & asphalt cracks
+  for (const [sx, sy, rx, ry] of SCORCH_MARKS) {
+    const sg = ctx.createRadialGradient(sx, sy, 1, sx, sy, rx);
+    sg.addColorStop(0, 'rgba(14, 16, 18, 0.34)');
+    sg.addColorStop(1, 'rgba(14, 16, 18, 0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(15, 22, 26, 0.45)';
+  ctx.lineWidth = 1.4;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const poly of CRACKS) {
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Pebbles along highway edges
+  for (const [px, py, rx, ry] of PEBBLES) {
+    ctx.fillStyle = '#182226';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 1, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5a6c70';
+    ctx.beginPath();
+    ctx.ellipse(px, py, rx * 0.85, ry * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Animated wasteland grass tufts along outer shoulders
+  for (let i = 0; i < SCRUBS.length; i++) {
+    const [gx, gy, sc] = SCRUBS[i];
+    const sway = reduced ? 0 : Math.sin(time * 2.1 + i * 1.4) * 2.0;
+    ctx.save();
+    ctx.strokeStyle = '#131d19';
+    ctx.lineWidth = 3.2 * sc;
+    ctx.lineCap = 'round';
+    for (const [dx, h] of [[-4, 8], [0, 11], [4, 7]]) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.quadraticCurveTo(gx + dx * 0.6 + sway * 0.5, gy - h * 0.55, gx + dx + sway, gy - h * sc);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#538a5e';
+    ctx.lineWidth = 1.8 * sc;
+    for (const [dx, h] of [[-4, 8], [0, 11], [4, 7]]) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.quadraticCurveTo(gx + dx * 0.6 + sway * 0.5, gy - h * 0.55, gx + dx + sway, gy - h * sc);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Painted yellow kill-zone hazard line just ahead of the steel wall
+  const dangerY = FENCE_Y - 22;
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = '#f8d260';
+  for (let hx = 34; hx < W - 38; hx += 22) {
+    ctx.beginPath();
+    ctx.moveTo(hx, dangerY);
+    ctx.lineTo(hx + 11, dangerY);
+    ctx.lineTo(hx + 7, dangerY + 5);
+    ctx.lineTo(hx - 4, dangerY + 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Warm twin floodlight beams illuminating the wall kill-zone (smoothly feathered to 0)
+  const sweep = reduced ? 0 : Math.sin(time * 0.9) * 14;
+  const beamTopY = FENCE_Y - 225;
+  for (const [lx, dir] of [[86, -1], [274, 1]]) {
+    const beamGrad = ctx.createLinearGradient(lx, FENCE_Y - 12, lx, beamTopY);
+    beamGrad.addColorStop(0, hasBoss ? 'rgba(255, 204, 134, 0.24)' : 'rgba(255, 236, 168, 0.20)');
+    beamGrad.addColorStop(0.45, hasBoss ? 'rgba(255, 166, 106, 0.09)' : 'rgba(250, 228, 152, 0.08)');
+    beamGrad.addColorStop(0.85, 'rgba(255, 224, 148, 0.015)');
+    beamGrad.addColorStop(1, 'rgba(255, 224, 148, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(lx - 9, FENCE_Y - 12);
+    ctx.lineTo(lx + 9, FENCE_Y - 12);
+    ctx.lineTo(lx + 76 + sweep * dir, beamTopY);
+    ctx.lineTo(lx - 76 + sweep * dir, beamTopY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Boss wave subtle crimson atmosphere wash across road
+  if (hasBoss) {
+    const pulse = reduced ? 0.14 : 0.11 + 0.05 * Math.sin(time * 2.2);
+    const wash = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+    wash.addColorStop(0, `rgba(210, 44, 58, ${pulse})`);
+    wash.addColorStop(1, 'rgba(180, 32, 42, 0.03)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, fieldTop, W, fieldH);
+  }
+}
+
+// =========================================================================
+// ILLUSTRATED ARMORED STEEL FORTRESS WALL (y = 492 .. 536)
+// =========================================================================
+function drawFortressWall(ctx, ratio, time, reduced) {
+  const wallTop = FENCE_Y - 18; // 494
+  const wallH = 38;
+  const damaged = ratio <= 0.65;
+  const critical = ratio <= 0.35;
+
+  // Ground drop shadow under wall front
+  const shGrad = ctx.createLinearGradient(0, wallTop - 10, 0, wallTop + 2);
+  shGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  shGrad.addColorStop(1, 'rgba(0, 0, 0, 0.52)');
+  ctx.fillStyle = shGrad;
+  ctx.fillRect(0, wallTop - 10, W, 12);
+
+  // Main beveled steel wall body
+  const bodyGrad = ctx.createLinearGradient(0, wallTop, 0, wallTop + wallH);
+  if (critical) {
+    bodyGrad.addColorStop(0, '#967c76');
+    bodyGrad.addColorStop(0.24, '#6a524d');
+    bodyGrad.addColorStop(0.76, '#483532');
+    bodyGrad.addColorStop(1, '#261a18');
+  } else if (damaged) {
+    bodyGrad.addColorStop(0, '#b8c4cc');
+    bodyGrad.addColorStop(0.24, '#7d8e98');
+    bodyGrad.addColorStop(0.76, '#4f5e68');
+    bodyGrad.addColorStop(1, '#28323a');
+  } else {
+    bodyGrad.addColorStop(0, '#dce8f0');
+    bodyGrad.addColorStop(0.22, '#9ab0be');
+    bodyGrad.addColorStop(0.75, '#5b707e');
+    bodyGrad.addColorStop(1, '#2d3b45');
+  }
+
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(0, wallTop, W, wallH);
+
+  // Razor-wire defensive coils along top parapet
+  ctx.save();
+  ctx.strokeStyle = critical ? '#5a443e' : '#32424c';
+  ctx.lineWidth = 1.8;
+  for (let wx = 8; wx < W - 4; wx += 14) {
+    ctx.beginPath();
+    ctx.ellipse(wx, wallTop - 1, 7, 4.2, -0.25, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = critical ? '#a68b80' : '#d2e2ec';
+  ctx.lineWidth = 0.9;
+  for (let wx = 8; wx < W - 4; wx += 14) {
+    ctx.beginPath();
+    ctx.ellipse(wx, wallTop - 1.5, 6.2, 3.6, -0.25, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Bright beveled top armor lip
+  ctx.fillStyle = critical ? '#c49d90' : '#eef7fc';
+  ctx.fillRect(0, wallTop, W, 3.2);
+  ctx.fillStyle = '#12191e';
+  ctx.fillRect(0, wallTop + 3.2, W, 1.5);
+
+  // Armor panel vertical seams & steel rivets
+  const panelW = 36;
+  for (let px = 0; px < W; px += panelW) {
+    ctx.fillStyle = '#172128';
+    ctx.fillRect(px, wallTop + 4, 2, wallH - 6);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+    ctx.fillRect(px + 2, wallTop + 5, 1.2, wallH - 8);
+    // Corner rivets
+    for (const [rx, ry] of [[px + 6, wallTop + 9], [px + panelW - 6, wallTop + 9], [px + 6, wallTop + 21], [px + panelW - 6, wallTop + 21]]) {
+      ctx.fillStyle = '#19232a';
+      ctx.beginPath();
+      ctx.arc(rx, ry + 0.7, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = critical ? '#a88c82' : '#d8e6ee';
+      ctx.beginPath();
+      ctx.arc(rx, ry, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Caution Yellow-Black Diagonal Hazard Band along lower steel girder
+  const bandY = wallTop + 25;
+  const bandH = 8;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, bandY, W, bandH);
+  ctx.clip();
+  ctx.fillStyle = '#1b2226';
+  ctx.fillRect(0, bandY, W, bandH);
+  ctx.fillStyle = critical ? '#d96b38' : damaged ? '#d8a63c' : '#f4c84c';
+  for (let sx = -10; sx < W + 16; sx += 18) {
+    ctx.beginPath();
+    ctx.moveTo(sx, bandY + bandH);
+    ctx.lineTo(sx + 8, bandY + bandH);
+    ctx.lineTo(sx + 14, bandY);
+    ctx.lineTo(sx + 6, bandY);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.strokeStyle = '#10161c';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(0, bandY);
+  ctx.lineTo(W, bandY);
+  ctx.moveTo(0, bandY + bandH);
+  ctx.lineTo(W, bandY + bandH);
+  ctx.stroke();
+
+  // Heavy Reinforced Steel Buttress Pylons + Floodlight Turret Lamps
+  const pylons = [14, 86, 274, 346];
+  for (const cx of pylons) {
+    const pw = 18;
+    const ph = 42;
+    const px = cx - pw / 2;
+    const py = wallTop - 4;
+    const pg = ctx.createLinearGradient(px, py, px + pw, py);
+    pg.addColorStop(0, '#3e4f5a');
+    pg.addColorStop(0.45, '#9ab0be');
+    pg.addColorStop(1, '#2b3740');
+    rRect(ctx, px, py, pw, ph, 4);
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.strokeStyle = '#10161c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Lamp / warning beacon on inner pylons (86 & 274)
+    if (cx === 86 || cx === 274) {
+      const blink = critical ? (0.45 + 0.55 * Math.sin(time * 9)) : 1;
+      ctx.save();
+      ctx.globalAlpha = blink;
+      ctx.fillStyle = critical ? '#ff4a32' : '#ffe896';
+      ctx.beginPath();
+      ctx.arc(cx, py + 9, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#141c22';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Progressive Damage: Jagged Vector Cracks, Scorch & Glowing Embers
+  if (damaged) {
+    const cracks = [
+      [[52, wallTop + 4], [58, wallTop + 14], [53, wallTop + 23]],
+      [[148, wallTop + 3], [142, wallTop + 13], [150, wallTop + 24]],
+      [[216, wallTop + 5], [224, wallTop + 15], [218, wallTop + 25]],
+      [[308, wallTop + 4], [302, wallTop + 16], [310, wallTop + 24]],
+    ];
+    const shown = critical ? cracks.length : 2;
+    ctx.save();
+    ctx.strokeStyle = '#100c0b';
+    ctx.lineWidth = critical ? 2.4 : 1.8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < shown; i++) {
+      const pts = cracks[i];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+      ctx.stroke();
+      if (critical) {
+        ctx.strokeStyle = '#ff6a28';
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+        ctx.strokeStyle = '#100c0b';
+        ctx.lineWidth = 2.4;
+      }
+    }
+    ctx.restore();
+  }
+
+  // Critical smoking wisps
+  if (critical && !reduced) {
+    for (let i = 0; i < 3; i++) {
+      const sx = 64 + i * 116;
+      const cycle = (time * 0.9 + i * 0.37) % 1;
+      const sy = wallTop + 8 - cycle * 24;
+      ctx.save();
+      ctx.globalAlpha = (1 - cycle) * 0.36;
+      ctx.fillStyle = '#201818';
+      ctx.beginPath();
+      ctx.arc(sx + Math.sin(time * 3 + i) * 4, sy, 4 + cycle * 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Clean dark ink bottom outline of the steel wall
+  ctx.strokeStyle = '#0e1419';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(0, wallTop + wallH);
+  ctx.lineTo(W, wallTop + wallH);
+  ctx.stroke();
+}
+
+// =========================================================================
+// GLOWING ENERGY WALL SHIELD (AEGIS IMMUNITY)
+// =========================================================================
+function drawWallShield(ctx, count, time, reduced) {
+  if (!(count > 0)) return;
+  const pulse = reduced ? 0.85 : 0.72 + 0.28 * Math.sin(time * 4.2);
+  const y = FENCE_Y - 22;
+
+  ctx.save();
+  // Translucent curved plasma barrier band
+  const shieldGrad = ctx.createLinearGradient(0, y - 10, 0, y + 8);
+  shieldGrad.addColorStop(0, 'rgba(72, 224, 255, 0)');
+  shieldGrad.addColorStop(0.5, `rgba(92, 232, 255, ${0.26 * pulse})`);
+  shieldGrad.addColorStop(1, 'rgba(42, 168, 220, 0.06)');
+  ctx.fillStyle = shieldGrad;
+  ctx.fillRect(0, y - 10, W, 18);
+
+  // Crisp glowing energy ridge arc
+  ctx.strokeStyle = `rgba(154, 246, 255, ${0.85 * pulse})`;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(6, y + 3);
+  ctx.quadraticCurveTo(W / 2, y - 8, W - 6, y + 3);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.75 * pulse})`;
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.moveTo(16, y + 1);
+  ctx.quadraticCurveTo(W / 2, y - 7, W - 16, y + 1);
+  ctx.stroke();
+
+  // Shield Charge Pips centered above wall
+  const shown = Math.min(8, Math.floor(count));
+  const spacing = 12;
+  const startX = W / 2 - ((shown - 1) * spacing) / 2;
+  for (let i = 0; i < shown; i++) {
+    const px = startX + i * spacing;
+    const py = y - 6;
+    ctx.fillStyle = '#0e2c3a';
+    ctx.beginPath();
+    ctx.moveTo(px, py - 5);
+    ctx.lineTo(px + 4.5, py - 2);
+    ctx.lineTo(px + 3.5, py + 3);
+    ctx.lineTo(px, py + 5.5);
+    ctx.lineTo(px - 3.5, py + 3);
+    ctx.lineTo(px - 4.5, py - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#8ef4ff';
+    ctx.beginPath();
+    ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// =========================================================================
+// CENTRAL COMMANDER BASTION DECK (y = 532 .. 640) — ZERO 2×5 GRID!
+// =========================================================================
+function drawCommanderDeck(ctx, state, time, reduced) {
+  const deckTop = FENCE_Y + 20; // 532
+  const deckH = H - deckTop;
+
+  // Heavy fortified steel-concrete bastion deck floor
+  const deckGrad = ctx.createLinearGradient(0, deckTop, 0, H);
+  deckGrad.addColorStop(0, '#222d34');
+  deckGrad.addColorStop(0.42, '#1a242b');
+  deckGrad.addColorStop(1, '#10181d');
+  ctx.fillStyle = deckGrad;
+  ctx.fillRect(0, deckTop, W, deckH);
+
+  // Subtle metallic decking seams
+  ctx.save();
+  ctx.strokeStyle = 'rgba(130, 174, 190, 0.08)';
+  ctx.lineWidth = 1;
+  for (let y = deckTop + 18; y < H; y += 22) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  for (let x = 45; x < W; x += 90) {
+    ctx.beginPath();
+    ctx.moveTo(x, deckTop);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Power conduits running from Center Platform to Flanking Auto-Skill Pods
+  const cx = W / 2; // 180
+  const cy = ARENA.frontY + 4; // 564
+  const upg = heroUpgrades(state);
+  const hasFire = (upg.napalm || 0) > 0 || (upg.shrapnel || 0) > 0;
+  const hasFrost = (upg.cryo_barrage || 0) > 0 || (upg.frostbite || 0) > 0;
+  const hasTech = (upg.orbital_beam || 0) > 0 || (upg.ricochet || 0) > 0;
+  const hasCar = (upg.armored_car || 0) > 0;
+
+  ctx.save();
+  ctx.strokeStyle = '#10171d';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(74, 574);
+  ctx.lineTo(cx, cy + 4);
+  ctx.lineTo(286, 574);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#334652';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  // Animated energy pulses along conduits when Auto Skills are unlocked
+  if (hasFire || hasFrost || hasTech || hasCar) {
+    const glow = reduced ? 0.7 : 0.45 + 0.45 * Math.sin(time * 4.5);
+    ctx.strokeStyle = hasTech ? `rgba(100, 240, 255, ${glow})` : hasFire ? `rgba(255, 140, 56, ${glow})` : `rgba(246, 206, 100, ${glow})`;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Decorative Flanking Auto-Skill Support Pods (Left & Right of Hero)
+  for (const [px, accent, lit] of [
+    [74, hasFire ? '#ff7c32' : '#f0c454', hasFire || hasCar],
+    [286, hasFrost ? '#78ecff' : '#64e2ff', hasFrost || hasTech]
+  ]) {
+    const py = 574;
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 7, 22, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hexagonal steel launcher pad
+    const padGrad = ctx.createLinearGradient(px - 18, py - 10, px + 18, py + 10);
+    padGrad.addColorStop(0, '#506470');
+    padGrad.addColorStop(1, '#26333c');
+    rRect(ctx, px - 18, py - 10, 36, 20, 7);
+    ctx.fillStyle = padGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#0f161c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Glowing core LED
+    const pulse = reduced ? 0.85 : 0.55 + 0.45 * Math.sin(time * 3.8 + px);
+    ctx.fillStyle = lit ? accent : '#394b56';
+    ctx.save();
+    ctx.globalAlpha = lit ? pulse : 0.65;
+    ctx.beginPath();
+    ctx.arc(px, py, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = '#12191e';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
+  // Ammo Crates tucked cleanly on outer deck flanks
+  for (const [bx, by] of [[18, 564], [316, 564]]) {
+    rRect(ctx, bx, by, 26, 16, 3);
+    ctx.fillStyle = '#485a46';
+    ctx.fill();
+    ctx.strokeStyle = '#111815';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.fillStyle = '#6c8468';
+    ctx.fillRect(bx + 2, by + 2, 22, 4);
+    ctx.fillStyle = '#e8c45e';
+    ctx.fillRect(bx + 10, by + 7, 6, 3);
+  }
+
+  // HEROIC CENTRAL COMMANDER GUNNERY PLATFORM (Anchors fixed center Wall Gunner!)
+  const platRx = 46;
+  const platRy = 22;
+
+  // Soft golden ambient halo
+  const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, 56);
+  halo.addColorStop(0, 'rgba(246, 204, 96, 0.22)');
+  halo.addColorStop(1, 'rgba(246, 204, 96, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 58, 30, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer beveled steel base ellipse
+  ctx.fillStyle = '#10171d';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, platRx + 2, platRy + 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const outerGrad = ctx.createLinearGradient(cx, cy - platRy, cx, cy + platRy);
+  outerGrad.addColorStop(0, '#6a808e');
+  outerGrad.addColorStop(0.5, '#3b4c57');
+  outerGrad.addColorStop(1, '#212c34');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx, platRy, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#0e1419';
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  // Inner dark recessed steel deck with pulsing gold tactical ring
+  ctx.fillStyle = '#1b262e';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx - 8, platRy - 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const ringAlpha = reduced ? 0.78 : 0.58 + 0.34 * Math.sin(time * 2.8);
+  ctx.save();
+  ctx.strokeStyle = `rgba(248, 206, 94, ${ringAlpha})`;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx - 7, platRy - 4, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Four directional brass chevron ticks around the central platform
+  ctx.fillStyle = '#f2c864';
+  for (const [tx, ty] of [[cx, cy - platRy + 2], [cx, cy + platRy - 2], [cx - platRx + 5, cy], [cx + platRx - 5, cy]]) {
+    ctx.beginPath();
+    ctx.arc(tx, ty, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// =========================================================================
+// MINIMAL-CTX FALLBACK (for unit tests with fillRect-only stubs)
+// =========================================================================
+function drawMinimalFallback(ctx, ratio) {
+  ctx.fillStyle = '#1a2c38';
+  ctx.fillRect(0, 0, W, 65);
+  ctx.fillStyle = '#2a3940';
+  ctx.fillRect(0, 65, W, FENCE_Y - 75);
+  ctx.fillStyle = ratio > 0.35 ? '#8ca0ae' : '#6c4d48';
+  ctx.fillRect(0, FENCE_Y - 12, W, 28);
+  ctx.fillStyle = '#1b262e';
+  ctx.fillRect(0, FENCE_Y + 16, W, H - (FENCE_Y + 16));
 }
 
 export function drawWorld(ctx, state, options) {
   if (!ctx || typeof ctx.fillRect !== 'function') return;
-  const opts = options && typeof options === 'object' ? options : {};
+  const opts = options || {};
   const time = Number.isFinite(opts.time) ? opts.time : 0;
-  const reduced = !!opts.reducedMotion;
-  const phase = state && typeof state.phase === 'string' ? state.phase : 'playing';
+  const reduced = Boolean(opts.reducedMotion || opts.settings?.reducedMotion);
   const ratio = fenceRatio(state);
-  const canStack = typeof ctx.save === 'function' && typeof ctx.restore === 'function';
-  if (canStack) ctx.save();
+  const hasBoss = directorHasBoss(state);
+  const wallImmunity = Number.isFinite(state?.wallImmunity) ? Math.max(0, Math.floor(state.wallImmunity)) : 0;
+
+  if (!isRichCtx(ctx)) {
+    drawMinimalFallback(ctx, ratio);
+    return;
+  }
+
+  ctx.save();
   try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* ignored */ }
-    if (typeof ctx.beginPath === 'function' && typeof ctx.rect === 'function' && typeof ctx.clip === 'function') {
-      ctx.beginPath();
-      ctx.rect(0, 0, W, H);
-      ctx.clip();
-    }
-    const cached = backdropCanvas();
-    if (cached && typeof ctx.drawImage === 'function') ctx.drawImage(cached, 0, 0, W, H);
-    else paintBackdrop(ctx);
-    if (directorHasBoss(state)) drawBossWave(ctx, time, reduced);
-    drawStars(ctx, time, reduced);
-    drawMist(ctx, time, reduced);
-    drawGrass(ctx, time, reduced);
-    drawFence(ctx, ratio, Number(state?.wallImmunity) || 0, time, reduced);
-    drawFenceTorches(ctx, ratio, time, reduced);
-    drawBanner(ctx, ratio, time, reduced, phase);
-    drawEmbers(ctx, ratio, time, reduced);
-    drawShoulders(ctx, ratio);
-    for (const slot of readSlots(state)) drawSlot(ctx, slot, time, reduced, phase);
-    drawTies(ctx, 0);
-    drawTies(ctx, 1);
+    drawSkyAndHorizon(ctx, time, reduced, hasBoss);
+    drawHighwayField(ctx, time, reduced, hasBoss);
+    drawFortressWall(ctx, ratio, time, reduced);
+    drawWallShield(ctx, wallImmunity, time, reduced);
+    drawCommanderDeck(ctx, state, time, reduced);
   } finally {
-    if (canStack) ctx.restore();
+    ctx.restore();
   }
 }
 
-function iconRows(id, rows) {
-  if (!Array.isArray(rows) || rows.length !== 16) throw new Error(`Fencefall icon "${id}" must have 16 rows`);
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (typeof row !== 'string' || row.length !== 16) throw new Error(`Fencefall icon "${id}" row ${i} must be 16 wide`);
-    for (const ch of row) {
-      if (ch !== '.' && !PAL[ch]) throw new Error(`Fencefall icon "${id}" swatch "${ch}" is unknown`);
-    }
-  }
-  if (!rows.some(row => [...row].some(ch => ch !== '.'))) throw new Error(`Fencefall icon "${id}" is blank`);
-  return rows;
-}
-
-const ICONS = {
-  bolt: iconRows('bolt', [
-    '................',
-    '.......yy.......',
-    '......ywwy......',
-    '......yw.y......',
-    '.......yy.......',
-    '.......mm.......',
-    '.......mm.......',
-    '.......mm.......',
-    '......mMMm......',
-    '......mmmm......',
-    '.......mm.......',
-    '......m..m......',
-    '.......mm.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  fire: iconRows('fire', [
-    '................',
-    '.......r........',
-    '......rrr.......',
-    '.....rrfrr......',
-    '.....rfyfr......',
-    '....rrfyyrr.....',
-    '....rfyyyfr.....',
-    '...rrfyyyyrr....',
-    '...rfyyyyyfr....',
-    '....rfyyyRr.....',
-    '.....rRRRr......',
-    '......RRR.......',
-    '.......R........',
-    '................',
-    '................',
-    '................'
-  ]),
-  frost: iconRows('frost', [
-    '................',
-    '.......C........',
-    '......aCa.......',
-    '.....aCCCa......',
-    '....aCCwwCa.....',
-    '...aCCwCCwCa....',
-    '....aCwwCCa.....',
-    '.....aCCCa......',
-    '......aCa.......',
-    '.......C........',
-    '......a.a.......',
-    '.....a...a......',
-    '......ccc.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  lightning: iconRows('lightning', [
-    '................',
-    '......yy........',
-    '.....yyy........',
-    '.....fyy........',
-    '....yy..........',
-    '...yyy..........',
-    '..yyyyyy........',
-    '......fy........',
-    '.....yy.........',
-    '....yy..........',
-    '...fy...........',
-    '..yy............',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  poison: iconRows('poison', [
-    '................',
-    '.......b........',
-    '......bbb.......',
-    '.....bBBBb......',
-    '.....bbwbb......',
-    '....bbbBbbb.....',
-    '....bbBBBbb.....',
-    '.....bBBBb......',
-    '......bBb.......',
-    '.......B........',
-    '......b.b.......',
-    '.......b........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  support: iconRows('support', [
-    '................',
-    '.......g........',
-    '......ggg.......',
-    '.......m........',
-    '......mym.......',
-    '.....myyym......',
-    '.....mywym......',
-    '.....myyym......',
-    '......mym.......',
-    '.......m........',
-    '......mmm.......',
-    '.......m........',
-    '......m.m.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  hero: iconRows('hero', [
-    '................',
-    '......yyy.......',
-    '.....ygggy......',
-    '....ygwwwgy.....',
-    '....gwkkwkg.....',
-    '....gwwwwkg.....',
-    '.....gwwgg......',
-    '......mmm.......',
-    '.....mmmmm......',
-    '....mmgggmm.....',
-    '....mmmmmmm.....',
-    '.....mgggm......',
-    '......mmm.......',
-    '.......m........',
-    '................',
-    '................'
-  ]),
-  hybrid: iconRows('hybrid', [
-    '................',
-    '....aa..........',
-    '...aCCa.........',
-    '..aCCCCa....r...',
-    '..aCwCCa...rr...',
-    '...aCCa...rfr...',
-    '..........rfr...',
-    '....gg...rr.....',
-    '...gGGg.........',
-    '..gGGGGg........',
-    '..gGwGGg........',
-    '...gGGg.........',
-    '....gg..........',
-    '................',
-    '................',
-    '................'
-  ]),
-  tower: iconRows('tower', [
-    '................',
-    '....m......m....',
-    '....mm....mm....',
-    '....mymmmym.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '......mmm.......',
-    '......mym.......',
-    '......mmm.......',
-    '.....mmmmm......',
-    '....mmmmmmm.....',
-    '....MMMMMMM.....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  burn: iconRows('burn', [
-    '................',
-    '........r.......',
-    '.......rrr......',
-    '......rfyr......',
-    '......ryyr......',
-    '.......rR.......',
-    '....RRRRRRR.....',
-    '....kkkkkkk.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  slow: iconRows('slow', [
-    '................',
-    '......CCCC......',
-    '.....C....C.....',
-    '.....C.ww.C.....',
-    '......C..C......',
-    '.......CC.......',
-    '......C..C......',
-    '.....C....C.....',
-    '.....C.ww.C.....',
-    '......CCCC......',
-    '.......mm.......',
-    '......m..m......',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  stun: iconRows('stun', [
-    '................',
-    '.......y........',
-    '......y.y.......',
-    '...y...y...y....',
-    '....y.yyy.y.....',
-    '.....yyyyy......',
-    '...yyyyyyyyy....',
-    '.....yyyyy......',
-    '....y.yyy.y.....',
-    '...y...y...y....',
-    '......y.y.......',
-    '.......y........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  brittle: iconRows('brittle', [
-    '................',
-    '......mmmm......',
-    '.....mwwwwm.....',
-    '....mw.w..wm....',
-    '....mw..w..m....',
-    '....m..w...m....',
-    '....m...w.wm....',
-    '.....m.w.wm.....',
-    '......mmmm......',
-    '.......dd.......',
-    '......d..d......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  fence: iconRows('fence', [
-    '................',
-    '...m.m.m.m.m.m..',
-    '...mmmmmmmmmmm..',
-    '...me.e.e.e.m...',
-    '...me.e.e.e.m...',
-    '...me.e.e.e.m...',
-    '...mmmmmmmmmmm..',
-    '...m........m...',
-    '..mmm......mmm..',
-    '..m.m......m.m..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  hp: iconRows('hp', [
-    '................',
-    '................',
-    '.....rr..rr.....',
-    '....rrrrrrrr....',
-    '....rrwwrrrr....',
-    '....rrrrrrrr....',
-    '.....rrrrrr.....',
-    '......rrrr......',
-    '.......rr.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  xp: iconRows('xp', [
-    '................',
-    '.......y........',
-    '......yyy.......',
-    '.....yyyyy......',
-    '....yywywyy.....',
-    '...yyyyyyyyy....',
-    '..yyyyyyyyyyyy..',
-    '......yyy.......',
-    '......yyy.......',
-    '......yyy.......',
-    '.....yyyyy......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  wave: iconRows('wave', [
-    '................',
-    '..m....m....m...',
-    '.mm...mm...mm...',
-    'm.m..m.m..m.m...',
-    'mmm..mmm..mmm...',
-    '................',
-    '...m....m....m..',
-    '..mm...mm...mm..',
-    '.m.m..m.m..m.m..',
-    '.mmm..mmm..mmm..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  crit: iconRows('crit', [
-    '................',
-    '.......y........',
-    '..y...yyy...y...',
-    '...y.yyyyy.y....',
-    '....yyyyyyy.....',
-    '.yyyyywywyyyyy..',
-    '....yyyyyyy.....',
-    '...y.yyyyy.y....',
-    '..y...yyy...y...',
-    '.......y........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  damage: iconRows('damage', [
-    '................',
-    '.............g..',
-    '............gg..',
-    '...........gwg..',
-    '..........g.g...',
-    '.........g.g....',
-    '........g.g.....',
-    '.......g.g......',
-    '......g.g.......',
-    '.....g.g........',
-    '....mmm.........',
-    '.....m..........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  range: iconRows('range', [
-    'gg..........gg..',
-    'g............g..',
-    'g............g..',
-    '................',
-    '................',
-    '.......aa.......',
-    '......a..a......',
-    '......a..a......',
-    '.......aa.......',
-    '................',
-    '................',
-    'g............g..',
-    'g............g..',
-    'gg..........gg..',
-    '................',
-    '................'
-  ]),
-  haste: iconRows('haste', [
-    '................',
-    '......ggg.......',
-    '.....g...g......',
-    '....gg...gg.....',
-    '...gg..g..gg....',
-    '..gg..ggg..gg...',
-    '......ggg.......',
-    '.....gg.gg......',
-    '....gg...gg.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  rank: iconRows('rank', [
-    '................',
-    '.......m........',
-    '......mmm.......',
-    '.....m...m......',
-    '................',
-    '......yyy.......',
-    '.....yyyyy......',
-    '....yy...yy.....',
-    '................',
-    '.....ggggg......',
-    '....ggggggg.....',
-    '...gg.....gg....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  merge: iconRows('merge', [
-    '................',
-    '...a......gg....',
-    '....a....g..g...',
-    '.aaaaaaa.g..g...',
-    '....a....gggg...',
-    '...a......gg....',
-    '.........g..g...',
-    '.......ggggggg..',
-    '.........g..g...',
-    '..........gg....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  pause: iconRows('pause', [
-    '................',
-    '................',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  play: iconRows('play', [
-    '................',
-    '................',
-    '....m...........',
-    '....mm..........',
-    '....mmm.........',
-    '....mmmm........',
-    '....mmmmm.......',
-    '....mmmm........',
-    '....mmm.........',
-    '....mm..........',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  victory: iconRows('victory', [
-    '................',
-    '.......g........',
-    '......gyg.......',
-    '.....gyyyg......',
-    '....gyyyyyyg....',
-    '...gyyyyyyyyg...',
-    '....gyyyyyyg....',
-    '.....gyyyg......',
-    '......gyg.......',
-    '.......g........',
-    '......mmm.......',
-    '.....mmmmm......',
-    '......mmm.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  defeat: iconRows('defeat', [
-    '................',
-    '......kkkk......',
-    '.....kwwwk......',
-    '....kwywywk.....',
-    '....kwkkkwk.....',
-    '....kwwwwwk.....',
-    '.....kwwkk......',
-    '......kkk.......',
-    '......k.k.......',
-    '.....k...k......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  weapon: iconRows('weapon', [
-    '................',
-    '.......m........',
-    '......mm........',
-    '......mm........',
-    '.....mwm........',
-    '.....mm.........',
-    '....mm..........',
-    '....mm..........',
-    '...mmm..........',
-    '..myym..........',
-    '...mm...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  charm: iconRows('charm', [
-    '................',
-    '.......g........',
-    '......g.g.......',
-    '......gyg.......',
-    '.......g........',
-    '......y.y.......',
-    '.......g........',
-    '......g.g.......',
-    '.......g........',
-    '......g.g.......',
-    '.......g........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  armor: iconRows('armor', [
-    '................',
-    '.....mmmmm......',
-    '....mmmmmmm.....',
-    '....mmmwmmm.....',
-    '....mmmmmmm.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '......mmm.......',
-    '......m.m.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  vitality: iconRows('vitality', [
-    '................',
-    '.....rr..rr.....',
-    '....rrrrrrrr....',
-    '....rrryyrrr....',
-    '.....rryyrr.....',
-    '......rrr.......',
-    '.......r........',
-    '......mmm.......',
-    '......mym.......',
-    '......mmm.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  locked: iconRows('locked', [
-    '................',
-    '......mmm.......',
-    '.....m...m......',
-    '.....m...m......',
-    '....mmmmmmm.....',
-    '....mmmywmm.....',
-    '....mmmmmmm.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  plus: iconRows('plus', [
-    '................',
-    '................',
-    '.......gg.......',
-    '.......gg.......',
-    '.......gg.......',
-    '....gggggggg....',
-    '....gggggggg....',
-    '.......gg.......',
-    '.......gg.......',
-    '.......gg.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  warning: iconRows('warning', [
-    '................',
-    '.......y........',
-    '......yyy.......',
-    '.....yy.yy......',
-    '....yy.k.yy.....',
-    '...yy.yyy.yy....',
-    '..yy.yyyyy.yy...',
-    '.yy.yy.k.yy.yy..',
-    '.yyyyyyyyyyyyy..',
-    '....MMMMMMM.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  currency: iconRows('currency', [
-    '................',
-    '................',
-    '......gggg......',
-    '.....g....g.....',
-    '.....g.yy.g.....',
-    '.....g.yy.g.....',
-    '.....g....g.....',
-    '......gggg......',
-    '.......GG.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  move: iconRows('move', [
-    '................',
-    '.......a........',
-    '......aaa.......',
-    '.....aa.aa......',
-    '....aa...aa.....',
-    '.......a........',
-    '.......a........',
-    '.......a........',
-    '....ggggggg.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  sound: iconRows('sound', [
-    '................',
-    '....m...........',
-    '....mm..y.......',
-    '.mmmmm..y.y.....',
-    '.m.mmm..y...y...',
-    '.m.mmm..y.y.....',
-    '.mmmmm..y.......',
-    '....mm..........',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  mute: iconRows('mute', [
-    '................',
-    '....m......r....',
-    '....mm....r.....',
-    '.mmmmm...r......',
-    '.m.mmm..r.......',
-    '.m.mmm...r......',
-    '.mmmmm....r.....',
-    '....mm.....r....',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  splash: iconRows('splash', [
-    '................',
-    '.......r........',
-    '..r...rrr...r...',
-    '...r.rrfrr.r....',
-    '....rrrrrrr.....',
-    '.rrrrrryyrrrrr..',
-    '....rrrrrrr.....',
-    '...r.rrfrr.r....',
-    '..r...rrr...r...',
-    '.......r........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  chain: iconRows('chain', [
-    '................',
-    '....mm..........',
-    '...m..m.........',
-    '...m..m...mm....',
-    '....mm...m..m...',
-    '........m..m....',
-    '....mm...mm.....',
-    '...m..m.........',
-    '...m..m...mm....',
-    '....mm...m..m...',
-    '........m..m....',
-    '.........mm.....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  pierce: iconRows('pierce', [
-    '................',
-    '.............y..',
-    '....MMMM....yy..',
-    '....MMMM...y.y..',
-    '....MMMM....yy..',
-    '....MMMM.....y..',
-    '....MMMM........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  surge: iconRows('surge', [
-    '................',
-    '................',
-    '....CCCCCCCC....',
-    '..CCaaaaaaaaCC..',
-    '.Caa........aaC.',
-    '....CCCCCCCC....',
-    '..CCaawwwwaaCC..',
-    '.Caa........aaC.',
-    '....yyyyyyyy....',
-    '..yy........yy..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ])
-};
-
-const ACCENTS = ['g', 'y', 'r', 'f', 'a', 'C', 'b', 'p', 'm', 'e'];
-
-function fallbackRows(id) {
-  const h = hashString(id || '?');
-  const a = ACCENTS[h % ACCENTS.length];
-  const b = ACCENTS[(h >>> 5) % ACCENTS.length];
-  const diamond = [
-    '................',
-    '................',
-    '......mmmm......',
-    '.....m....m.....',
-    '....m......m....',
-    '...m........m...',
-    '...m...12...m...',
-    '...m..1221..m...',
-    '...m...12...m...',
-    '...m........m...',
-    '....m......m....',
-    '.....m....m.....',
-    '......mmmm......',
-    '.......MM.......',
-    '................',
-    '................'
-  ];
-  return diamond.map(row => row.split('1').join(a).split('2').join(b));
-}
-
-function normalizeId(id) {
-  return String(id ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function rowsFor(id) {
-  const key = normalizeId(id);
-  if (ICONS[key]) return ICONS[key];
-  const alias = ALIASES[key];
-  if (alias && ICONS[alias]) return ICONS[alias];
-  return fallbackRows(key || '?');
-}
-
+/** Crisp vector icon drawer (kept exported for compatibility). */
 export function drawIcon(ctx, id, x, y, size = 16) {
   if (!ctx || typeof ctx.fillRect !== 'function') return;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  const box = Number.isFinite(size) && size > 0 ? size : 16;
-  const scale = box / 16;
-  const rows = rowsFor(id);
-  const canStack = typeof ctx.save === 'function' && typeof ctx.restore === 'function';
-  if (canStack) ctx.save();
-  try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* ignored */ }
-    for (let row = 0; row < 16; row++) {
-      const line = rows[row];
-      for (let col = 0; col < 16; col++) {
-        const color = PAL[line[col]];
-        if (!color) continue;
-        ctx.fillStyle = color;
-        ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
-      }
-    }
-  } finally {
-    if (canStack) ctx.restore();
-  }
-}
+  const s = Math.max(8, Number.isFinite(size) ? size : 16);
+  const cx = x + s / 2;
+  const cy = y + s / 2;
+  const r = s * 0.38;
+  const key = String(id || '').toLowerCase();
 
-function drawPadCorners(ctx, left, top, w, h, color, arm = 5, thick = 1) {
-  ctx.fillStyle = color;
-  ctx.fillRect(left, top, arm, thick);
-  ctx.fillRect(left, top, thick, arm);
-  ctx.fillRect(left + w - arm, top, arm, thick);
-  ctx.fillRect(left + w - thick, top, thick, arm);
-  ctx.fillRect(left, top + h - thick, arm, thick);
-  ctx.fillRect(left, top + h - arm, thick, arm);
-  ctx.fillRect(left + w - arm, top + h - thick, arm, thick);
-  ctx.fillRect(left + w - thick, top + h - arm, thick, arm);
-}
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = '#f0cb72';
+    ctx.fillRect(x + 2, y + 2, Math.max(2, s - 4), Math.max(2, s - 4));
+    return;
+  }
 
-function drawBulwarkSprite(ctx, cx, cy, ratio) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const damaged = ratio <= 0.65;
-  const critical = ratio <= 0.32;
-  // Ground shadow
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
-  ctx.fillRect(x - 24, y + 6, 48, 5);
-  // 5 sharpened iron stakes protruding upward
-  const spikes = [-19, -10, -1, 8, 17];
-  for (let i = 0; i < spikes.length; i++) {
-    if (critical && (i === 1 || i === 3)) continue;
-    const sx = x + spikes[i];
-    const tall = damaged && i === 2 ? 4 : 7;
-    ctx.fillStyle = '#33424a';
-    ctx.fillRect(sx, y - 8 - tall, 4, tall + 2);
-    ctx.fillStyle = '#a8bec6';
-    ctx.fillRect(sx + 1, y - 8 - tall, 2, tall);
-    ctx.fillStyle = '#f2f7f8';
-    ctx.fillRect(sx + 1, y - 8 - tall, 1, 2);
-  }
-  // Main reinforced timber-and-steel barricade body
-  ctx.fillStyle = '#181410';
-  ctx.fillRect(x - 23, y - 9, 46, 17);
-  ctx.fillStyle = critical ? '#4e3528' : damaged ? '#6e4c34' : '#8d6440';
-  ctx.fillRect(x - 22, y - 8, 44, 15);
-  // Vertical plank seams & top edge highlight
-  ctx.fillStyle = critical ? '#6a4836' : '#c09866';
-  ctx.fillRect(x - 22, y - 8, 44, 2);
-  ctx.fillStyle = '#2c1e14';
-  for (let px = -14; px <= 14; px += 7) ctx.fillRect(x + px, y - 8, 1, 15);
-  // Twin forged-iron cross straps + rivets
-  ctx.fillStyle = '#405058';
-  ctx.fillRect(x - 23, y - 5, 46, 4);
-  ctx.fillRect(x - 23, y + 2, 46, 4);
-  ctx.fillStyle = '#8fa4ae';
-  ctx.fillRect(x - 22, y - 5, 44, 1);
-  ctx.fillRect(x - 22, y + 2, 44, 1);
-  ctx.fillStyle = '#eef4f6';
-  for (let rx = -18; rx <= 18; rx += 9) {
-    ctx.fillRect(x + rx, y - 4, 2, 1);
-    ctx.fillRect(x + rx, y + 3, 2, 1);
-  }
-  // Progressive battle cracks
-  if (damaged) {
-    ctx.fillStyle = '#120d0a';
-    ctx.fillRect(x - 8, y - 7, 2, 6);
-    ctx.fillRect(x - 6, y - 2, 2, 5);
-    ctx.fillRect(x + 9, y - 6, 2, 7);
-  }
-  if (critical) {
-    ctx.fillStyle = '#120d0a';
-    ctx.fillRect(x - 16, y - 8, 5, 5);
-    ctx.fillRect(x + 4, y - 8, 4, 6);
-    ctx.fillStyle = '#e06038';
-    ctx.fillRect(x - 7, y - 1, 1, 2);
-    ctx.fillRect(x + 10, y - 2, 1, 2);
-  }
-}
-
-function drawSpikesSprite(ctx, cx, cy, time, reduced) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const glint = reduced ? -1 : Math.floor(time * 4) % 5;
-  // Iron base grate recessed on the ground
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
-  ctx.fillRect(x - 23, y - 6, 46, 15);
-  ctx.fillStyle = '#242e34';
-  ctx.fillRect(x - 22, y - 5, 44, 13);
-  ctx.fillStyle = '#404f58';
-  ctx.fillRect(x - 22, y - 5, 44, 1);
-  ctx.fillRect(x - 22, y + 7, 44, 1);
-  // Back row of forged steel spikes
-  for (let i = 0; i < 5; i++) {
-    const sx = x - 19 + i * 9;
-    ctx.fillStyle = '#38464e';
-    ctx.fillRect(sx, y - 6, 6, 6);
-    ctx.fillStyle = '#8b9ba4';
-    ctx.fillRect(sx + 1, y - 9, 4, 7);
-    ctx.fillStyle = i === glint ? '#ffffff' : '#dce8ee';
-    ctx.fillRect(sx + 2, y - 11, 2, 5);
-  }
-  // Front staggered row of crimson-tipped thorn spikes
-  for (let i = 0; i < 4; i++) {
-    const sx = x - 15 + i * 9;
-    ctx.fillStyle = '#283238';
-    ctx.fillRect(sx, y, 6, 6);
-    ctx.fillStyle = '#a0b2bc';
-    ctx.fillRect(sx + 1, y - 3, 4, 7);
-    ctx.fillStyle = (i + 2) % 5 === glint ? '#fff4d0' : '#f2eee4';
-    ctx.fillRect(sx + 2, y - 5, 2, 4);
-    ctx.fillStyle = '#c4583c';
-    ctx.fillRect(sx + 2, y - 5, 2, 1);
-  }
-}
-
-function drawFlareSprite(ctx, cx, cy, time, reduced) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const pulse = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 4.5));
-  const sway = reduced ? 0 : (Math.sin(time * 8) > 0 ? 1 : 0);
-  // Warm ground illumination pool
   ctx.save();
-  ctx.globalAlpha = 0.14 + pulse * 0.06;
-  ctx.fillStyle = '#f0cb72';
-  ctx.beginPath();
-  ctx.arc(x, y, 28 + pulse * 4, 0, Math.PI * 2);
-  ctx.fill();
-  // Translucent reveal detection ring (115px matches simulation reveal radius)
-  ctx.globalAlpha = 0.22 + pulse * 0.08;
-  ctx.strokeStyle = '#f7d578';
-  ctx.lineWidth = 1;
-  ctx.setLineDash?.([4, 4]);
-  ctx.beginPath();
-  ctx.arc(x, y, 115, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash?.([]);
-  ctx.restore();
+  try {
+    rRect(ctx, x + 0.5, y + 0.5, s - 1, s - 1, s * 0.22);
+    ctx.fillStyle = '#132028';
+    ctx.fill();
+    ctx.strokeStyle = '#486772';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
-  // Shadow & iron tripod legs
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.5)';
-  ctx.fillRect(x - 10, y + 6, 20, 4);
-  ctx.fillStyle = '#2a343a';
-  ctx.fillRect(x - 8, y + 2, 3, 7);
-  ctx.fillRect(x + 5, y + 2, 3, 7);
-  ctx.fillRect(x - 1, y + 3, 3, 6);
-  // Ornate brass brazier bowl
-  ctx.fillStyle = '#5a421e';
-  ctx.fillRect(x - 9, y - 4, 18, 7);
-  ctx.fillStyle = '#c89b46';
-  ctx.fillRect(x - 8, y - 5, 16, 5);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x - 9, y - 5, 18, 2);
-  ctx.fillStyle = '#8a3418';
-  ctx.fillRect(x - 6, y - 6, 12, 2);
-  // Dancing radiant solar flame
-  ctx.fillStyle = '#e86824';
-  ctx.fillRect(x - 5 + sway, y - 12, 10, 7);
-  ctx.fillStyle = '#ffc84a';
-  ctx.fillRect(x - 4 + sway, y - 15, 8, 8);
-  ctx.fillStyle = '#fff9d6';
-  ctx.fillRect(x - 2 + sway, y - 17, 4, 7);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x - 1 + sway, y - 14, 2, 3);
+    const color = key.includes('fire') || key.includes('napalm') || key.includes('burn') ? '#ff6c30'
+      : key.includes('frost') || key.includes('cryo') || key.includes('slow') ? '#7ce8ff'
+      : key.includes('light') || key.includes('ricochet') || key.includes('stun') ? '#ffe14a'
+      : key.includes('poison') ? '#7dce6a'
+      : key.includes('orbital') || key.includes('beam') ? '#54f0ff'
+      : '#f0cb72';
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+  } finally {
+    ctx.restore();
+  }
 }
-

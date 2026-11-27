@@ -120,53 +120,40 @@ test('v4 removes all PvZ field modules, merge tower modules, harvest tower, and 
   }
 });
 
-test('1-tap draft auto-deploys turrets in AUTO_DEPLOY_ORDER and levels repeat picks Lv.1 -> Lv.4', () => {
-  const state = createRun({ seed: 202, difficulty: 'normal', runId: 'v4-1tap-level' });
+test('v5 1-tap draft offers ONLY Gun Mods & Auto Skills (zero turrets) and scales up to cap', () => {
+  const state = createRun({ seed: 202, difficulty: 'normal', runId: 'v5-1tap-solo' });
   prepare(state);
 
-  // First pick of 'bolt' auto-deploys to AUTO_DEPLOY_ORDER[0] (slot 1, beside Hero on slot 2)
-  state.phase = 'draft';
-  state.draft = {
-    options: [
-      { id: 'tower:bolt', kind: 'tower', type: 'bolt', action: 'deploy', rank: 0, nextRank: 1, cap: 4 },
-      { id: 'tower:fire', kind: 'tower', type: 'fire', action: 'deploy', rank: 0, nextRank: 1, cap: 4 },
-      { id: 'hero_upgrade:strike', kind: 'hero_upgrade', upgradeId: 'strike', superweapon: false, cap: 5, nextLevel: 1 }
-    ]
-  };
-  const first = chooseDraft(state, 0);
-  assert.equal(first.ok, true);
-  assert.equal(state.phase, 'playing');
-  const firstSlot = AUTO_DEPLOY_ORDER[0];
-  assert.equal(state.slots[firstSlot].unit.type, 'bolt');
-  assert.equal(state.slots[firstSlot].unit.rank, 1);
+  for (let i = 0; i < 20; i++) {
+    const cards = generateDraft(state);
+    assert.equal(cards.length, 3);
+    assert.equal(cards.some(c => c.kind === 'tower'), false, 'zero turret cards offered');
+    assert.ok(cards.every(c => c.kind === 'hero_upgrade'), 'every card is a Gun Mod or Auto Skill');
+  }
 
-  const dmgLv1 = getUnitStats(state.slots[firstSlot].unit, state).damage;
-
-  // Repeat picks of 'bolt' directly level it Lv.1 -> Lv.2 -> Lv.3 -> Lv.4 and emit upgrade_tower
-  for (let next = 2; next <= RANK_SCALE.maxRank; next++) {
-    state.events = [];
+  const dmgBefore = getUnitStats(state.slots[2].unit, state).damage;
+  for (let next = 1; next <= 5; next++) {
     state.phase = 'draft';
     state.draft = {
       options: [
-        { id: 'tower:bolt', kind: 'tower', type: 'bolt', action: 'upgrade', rank: next - 1, nextRank: next, cap: 4 },
-        { id: 'tower:fire', kind: 'tower', type: 'fire', action: 'deploy', rank: 0, nextRank: 1, cap: 4 },
-        { id: 'hero_upgrade:strike', kind: 'hero_upgrade', upgradeId: 'strike', superweapon: false, cap: 5, nextLevel: 1 }
+        { id: 'hero_upgrade:strike', kind: 'hero_upgrade', upgradeId: 'strike', superweapon: false, cap: 5, nextLevel: next },
+        { id: 'hero_upgrade:napalm', kind: 'hero_upgrade', upgradeId: 'napalm', superweapon: true, cap: 4, nextLevel: 1 },
+        { id: 'hero_upgrade:volley', kind: 'hero_upgrade', upgradeId: 'volley', superweapon: false, cap: 3, nextLevel: 1 }
       ]
     };
     const res = chooseDraft(state, 0);
     assert.equal(res.ok, true);
     assert.equal(state.phase, 'playing');
-    assert.equal(state.slots[firstSlot].unit.rank, next);
-    assert.ok(state.events.some(e => e.type === 'upgrade_tower' && e.rank === next && e.slot === firstSlot));
+    assert.equal(state.slots[2].unit.upgrades.strike, next);
+    assert.equal(state.slots.filter(s => s.unit).length, 1);
   }
 
-  const dmgLv4 = getUnitStats(state.slots[firstSlot].unit, state).damage;
-  assert.ok(dmgLv4 > dmgLv1 * 4, `Lv.4 damage (${dmgLv4}) should scale strongly over Lv.1 (${dmgLv1})`);
+  const dmgMax = getUnitStats(state.slots[2].unit, state).damage;
+  assert.ok(dmgMax >= dmgBefore + 25, `Lv.5 Heavy Rounds damage (${dmgMax}) scales cleanly over Lv.0 (${dmgBefore})`);
 
-  // At Lv.4 cap, 'bolt' must no longer appear in generateDraft!
   for (let i = 0; i < 15; i++) {
     const cards = generateDraft(state);
-    assert.equal(cards.some(c => c.kind === 'tower' && c.type === 'bolt'), false, 'maxed Lv.4 turret excluded from draft');
+    assert.equal(cards.some(c => c.upgradeId === 'strike'), false, 'maxed Gun Mod excluded from draft');
   }
 });
 
@@ -194,7 +181,7 @@ test('charge-based rerollDraft spends rerollsLeft cleanly and stops when deplete
   assert.equal(rerollDraft(state).ok, false, 'cannot reroll with 0 charges left');
 });
 
-test('wall thorns reflect damage on melee hits and Bastion hero upgrade grants +100 wall HP and +1 Aegis immunity', () => {
+test('wall thorns reflect damage on melee hits and Bastion upgrade grants +120 wall HP and +1 Aegis immunity', () => {
   const profile = createProfile('en');
   profile.currency = 500;
   buyEquipment(profile, 'vanguard_kit');
@@ -205,7 +192,7 @@ test('wall thorns reflect damage on melee hits and Bastion hero upgrade grants +
   const immBefore = state.wallImmunity;
 
   assert.equal(applyHeroUpgrade(state, 'bastion').ok, true);
-  assert.equal(state.fence.maxHp, maxBefore + 100);
+  assert.equal(state.fence.maxHp, maxBefore + 120);
   assert.equal(state.wallImmunity, immBefore + 1);
 
   // Consume Aegis immunity first, then verify thorns reflect damage to melee attacker
@@ -216,19 +203,17 @@ test('wall thorns reflect damage on melee hits and Bastion hero upgrade grants +
   assert.ok(biter.hp < 100, `wall thorns reflected damage (${biter.hp} < 100)`);
 });
 
-test('dragDrop swaps any two defenders cleanly and setTargeting switches all 4 targeting modes directly', async () => {
+test('v5 keeps Gunner anchored at center slot 2 and setTargeting switches all 4 targeting modes directly', async () => {
   const api = await createController({ storage: memoryStorage() });
-  assert.equal(api.act('start', { seed: 505, difficulty: 'normal', runId: 'v4-drag-target' }).ok, true);
+  assert.equal(api.act('start', { seed: 505, difficulty: 'normal', runId: 'v5-fixed-target' }).ok, true);
   const state = api.getState();
   const hero = state.slots[2].unit;
-  const frost = createUnit(state, 'frost', 2, 'tower');
-  state.slots[1].unit = frost;
 
-  const swapped = api.act('dragDrop', { from: 2, to: 1 });
-  assert.equal(swapped.ok, true);
-  assert.equal(swapped.swapped, true);
-  assert.equal(state.slots[1].unit, hero);
-  assert.equal(state.slots[2].unit, frost);
+  const dragged = api.act('dragDrop', { from: 2, to: 1 });
+  assert.equal(dragged.ok, false);
+  assert.equal(dragged.reason, 'heroFixed');
+  assert.equal(state.slots[2].unit, hero);
+  assert.equal(state.slots[1].unit, null);
 
   for (const mode of TARGET_MODES) {
     assert.equal(api.act('setTargeting', { index: 2, mode }).ok, true);
@@ -236,7 +221,7 @@ test('dragDrop swaps any two defenders cleanly and setTargeting switches all 4 t
   }
 });
 
-test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft modal, and 4-mode Unit Sheet', () => {
+test('mobile-first v5 UI renders Home, 3-Tab Armory, 2-Tab Codex (zero Turrets tab), Draft modal, and 4-mode Gunner Sheet', () => {
   const doc = makeDoc();
   const profile = createProfile('zh');
   const api = {
@@ -264,16 +249,16 @@ test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft
   assert.ok(findTestId(armory, 'armory-tab-upgrades'));
   assert.ok(findTestId(armory, 'gem-sockets'));
 
-  // 3-Tab Codex (Turrets / Hero & Arsenal / Enemies — zero Recipes)
+  // 2-Tab Codex (Guns & Skills / Zombies — zero Turrets or Recipes tabs)
   const codex = doc.createElement('div');
   renderMetaPanel(codex, 'codex', null, profile, api);
-  assert.ok(findTestId(codex, 'codex-tab-towers'));
+  assert.equal(findTestId(codex, 'codex-tab-towers'), null);
   assert.ok(findTestId(codex, 'codex-tab-hero'));
   assert.ok(findTestId(codex, 'codex-tab-enemies'));
   assert.equal(findTestId(codex, 'codex-tab-recipes'), null);
 
-  // Draft Modal with 3 cards + Reroll button
-  const run = createRun({ seed: 606, difficulty: 'normal', expedition: 'stage_1', profile, runId: 'v4-ui' });
+  // Draft Modal with 3 Gun Mod / Auto Skill cards + Reroll button
+  const run = createRun({ seed: 606, difficulty: 'normal', expedition: 'stage_1', profile, runId: 'v5-ui' });
   run.xp = run.nextDraftXp;
   updateDrafts(run);
   const draftHost = doc.createElement('div');
@@ -284,7 +269,7 @@ test('mobile-first UI renders Home, 3-Tab Armory, 3-Tab Codex, zero-scroll Draft
   assert.ok(findTestId(draftHost, 'draft-choice-2'));
   assert.ok(findTestId(draftHost, 'reroll-draft'));
 
-  // Unit Sheet with direct 4-mode targeting buttons
+  // Gunner Sheet with direct 4-mode targeting buttons
   chooseDraft(run, 0);
   const sheetHost = doc.createElement('div');
   renderBuildPanel(sheetHost, run, api);

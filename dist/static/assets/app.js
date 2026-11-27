@@ -1210,6 +1210,10 @@ async function createController(options = {}) {
         return {ok: true, index: -1};
       }
       if (!integerSlot(index)) return {ok: false, reason: 'bad-slot'};
+      if (!run.slots?.[index]?.unit) {
+        ui.selectedSlot = -1;
+        return {ok: true, index: -1};
+      }
       const previous = ui.selectedSlot;
       ui.selectedSlot = previous === index ? -1 : index;
       return {ok: true, index: ui.selectedSlot};
@@ -1230,28 +1234,17 @@ async function createController(options = {}) {
   }
 
   function moveUnits(from, to) {
+    void from;
+    void to;
     if (!run) return {ok: false, reason: 'no-run'};
-    if (!integerSlot(from) || !integerSlot(to) || from === to) return {ok: false, reason: 'bad-slot'};
-    if (!canPlan(run)) return {ok: false, reason: 'not-planning'};
-    const origin = run.slots[from].unit;
-    const target = run.slots[to].unit;
-    if (!origin && !target) return {ok: false, reason: 'emptySlot'};
-    const swapped = Boolean(origin && target);
-    run.slots[from].unit = target;
-    run.slots[to].unit = origin;
-    ui.selectedSlot = to;
-    saveRun();
-    return swapped ? {ok: true, swapped: true} : {ok: true};
+    return {ok: false, reason: 'heroFixed'};
   }
 
   function dragDrop(from, to) {
+    void from;
+    void to;
     if (!run) return {ok: false, reason: 'no-run'};
-    if (!integerSlot(from) || !integerSlot(to)) return {ok: false, reason: 'bad-slot', snapped: true};
-    if (from === to) return {ok: false, reason: 'same-slot', snapped: true};
-    if (!canPlan(run)) return {ok: false, reason: 'not-planning', snapped: true};
-    const origin = run.slots[from]?.unit;
-    if (!origin) return {ok: false, reason: 'emptySlot', snapped: true};
-    return moveUnits(from, to);
+    return {ok: false, reason: 'heroFixed', snapped: true};
   }
 
   function chooseDraft(index) {
@@ -1518,8 +1511,8 @@ const ENEMIES = {
   shambler: {
     name: {en: 'Ash Shambler', zh: '灰烬蹒者'},
     description: {
-      en: 'The common body: ordinary pace and health, no armor, and a steady bite on the shared fence.',
-      zh: '最常见的敌人：步速与生命都普通，没有护甲，以稳定的节奏啃咬共享栅栏。',
+      en: 'Standard frontline zombie with steady speed and no armor, chewing steadily at the wall.',
+      zh: '最常见的普通僵尸：步速和血量适中，没有护甲，贴墙后持续啃咬城墙。',
     },
     role: {en: 'Grunt', zh: '步兵'},
     threat: 1,
@@ -1534,8 +1527,8 @@ const ENEMIES = {
   runner: {
     name: {en: 'Wire Runner', zh: '线驰者'},
     description: {
-      en: 'The fastest body. Thin health, a light bite, and it reaches the shared fence well ahead of the ash shamblers, so shoot it early.',
-      zh: '最快的敌人。生命很薄、啃咬很轻，会远早于灰烬蹒者贴上共享栅栏，需要提前打掉。',
+      en: 'Fast sprinter with thin health that rushes the wall ahead of the horde.',
+      zh: '移动极快的突进僵尸，血量薄但会抢先冲到城墙前，适合用减速或速射拦截。',
     },
     role: {en: 'Raider', zh: '突进'},
     threat: 2,
@@ -1550,8 +1543,8 @@ const ENEMIES = {
   brute: {
     name: {en: 'Gate Brute', zh: '闸门蛮兽'},
     description: {
-      en: 'Huge and slow. Each bite tears a deep chunk from the shared fence, and its long health takes a focused fight.',
-      zh: '体型巨大、步速很慢。每一口都从共享栅栏撕下很深的一块，厚实的生命需要长时间集火。',
+      en: 'Huge and slow siege zombie with high health and heavy wall slams.',
+      zh: '体型巨大的重型攻城僵尸，移速慢但血量厚实，每一击都能重创城墙。',
     },
     role: {en: 'Siege', zh: '攻城'},
     threat: 5,
@@ -1566,8 +1559,8 @@ const ENEMIES = {
   armored: {
     name: {en: 'Plate Walker', zh: '板甲行者'},
     description: {
-      en: 'Thick plate sheds a bit more than half of every hit. It walks up and keeps biting the shared fence until that plate is focused down.',
-      zh: '厚甲会挡下略多于一半的每一击。它走向共享栅栏并持续啃咬，直到这层甲被集火拆掉。',
+      en: 'Heavy armor blocks over half of incoming damage. Use Armor Pierce or elemental burns.',
+      zh: '身披厚重铁甲，能减免一半以上伤害，用穿甲弹芯或燃烧火海可快速熔化。',
     },
     role: {en: 'Bulwark', zh: '重甲'},
     threat: 4,
@@ -1584,8 +1577,8 @@ const ENEMIES = {
     attackRange:135, projectileSpeed:190,
     name: {en: 'Sap Spitter', zh: '腐浆喷者'},
     description: {
-      en: 'Stops 135 px from the fence and spits acid. Set Priority targeting to focus it down early.',
-      zh: '在距防线 135 像素处停步喷酸，可用「高危」索敌优先集火清理。',
+      en: 'Stops 135 px from the wall and spits acid. Switch Priority targeting to drop it early.',
+      zh: '在距城墙 135 像素处停步喷酸，切「高危」索敌可优先将其点杀。',
     },
     role: {en: 'Sapper', zh: '工兵'},
     threat: 3,
@@ -1600,8 +1593,8 @@ const ENEMIES = {
   swarm: {
     name: {en: 'Dust Gnawer', zh: '尘啮'},
     description: {
-      en: 'Tiny and weak alone, with a small bite. They arrive in bunches and smother the shared fence by numbers.',
-      zh: '单只又小又弱，啃咬也很轻。它们成群涌来，靠数量淹没共享栅栏。',
+      en: 'Tiny and fragile alone, but arrives in huge packs to overwhelm the wall.',
+      zh: '单只脆弱矮小，但会成群结队涌来，靠燃油火海与分裂弹幕割草极爽。',
     },
     role: {en: 'Swarm', zh: '虫群'},
     threat: 1,
@@ -1617,8 +1610,8 @@ const ENEMIES = {
     statusResist:{slow:0.5,stun:0.65},
     name: {en: 'Crown Breach', zh: '冠裂兽'},
     description: {
-      en: 'Boss. At or below half (0.5) of its maximum health it enrages, moving faster and striking the shared fence harder and more often. It periodically calls weaker dust gnawers. It attacks only the fence.',
-      zh: '首领。生命降至最大生命的一半（0.5）或以下时会狂暴，移动更快，对共享栅栏的打击更重、更密，并周期性召唤较弱的尘啮。它只攻击栅栏。',
+      en: 'Boss. At or below half (0.5) of its maximum health it enrages, moving faster and striking the wall harder while summoning dust gnawers.',
+      zh: '首领。生命降至最大生命的一半（0.5）或以下时会狂暴，移速加快、重击城墙更凶猛，并定时召唤尘啮。',
     },
     role: {en: 'Boss', zh: '首领'},
     threat: 7,
@@ -1636,8 +1629,8 @@ const ENEMIES = {
   leaper: {
     name: {en: 'Ash Leaper', zh: '灰跃者'},
     description: {
-      en: 'Crouches briefly then leaps forward. Frost slow and Lightning stun break its charge.',
-      zh: '短暂蹲伏后向前扑跃，寒霜减速与电弧麻痹可有效打断其突进。',
+      en: 'Crouches briefly then vaults toward the wall. Frost slow and EM lightning break its jump.',
+      zh: '短暂蹲伏后向前扑跃直逼城墙，急冻减速与电磁麻痹可有效打断其突袭。',
     },
     role: {en: 'Leaper', zh: '跃袭'},
     threat: 3,
@@ -1653,8 +1646,8 @@ const ENEMIES = {
   splitter: {
     name: {en: 'Crack Brood', zh: '裂巢'},
     description: {
-      en: 'On death it releases two dust gnawers. It only bites the shared fence.',
-      zh: '死后放出两只尘啮。它只啃共享栅栏。',
+      en: 'Bursts into two dust gnawers when killed. Area fire and ice skills clean them up fast.',
+      zh: '死亡后会分裂出两只尘啮，配合火海与范围自动技能一网打尽。',
     },
     role: {en: 'Brood', zh: '裂变'},
     threat: 4,
@@ -1671,8 +1664,8 @@ const ENEMIES = {
     priority:true,
     name: {en: 'Ash Mender', zh: '烬补者'},
     description: {
-      en: 'Heals the most wounded enemy within range. It does not heal itself. It only bites the shared fence.',
-      zh: '治疗射程内伤得最重的敌人，不治疗自己。它只啃共享栅栏。',
+      en: 'Heals the most wounded zombie nearby (never itself). Snipe it early with Priority targeting.',
+      zh: '持续治疗附近受伤最重的僵尸（不治自己），建议切「高危」优先击杀。',
     },
     role: {en: 'Mender', zh: '治疗'},
     threat: 4,
@@ -1686,10 +1679,10 @@ const ENEMIES = {
     mend: {every: 1.8, amount: 46, range: 110},
   },
   shade: {
-    name: {en: 'Fence Shade', zh: '栅影'},
+    name: {en: 'Wall Shade', zh: '幽影'},
     description: {
-      en: 'Fades every 1.4 s to dodge direct hits. Poison clouds and burning areas still hurt it while faded.',
-      zh: '每 1.4 秒虚化规避直射，毒雾与持续灼烧在虚化期间依然生效。',
+      en: 'Phases every 1.4s to dodge direct bullets. Napalm fire seas and burn still hurt it.',
+      zh: '每 1.4 秒虚化躲避直射子弹，但火海与持续灼烧在虚化期间依然有效。',
     },
     role: {en: 'Shade', zh: '虚化'},
     threat: 3,
@@ -1706,8 +1699,8 @@ const ENEMIES = {
     priority:true,
     name: {en: 'Standard Wretch', zh: '旗孽'},
     description: {
-      en: 'While it lives, nearby enemies move three times as fast. It does not hurry itself. Kill it before the pack arrives. It only bites the shared fence.',
-      zh: '它存活时，附近的敌人变为三倍速。它不会加快自己。在那队人抵达前打掉它。它只啃共享栅栏。',
+      en: 'Drastically speeds up nearby zombies while alive. Take out the flag-bearer first!',
+      zh: '存活时让周围尸群疯狂加速冲锋，务必优先点杀旗手阻止尸潮撞墙！',
     },
     role: {en: 'Banner', zh: '旗手'},
     threat: 4,
@@ -1724,8 +1717,8 @@ const ENEMIES = {
     priority:true,
     name: {en: 'Ash Warden', zh: '烬卫'},
     description: {
-      en: 'Hits on one nearby ally are weaker while it lives. The warden itself is not shielded. Kill it first. It only bites the shared fence.',
-      zh: '它存活时，附近一名同伴受到的打击会变弱。烬卫自己没有这层护盾。先打掉它。它只啃共享栅栏。',
+      en: 'Projects a damage-reducing shield onto a nearby ally (not itself). Drop the warden first.',
+      zh: '为附近一名同伴提供强力减伤护盾（自己无盾），先打掉它瓦解防线。',
     },
     role: {en: 'Ward', zh: '护卫'},
     threat: 4,
@@ -1740,10 +1733,10 @@ const ENEMIES = {
   },
   charge: {
     priority:true,
-    name: {en: 'Cinder Charge', zh: '烬爆'},
+    name: {en: 'Cinder Charge', zh: '烬爆者'},
     description: {
-      en: 'Once it reaches the shared fence it bites once and lights a fuse. Kill it before the fuse ends. Otherwise it blows one heavy hole in the fence and dies.',
-      zh: '贴上共享栅栏后先啃一口并点燃引线。引线燃尽前打掉它。否则它会在栅栏上炸开一个大口然后死去。',
+      en: 'Lights an explosive fuse upon reaching the wall. Kill or knock it back before detonation!',
+      zh: '贴近城墙后点燃引线，倒计时结束会炸出巨额伤害，务必在爆炸前击杀或震退！',
     },
     role: {en: 'Charge', zh: '爆弹'},
     threat: 4,
@@ -1760,8 +1753,8 @@ const ENEMIES = {
     priority:true,
     name: {en: 'Ash Hush', zh: '烬寂'},
     description: {
-      en: 'Light bites. While it is on the shared fence, every defender recharges more slowly. Kill it and the board fires at full speed again.',
-      zh: '啃咬很轻。它贴在共享栅栏上时，所有防守者的充能都会变慢。打掉它，阵列就会恢复全速。',
+      en: 'Slows your reload speed while clamped to the wall. Clear it swiftly to keep full fire rate.',
+      zh: '贴墙时会拖慢枪手攻速与技能充能，尽快击杀以恢复全速倾泻火力。',
     },
     role: {en: 'Hush', zh: '静场'},
     threat: 4,
@@ -1848,82 +1841,109 @@ function makeStandardPhases(s, hp, opts) {
   const n = (en, zh) => ({ en, zh });
   const h = (mult) => roundScale(hp * mult);
   const phases = [
-    // Opening wave at 0.5s: immediate mowing action + quick first draft
+    // 1. Opening wave at 0.5s: immediate mowing action + rapid first 3-of-1 upgrade
     phase(
       `s${s}-open`, 0.5, 1.5, 1,
       n(`Stage ${s} · Vanguard`, `第 ${s} 关 · 前锋尸潮`),
       [
-        pack('swarm', Math.round(swarmCount * 0.65), 0.24, h(0.55)),
-        pack('shambler', 5, 0.55, h(0.45)),
+        pack('swarm', Math.round(swarmCount * 0.7), 0.24, h(0.42)),
+        pack('shambler', 5, 0.52, h(0.38)),
       ]
     ),
-    // Early pressure (12s - 52s)
+    // 2. Early wave (12s - 62s): rising tide, quick gun mod ramp
     phase(
-      `s${s}-rush`, 12, 52, 10,
+      `s${s}-rush`, 12, 62, 10,
       n('Rising Tide', '尸潮涌动'),
       [
-        pack('swarm', swarmCount, 0.3, h(0.75)),
-        pack(primary, primary === 'swarm' ? swarmCount : primary === 'runner' ? 5 : 4, primary === 'swarm' ? 0.25 : 1.2, h(0.85)),
-        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 4 : 2, 1.8, h(0.9)),
+        pack('swarm', swarmCount, 0.28, h(0.56)),
+        pack(primary, primary === 'swarm' ? swarmCount : primary === 'runner' ? 5 : 4, primary === 'swarm' ? 0.25 : 1.15, h(0.62)),
+        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 4 : 2, 1.75, h(0.68)),
       ],
       s >= 4
     ),
-    // Mid-stage escalation (55s - 105s)
+    // 3. First Horde Surge (66s - 122s): dense mowing action, unlocks Auto Skills
     phase(
-      `s${s}-clash`, 55, 105, 10,
-      n('Steel Clash', '防线激战'),
+      `s${s}-surge`, 66, 122, 11,
+      n('First Surge', '第一波尸潮'),
       [
-        pack('swarm', Math.round(swarmCount * 1.3), 0.22, h(0.9)),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.2) : 5, 1.0, h(1.0)),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.2, h(1.05)),
-        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.4, h(1.0))] : []),
+        pack('swarm', Math.round(swarmCount * 1.25), 0.22, h(0.72)),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.15) : 5, 1.0, h(0.78)),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.2, h(0.82)),
+        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.4, h(0.8))] : []),
       ],
       true
     ),
+    // 4. Mid-Stage Steel Clash (126s - 182s): mixed elites & supports
+    phase(
+      `s${s}-clash`, 126, 182, 11,
+      n('Steel Clash', '中段激战'),
+      [
+        pack('swarm', Math.round(swarmCount * 1.35), 0.2, h(0.86)),
+        pack(secondary, secondary === 'runner' ? 6 : 3, 1.15, h(0.92)),
+        pack(elite, elite === 'brute' ? 2 : 4, 1.9, h(0.96)),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.2, h(0.94))] : []),
+      ],
+      false
+    ),
   ];
 
-  // Optional Vanguard Mini-Boss on Stages 15, 19, 20
+  // Optional Mid-Stage Vanguard Mini-Boss on Boss / Late Stages (5, 10, 15, 19, 20)
   if (vanguardScale > 0) {
     phases.push(
       phase(
-        `s${s}-vanguard`, 107, 108, 1,
+        `s${s}-vanguard`, 156, 157, 1,
         n('Vanguard Boss', '先锋巨兽'),
         [
           pack('boss', 1, 0, roundScale(vanguardScale)),
-          pack('swarm', Math.round(swarmCount * 1.1), 0.22, h(0.9)),
-          pack(secondary, 4, 1.2, h(1.0)),
+          pack('swarm', Math.round(swarmCount * 1.15), 0.22, h(0.9)),
+          pack(secondary, 4, 1.2, h(0.96)),
         ],
         true
       )
     );
   }
 
-  // Late storm (110s - 152s)
+  // 5. Crimson Storm (188s - 240s): intense full-screen bullet-storm spectacle
   phases.push(
     phase(
-      `s${s}-storm`, 110, 152, 10,
+      `s${s}-storm`, 188, 240, 10,
       n('Crimson Storm', '赤潮狂攻'),
       [
-        pack('swarm', Math.round(swarmCount * 1.5), 0.18, h(1.0)),
-        pack(secondary, secondary === 'runner' ? 7 : 3, 1.1, h(1.05)),
-        pack(elite, elite === 'brute' ? 2 : 4, 1.9, h(1.12)),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.2, h(1.08))] : []),
+        pack('swarm', Math.round(swarmCount * 1.5), 0.18, h(0.98)),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.3) : 6, 0.95, h(1.04)),
+        pack(elite, elite === 'brute' ? 3 : 4, 1.8, h(1.1)),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.1, h(1.05))] : []),
       ],
       true
     )
   );
 
-  // Stage Finale (Boss or Final Wave at 156s)
+  // 6. Final Siege Buildup (244s - 280s): high pressure before boss/finale
+  phases.push(
+    phase(
+      `s${s}-siege`, 244, 280, 11,
+      n('Last Stand', '死守防线'),
+      [
+        pack('swarm', Math.round(swarmCount * 1.65), 0.16, h(1.02)),
+        pack(secondary, secondary === 'runner' ? 7 : 4, 1.0, h(1.06)),
+        pack(elite, elite === 'brute' ? 3 : 5, 1.65, h(1.12)),
+        ...(support ? [pack(support, 2, 2.0, h(1.06))] : []),
+      ],
+      true
+    )
+  );
+
+  // 7. Stage Finale (Boss or Final Assault at 288s -> ~5.0–5.4 min clear time)
   if (bossScale > 0) {
     phases.push(
       phase(
-        `s${s}-boss`, 156, 157, 1,
+        `s${s}-boss`, 288, 289, 1,
         n('Boss Siege', '首领压境'),
         [
           pack('boss', 1, 0, roundScale(bossScale)),
-          pack('swarm', Math.round(swarmCount * 1.6), 0.18, h(0.95)),
-          pack(elite, 2, 2.2, h(1.05)),
-          ...(support ? [pack(support, 2, 2.0, h(1.0))] : []),
+          pack('swarm', Math.round(swarmCount * 1.7), 0.17, h(0.96)),
+          pack(elite, 3, 2.0, h(1.08)),
+          ...(support ? [pack(support, 2, 1.9, h(1.02))] : []),
         ],
         true
       )
@@ -1931,13 +1951,13 @@ function makeStandardPhases(s, hp, opts) {
   } else {
     phases.push(
       phase(
-        `s${s}-finale`, 156, 157, 1,
+        `s${s}-finale`, 288, 289, 1,
         n('Final Assault', '终局总攻'),
         [
-          pack('swarm', Math.round(swarmCount * 1.8), 0.16, h(1.02)),
-          pack(elite, elite === 'brute' ? 3 : 5, 1.4, h(1.15)),
+          pack('swarm', Math.round(swarmCount * 1.9), 0.15, h(1.04)),
+          pack(elite, elite === 'brute' ? 4 : 5, 1.35, h(1.15)),
           pack(secondary, secondary === 'runner' ? 8 : 4, 0.9, h(1.08)),
-          ...(support ? [pack(support, 2, 1.8, h(1.05))] : []),
+          ...(support ? [pack(support, 2, 1.8, h(1.06))] : []),
         ],
         true
       )
@@ -1947,192 +1967,192 @@ function makeStandardPhases(s, hp, opts) {
 }
 
 const STAGE_SPECS = [
-  // Chapter 1: 荒原防线 (Stages 1-5) — Fast onboarding, escalating basics -> Boss 1
+  // Chapter 1: 荒原防线 (Stages 1-5) — Welcoming pure Solo-Gunner onboarding -> Boss 1
   {
-    stage: 1, chapter: 1, hp: 0.56, xpPace: 0.52, swarmCount: 12,
+    stage: 1, chapter: 1, hp: 0.65, xpPace: 1.05, swarmCount: 12,
     en: 'Ash Outpost', zh: '灰烬前哨',
-    focusEn: 'Horde intro · Rapid evolutions', focusZh: '割草入门 · 极速进化',
-    summaryEn: 'Dense shambler & gnawer waves kick off the defense. Level up fast and unleash auto super-weapons!',
-    summaryZh: '开局迎战成群灰烬蹒者与尘啮，快速三选一成型满屏弹幕！',
+    focusEn: 'Horde intro · Rapid upgrades', focusZh: '割草入门 · 极速成型',
+    summaryEn: 'Waves of shamblers and gnawers march toward the wall. Pick Gun Mods and Auto Skills to unleash bullet storms!',
+    summaryZh: '开局迎战成群蹒者与尘啮，三选一解锁枪械强化与自动技能，轻松割草！',
     enemies: ['shambler', 'swarm'],
     opts: { primary: 'shambler', secondary: 'swarm', elite: 'shambler', swarmCount: 12 },
   },
   {
-    stage: 2, chapter: 1, hp: 0.64, xpPace: 0.54, swarmCount: 14,
+    stage: 2, chapter: 1, hp: 0.78, xpPace: 1.15, swarmCount: 14,
     en: 'Broken Bridge', zh: '断桥尸群',
     focusEn: 'Fast Wire Runners', focusZh: '极速线驰突进',
-    summaryEn: 'Wire Runners sprint down the bridge toward your wall. Frost slow and rapid fire hold them back.',
-    summaryZh: '高速线驰者混入尸潮直冲城墙，寒霜减速与高频火力轻松拦截。',
+    summaryEn: 'Fast Wire Runners dash straight for the wall. Frost Rounds and Rapid Fire keep them pinned down.',
+    summaryZh: '高速线驰者混入尸潮直冲城墙，急冻减速弹与极速连射轻松拦截。',
     enemies: ['shambler', 'swarm', 'runner'],
     opts: { primary: 'runner', secondary: 'shambler', elite: 'runner', swarmCount: 14 },
   },
   {
-    stage: 3, chapter: 1, hp: 0.72, xpPace: 0.55, swarmCount: 15,
+    stage: 3, chapter: 1, hp: 0.92, xpPace: 1.25, swarmCount: 15,
     en: 'Acid Crossing', zh: '酸雾路口',
     focusEn: 'Ranged Sap Spitters', focusZh: '远程喷酸工兵',
-    summaryEn: 'Sap Spitters halt at mid-range to lob acid at the wall. Switch Priority targeting to drop them fast.',
-    summaryZh: '腐浆喷者在中距离停步喷酸，可用「高危」索敌优先集火清理。',
+    summaryEn: 'Sap Spitters halt mid-field to spit acid at the wall. Tap the Gunner to switch Priority targeting!',
+    summaryZh: '腐浆喷者在中距离停步喷酸，点击枪手切「高危」优先点杀它们。',
     enemies: ['swarm', 'runner', 'spitter'],
     opts: { primary: 'spitter', secondary: 'runner', elite: 'spitter', swarmCount: 15 },
   },
   {
-    stage: 4, chapter: 1, hp: 0.80, xpPace: 0.56, swarmCount: 16,
+    stage: 4, chapter: 1, hp: 1.08, xpPace: 1.32, swarmCount: 16,
     en: 'Rusted Barricade', zh: '铁锈路障',
     focusEn: 'Armored & Gate Brutes', focusZh: '重甲板甲与蛮兽',
-    summaryEn: 'Plate Walkers shrug off light hits while Gate Brutes march behind. Armor pierce & burn melt them.',
-    summaryZh: '板甲行者与闸门蛮兽重装压境，穿甲弹芯与燃烧弹幕是最佳克星。',
+    summaryEn: 'Plate Walkers shrug off light shots while Gate Brutes march behind. Armor Pierce and Napalm melt them.',
+    summaryZh: '板甲行者与闸门蛮兽重装压境，穿甲弹芯与燃油火海是最佳克星。',
     enemies: ['swarm', 'armored', 'brute', 'spitter'],
     opts: { primary: 'armored', secondary: 'spitter', elite: 'brute', swarmCount: 16 },
   },
   {
-    stage: 5, chapter: 1, hp: 0.88, xpPace: 0.54, swarmCount: 18, boss: true,
+    stage: 5, chapter: 1, hp: 1.25, xpPace: 1.35, swarmCount: 17, boss: true,
     en: 'First Crown', zh: '初代冠兽',
     focusEn: 'Chapter 1 Boss Siege', focusZh: '第一章首领决战',
-    summaryEn: 'Crown Breach leads its first siege against the bastion! Bring heavy crits and orbital beams.',
-    summaryZh: '冠裂兽首次率领尸潮压境！强化暴击、穿甲与全自动超武击溃首领。',
+    summaryEn: 'Crown Breach leads its first siege! Stack Deadeye Crit, Armor Pierce, and Orbital Laser to crush it.',
+    summaryZh: '冠裂兽首次率领尸潮压境！搭配致命暴击、穿甲与高能激光柱击溃首领。',
     enemies: ['swarm', 'runner', 'armored', 'boss'],
-    opts: { primary: 'runner', secondary: 'spitter', elite: 'armored', bossScale: 0.48, swarmCount: 18 },
+    opts: { primary: 'runner', secondary: 'spitter', elite: 'armored', vanguardScale: 0.55, bossScale: 0.95, swarmCount: 17 },
   },
 
   // Chapter 2: 废土围城 (Stages 6-10) — Splitters, Leapers, Menders, Shades -> Boss 2
   {
-    stage: 6, chapter: 2, hp: 1.05, xpPace: 0.58, swarmCount: 18,
+    stage: 6, chapter: 2, hp: 1.48, xpPace: 1.45, swarmCount: 18,
     en: 'Brood Tide', zh: '裂巢涌动',
     focusEn: 'Crack Broods & Swarms', focusZh: '分裂裂巢与虫海',
-    summaryEn: 'Crack Broods burst into dust gnawers on death. AoE napalm and split bullets shine here.',
-    summaryZh: '裂巢阵亡后会分裂出大量尘啮，燃油火海与分裂弹幕清场极爽。',
+    summaryEn: 'Crack Broods burst into dust gnawers on death. Napalm Fire Sea and Split Shrapnel clear crowds fast.',
+    summaryZh: '裂巢阵亡后会分裂出大量尘啮，燃油火海与子母分裂弹清场极爽。',
     enemies: ['swarm', 'splitter', 'runner'],
     opts: { primary: 'splitter', secondary: 'runner', elite: 'splitter', swarmCount: 18 },
   },
   {
-    stage: 7, chapter: 2, hp: 1.22, xpPace: 0.60, swarmCount: 19,
+    stage: 7, chapter: 2, hp: 1.72, xpPace: 1.50, swarmCount: 19,
     en: 'Leaper Ambush', zh: '灰跃突袭',
     focusEn: 'Leaping Ash Packs', focusZh: '跃袭突进伏击',
-    summaryEn: 'Ash Leapers crouch and vault straight toward the wall. Frost chill and lightning stun break their charge.',
-    summaryZh: '灰跃者蓄力扑跃直逼防线，寒霜与雷击麻痹可打断突袭节奏。',
+    summaryEn: 'Ash Leapers crouch and vault toward the wall. Glacial Barrage and EM Chain Strike break their charge.',
+    summaryZh: '灰跃者蓄力扑跃直逼城墙，干冰齐射柱与电磁连锁雷可打断突袭。',
     enemies: ['leaper', 'runner', 'swarm'],
     opts: { primary: 'leaper', secondary: 'runner', elite: 'leaper', support: 'spitter', swarmCount: 19 },
   },
   {
-    stage: 8, chapter: 2, hp: 1.42, xpPace: 0.60, swarmCount: 20,
+    stage: 8, chapter: 2, hp: 2.00, xpPace: 1.55, swarmCount: 20,
     en: 'Mender Column', zh: '烬医方阵',
     focusEn: 'Healers behind Tanks', focusZh: '治疗方阵与重盾',
-    summaryEn: 'Ash Menders patch up wounded Plate Walkers. Focus Priority targets or overwhelm with AoE DPS.',
-    summaryZh: '烬补者在重甲后方持续回血，切「高危」索敌或猛火压制快速破阵。',
+    summaryEn: 'Ash Menders heal wounded Plate Walkers. Use Priority targeting or heavy AoE skills to break their line.',
+    summaryZh: '烬补者在重甲后方持续回血，切「高危」索敌或自动技能群攻快速破阵。',
     enemies: ['armored', 'mender', 'spitter'],
     opts: { primary: 'armored', secondary: 'spitter', elite: 'brute', support: 'mender', swarmCount: 20 },
   },
   {
-    stage: 9, chapter: 2, hp: 1.65, xpPace: 0.60, swarmCount: 21,
+    stage: 9, chapter: 2, hp: 2.30, xpPace: 1.60, swarmCount: 20,
     en: 'Shade Corridor', zh: '幽影长廊',
-    focusEn: 'Phasing Fence Shades', focusZh: '虚化幽影潜行',
-    summaryEn: 'Fence Shades phase out to dodge direct bullets—poison clouds and burning napalm still scorch them.',
-    summaryZh: '栅影周期虚化规避直射，毒雾与火海持续灼烧仍可稳定杀伤。',
+    focusEn: 'Phasing Wall Shades', focusZh: '虚化幽影潜行',
+    summaryEn: 'Wall Shades phase out to dodge direct bullets—Napalm Fire Sea and Flame Rounds still scorch them.',
+    summaryZh: '幽影周期虚化规避直射，燃油火海与烈焰爆裂弹仍可持续灼烧击杀。',
     enemies: ['shade', 'spitter', 'leaper'],
-    opts: { primary: 'shade', secondary: 'leaper', elite: 'spitter', support: 'mender', swarmCount: 21 },
+    opts: { primary: 'shade', secondary: 'leaper', elite: 'spitter', support: 'mender', swarmCount: 20 },
   },
   {
-    stage: 10, chapter: 2, hp: 1.90, xpPace: 0.58, swarmCount: 22, boss: true,
+    stage: 10, chapter: 2, hp: 2.65, xpPace: 1.62, swarmCount: 21, boss: true,
     en: 'Horde Overlord', zh: '狂潮领主',
     focusEn: 'Chapter 2 Boss Siege', focusZh: '第二章首领决战',
-    summaryEn: 'An empowered Crown Breach advances with Mender and Splitter escorts. Upgrade your Core Gems!',
-    summaryZh: '强化冠裂兽携烬补者与裂巢压境，镶嵌核心宝石与武装装备全力迎战！',
+    summaryEn: 'An empowered Crown Breach advances with Mender and Splitter escorts. Socket Core Gems in the Armory!',
+    summaryZh: '强化冠裂兽携烬补者与裂巢压境，前往军械库镶嵌核心宝石与武装全力迎战！',
     enemies: ['splitter', 'mender', 'armored', 'boss'],
-    opts: { primary: 'splitter', secondary: 'leaper', elite: 'armored', support: 'mender', bossScale: 1.05, swarmCount: 22 },
+    opts: { primary: 'splitter', secondary: 'leaper', elite: 'armored', support: 'mender', vanguardScale: 1.1, bossScale: 1.85, swarmCount: 21 },
   },
 
   // Chapter 3: 焦土决战 (Stages 11-15) — Banners, Wardens, Charges, Hush -> Double Boss 3
   {
-    stage: 11, chapter: 3, hp: 2.15, xpPace: 0.60, swarmCount: 23,
+    stage: 11, chapter: 3, hp: 3.05, xpPace: 1.70, swarmCount: 22,
     en: 'Crimson Standard', zh: '血旗冲锋',
     focusEn: 'Haste Banner Rush', focusZh: '加速旗孽冲锋',
-    summaryEn: 'Standard Wretches triple the speed of nearby zombies. Snipe banners before the rush hits!',
-    summaryZh: '旗孽令周围尸群狂飙加速，优先点杀旗手阻止狂潮撞墙！',
+    summaryEn: 'Standard Wretches accelerate nearby zombies. Snipe banners early and sweep lanes with Armored Sweeper!',
+    summaryZh: '旗孽令周围尸群狂飙加速，优先点杀旗手并用重装装甲车碾压清路！',
     enemies: ['banner', 'runner', 'leaper', 'swarm'],
-    opts: { primary: 'runner', secondary: 'leaper', elite: 'armored', support: 'banner', swarmCount: 23 },
+    opts: { primary: 'runner', secondary: 'leaper', elite: 'armored', support: 'banner', swarmCount: 22 },
   },
   {
-    stage: 12, chapter: 3, hp: 2.42, xpPace: 0.60, swarmCount: 24,
+    stage: 12, chapter: 3, hp: 3.50, xpPace: 1.75, swarmCount: 23,
     en: 'Aegis Phalanx', zh: '盾墙推进',
     focusEn: 'Shielded Heavy Packs', focusZh: '护盾烬卫重装阵',
-    summaryEn: 'Ash Wardens shield nearby Brutes and Armored walkers. Cut down Wardens first to shatter the phalanx.',
-    summaryZh: '烬卫为同伴提供强力减伤护盾，优先斩杀烬卫瓦解铁壁方阵。',
+    summaryEn: 'Ash Wardens shield nearby Brutes and Plate Walkers. Drop Wardens first to shatter the phalanx.',
+    summaryZh: '烬卫为同伴提供强力减伤护盾，优先斩杀烬卫瓦解重装方阵。',
     enemies: ['warden', 'armored', 'brute', 'mender'],
-    opts: { primary: 'armored', secondary: 'mender', elite: 'brute', support: 'warden', swarmCount: 24 },
+    opts: { primary: 'armored', secondary: 'mender', elite: 'brute', support: 'warden', swarmCount: 23 },
   },
   {
-    stage: 13, chapter: 3, hp: 2.72, xpPace: 0.62, swarmCount: 25,
+    stage: 13, chapter: 3, hp: 4.00, xpPace: 1.80, swarmCount: 24,
     en: 'Cinder Tunnel', zh: '爆燃矿道',
     focusEn: 'Explosive Cinder Charges', focusZh: '引线自爆烬爆者',
     summaryEn: 'Cinder Charges ignite explosive fuses right at your wall. Knockback & burst stop them before detonation!',
-    summaryZh: '烬爆者贴墙点燃引线爆发巨额伤害，靠击退与爆发在引爆前清除。',
+    summaryZh: '烬爆者贴墙点燃引线爆发巨额伤害，靠击退与高爆发在引爆前清除。',
     enemies: ['charge', 'runner', 'splitter', 'spitter'],
-    opts: { primary: 'splitter', secondary: 'runner', elite: 'charge', support: 'spitter', swarmCount: 25 },
+    opts: { primary: 'splitter', secondary: 'runner', elite: 'charge', support: 'spitter', swarmCount: 24 },
   },
   {
-    stage: 14, chapter: 3, hp: 3.05, xpPace: 0.62, swarmCount: 25,
+    stage: 14, chapter: 3, hp: 4.55, xpPace: 1.85, swarmCount: 24,
     en: 'Silent Night', zh: '寂静寒夜',
     focusEn: 'Ash Hush Jamming', focusZh: '烬寂降频干扰',
-    summaryEn: 'Ash Hush slows defender reload speed while clamped to the wall. Clear it swiftly to keep firing!',
-    summaryZh: '烬寂贴墙会拖慢全队攻速，搭配高能射线与电弧连锁迅速清场。',
+    summaryEn: 'Ash Hush slows fire rate while clamped to the wall. Pair Orbital Laser and EM Chain Strike to clear it fast!',
+    summaryZh: '烬寂贴墙会拖慢攻速，搭配高能激光柱与电磁连锁雷迅速清场。',
     enemies: ['hush', 'shade', 'spitter', 'warden'],
-    opts: { primary: 'shade', secondary: 'spitter', elite: 'warden', support: 'hush', swarmCount: 25 },
+    opts: { primary: 'shade', secondary: 'spitter', elite: 'warden', support: 'hush', swarmCount: 24 },
   },
   {
-    stage: 15, chapter: 3, hp: 3.40, xpPace: 0.60, swarmCount: 26, boss: true,
+    stage: 15, chapter: 3, hp: 5.15, xpPace: 1.85, swarmCount: 25, boss: true,
     en: 'Scorched Sovereign', zh: '焦土霸主',
     focusEn: 'Vanguard + Boss Siege', focusZh: '双首领焦土决战',
-    summaryEn: 'A mid-stage Vanguard Boss softens the wall before the Scorched Sovereign arrives with Wardens & Banners.',
+    summaryEn: 'A mid-stage Vanguard Boss tests your wall before the Scorched Sovereign arrives with Wardens & Banners.',
     summaryZh: '中段先锋巨兽先声夺人，终局焦土霸主携旗孽与烬卫全面总攻！',
     enemies: ['banner', 'warden', 'charge', 'boss'],
-    opts: { primary: 'charge', secondary: 'banner', elite: 'warden', support: 'mender', vanguardScale: 0.95, bossScale: 1.75, swarmCount: 26 },
+    opts: { primary: 'charge', secondary: 'banner', elite: 'warden', support: 'mender', vanguardScale: 1.7, bossScale: 3.1, swarmCount: 25 },
   },
 
   // Chapter 4: 终末壁垒 (Stages 16-20) — Endgame Mastery
   {
-    stage: 16, chapter: 4, hp: 3.80, xpPace: 0.62, swarmCount: 26,
+    stage: 16, chapter: 4, hp: 5.80, xpPace: 1.90, swarmCount: 25,
     en: 'Iron Deluge', zh: '钢铁洪流',
     focusEn: 'Juggernaut Armored Wave', focusZh: '重甲蛮兽钢铁洪流',
     summaryEn: 'Wall-to-wall Brutes, Armored walkers, Wardens, and Menders. Bring HP Shredder & Armor Pierce!',
-    summaryZh: '蛮兽、板甲、烬卫与烬补者全重装压境，百分比斩杀与穿甲显威！',
+    summaryZh: '蛮兽、板甲、烬卫与烬补者全重装压境，百分比斩杀宝石与穿甲显威！',
     enemies: ['brute', 'armored', 'warden', 'mender'],
-    opts: { primary: 'armored', secondary: 'mender', elite: 'brute', support: 'warden', swarmCount: 26 },
+    opts: { primary: 'armored', secondary: 'mender', elite: 'brute', support: 'warden', swarmCount: 25 },
   },
   {
-    stage: 17, chapter: 4, hp: 4.25, xpPace: 0.62, swarmCount: 27,
+    stage: 17, chapter: 4, hp: 6.50, xpPace: 1.95, swarmCount: 26,
     en: 'Shadow Detonation', zh: '暗影爆破',
     focusEn: 'Shades, Charges & Banners', focusZh: '幽影自爆极速突袭',
-    summaryEn: 'Banner-boosted Leapers, phasing Shades, and Cinder Charges strike from every lane.',
-    summaryZh: '旗孽加速的灰跃、幽影与自爆烬爆多路齐发，全屏超武压制致胜！',
+    summaryEn: 'Banner-boosted Leapers, phasing Shades, and Cinder Charges strike from every angle.',
+    summaryZh: '旗孽加速的灰跃、幽影与自爆烬爆多路齐发，靠全屏自动技能压制致胜！',
     enemies: ['shade', 'charge', 'leaper', 'banner'],
-    opts: { primary: 'shade', secondary: 'leaper', elite: 'charge', support: 'banner', swarmCount: 27 },
+    opts: { primary: 'shade', secondary: 'leaper', elite: 'charge', support: 'banner', swarmCount: 26 },
   },
   {
-    stage: 18, chapter: 4, hp: 4.75, xpPace: 0.62, swarmCount: 28,
+    stage: 18, chapter: 4, hp: 7.25, xpPace: 2.00, swarmCount: 27,
     en: 'Hushed Horde', zh: '静默尸海',
     focusEn: 'Massive Swarm & Hush', focusZh: '静默干扰无尽虫海',
-    summaryEn: 'Endless Brood splits and Spitters backed by Ash Hush jamming. Keep AoE super-weapons cycling!',
-    summaryZh: '裂巢、喷酸与烬寂交织成铺天盖地的尸海，靠高频超武循环破局！',
+    summaryEn: 'Relentless Brood splits and Spitters backed by Ash Hush jamming. Keep Auto Skills cycling non-stop!',
+    summaryZh: '裂巢、喷酸与烬寂交织成铺天盖地的尸海，靠高频自动技能循环破局！',
     enemies: ['hush', 'splitter', 'swarm', 'spitter'],
-    opts: { primary: 'splitter', secondary: 'spitter', elite: 'charge', support: 'hush', swarmCount: 28 },
+    opts: { primary: 'splitter', secondary: 'spitter', elite: 'charge', support: 'hush', swarmCount: 27 },
   },
   {
-    stage: 19, chapter: 4, hp: 5.30, xpPace: 0.60, swarmCount: 29,
+    stage: 19, chapter: 4, hp: 8.10, xpPace: 2.00, swarmCount: 28,
     en: 'Eve of Dawn', zh: '破晓前夜',
     focusEn: 'All-Elite Gauntlet', focusZh: '全精英混合试炼',
     summaryEn: 'Every elite zombie role plus a Vanguard Crown Breach tests your complete build before Stage 20.',
-    summaryZh: '全部精英尸种与先锋巨兽齐上阵，终局决战前的终极阵容检验！',
+    summaryZh: '全部精英尸种与先锋巨兽齐上阵，第 20 关终极决战前的全能检验！',
     enemies: ['banner', 'warden', 'hush', 'brute'],
-    opts: { primary: 'warden', secondary: 'banner', elite: 'brute', support: 'hush', vanguardScale: 1.45, swarmCount: 29 },
+    opts: { primary: 'warden', secondary: 'banner', elite: 'brute', support: 'hush', vanguardScale: 2.4, swarmCount: 28 },
   },
   {
-    stage: 20, chapter: 4, hp: 5.90, xpPace: 0.58, swarmCount: 30, boss: true,
+    stage: 20, chapter: 4, hp: 9.00, xpPace: 2.05, swarmCount: 29, boss: true,
     en: 'Crown Cataclysm', zh: '终局冠裂',
     focusEn: 'Stage 20 Final Boss', focusZh: '第 20 关终极首领',
     summaryEn: 'The ultimate 20th-stage bastion defense! Conquer the Vanguard and full-power Crown Breach to master the campaign.',
-    summaryZh: '前 20 关终极决战！击溃先锋巨兽与满血终局冠裂兽，荣登壁垒之巅！',
+    summaryZh: '前 20 关终极决战！击溃先锋巨兽与满血终局冠裂兽，荣登城墙之巅！',
     enemies: ['banner', 'warden', 'charge', 'boss'],
-    opts: { primary: 'armored', secondary: 'charge', elite: 'warden', support: 'banner', vanguardScale: 1.55, bossScale: 2.65, swarmCount: 30 },
+    opts: { primary: 'armored', secondary: 'charge', elite: 'warden', support: 'banner', vanguardScale: 2.6, bossScale: 4.5, swarmCount: 29 },
   },
 ];
 
@@ -2157,7 +2177,7 @@ for (const spec of STAGE_SPECS) {
     stage: spec.stage,
     chapter: spec.chapter,
     boss: Boolean(spec.boss),
-    minutes: 3,
+    minutes: 5,
     xpPace: spec.xpPace,
     firstClearBonus: 40 + (spec.stage - 1) * 10,
     shortName: { en: spec.en, zh: spec.zh },
@@ -2823,35 +2843,36 @@ const ROWS = [
   ['badge.split', 'Split', '分裂'], ['badge.chain', 'EM', '电磁'], ['badge.napalm', 'Napalm', '火海'],
   ['badge.armored_car', 'Tank', '装甲车'], ['badge.cryo_barrage', 'Glacial', '冰柱'], ['badge.orbital_beam', 'Laser', '激光'],
   ['split_shot', 'Split Shrapnel', '子母分裂弹'],
-  ['ricochet', 'EM Ricochet', '电磁穿刺'],
-  ['napalm', 'Napalm Barrage', '燃油弹火海'],
+  ['ricochet', 'EM Chain Strike', '电磁连锁雷'],
+  ['napalm', 'Napalm Fire Sea', '燃油弹火海'],
   ['armored_car', 'Armored Sweeper', '重装装甲车'],
-  ['cryo_barrage', 'Glacial Barrage', '干冰连发柱'],
-  ['orbital_beam', 'Orbital Laser', '高能射线'],
-  ['starterPackTitle', 'Vanguard Starter Supply', '开荒爽玩补给包'],
-  ['starterPackDesc', 'Claim +180 Coins + free Opening Airdrop Gem (instant 3-choice boost every run)!', '一键免费领 180 币 +【空投先锋宝石】（每局开场即享免费三选一），直接起飞！'],
-  ['claimStarterPack', 'Claim +180 & Free Gem', '一键领取（+180币 +空投宝石）'],
-  ['starterClaimed', 'Starter Supply Claimed · Opening Airdrop Ready', '开荒补给已领取 · 空投宝石已装配'],
+  ['cryo_barrage', 'Glacial Barrage', '干冰齐射柱'],
+  ['orbital_beam', 'Orbital Laser', '高能激光柱'],
+  ['overclock', 'Firepower Overclock', '火力超频'],
+  ['starterPackTitle', 'Starter Supply Pack', '新手补给包'],
+  ['starterPackDesc', 'Free +180 Coins + Opening Airdrop Gem (instant 3-of-1 upgrade at the start of every stage)!', '免费领 180 金币 +【开局空投宝石】（每关开局即送免费三选一），爽快起步！'],
+  ['claimStarterPack', 'Claim +180 & Free Gem', '免费领取（+180金币 +开局宝石）'],
+  ['starterClaimed', 'Starter Pack Claimed · Opening Gem Equipped', '新手补给已领取 · 开局空投宝石已装备'],
   ['gems', 'Core Gems', '核心宝石'],
-  ['gemsIntro', 'Equip up to 3 core gems for dramatic BangBang build powers. Tap any socket to swap.', '最多镶嵌 3 颗核心宝石，解锁城墙免疫、开局空投、贯穿与百分比斩杀。'],
+  ['gemsIntro', 'Equip up to 3 Core Gems for wall shields, opening drops, pierce & crit shred.', '最多镶嵌 3 颗核心宝石，解锁城墙免伤、开局三选一、子弹穿透与暴击斩血。'],
   ['gemSlots', 'Equipped Slots', '已镶嵌槽位'],
   ['gemSlotEmpty', 'Empty', '空槽'],
   ['gemTierEpic', 'Epic', '史诗'],
   ['gemTierLegend', 'Legend', '传说'],
-  ['openingDraft', 'Opening Airdrop', '开局空投'],
-  ['wallImmunity', 'Wall Immunity', '城墙免疫'],
-  ['heroPierce', 'Hero Pierce', '英雄穿透'],
+  ['openingDraft', 'Opening Airdrop', '开局免费选卡'],
+  ['wallImmunity', 'Wall Shield', '城墙免伤'],
+  ['heroPierce', 'Bullet Pierce', '子弹穿透'],
   ['statusDamage', 'Elemental Surge', '异常增伤'],
   ['shredPercent', 'Crit Max-HP Shred', '暴击斩血'],
-  ['superweaponHaste', 'Super-Weapon CD', '超武冷却'],
-  ['starterWeapon', 'Opening Evolution', '开局随机超武'],
-  ['aegisChip', 'Aegis', '盾'],
+  ['superweaponHaste', 'Skill Cooldown', '技能冷却'],
+  ['starterWeapon', 'Starter Auto Skill', '开局赠送技能'],
+  ['aegisChip', 'Shield', '免伤'],
   ['openingDropTitle', 'Opening Airdrop · Pick 1 of 3', '开局空投 · 免费三选一'],
   ['arsenalNapalm', 'Napalm', '火海'],
   ['arsenalCar', 'Sweeper', '装甲车'],
-  ['arsenalCryo', 'Glacial', '冰柱'],
+  ['arsenalCryo', 'Glacial', '干冰'],
   ['arsenalBeam', 'Laser', '激光'],
-  ['arsenalEm', 'EM', '雷击'],
+  ['arsenalEm', 'EM', '天雷'],
   ['tabBattle', 'Battle', '出击'],
   ['tabArmory', 'Armory', '军械'],
   ['tabCodex', 'Codex', '图鉴'],
@@ -2859,21 +2880,23 @@ const ROWS = [
   ['armoryTabGems', 'Gems', '核心宝石'],
   ['armoryTabGear', 'Gear', '武装装备'],
   ['armoryTabUpgrades', 'Upgrades', '永久强化'],
-  ['tagSuperweapon', 'Super-Weapon', '自动超武'],
-  ['tagHero', 'Hero Mod', '英雄进化'],
+  ['tagSuperweapon', 'Auto Skill', '自动技能'],
+  ['tagHero', 'Gun Mod', '枪械强化'],
   ['tagNewTurret', 'New Turret', '新炮塔'],
   ['tagUpgradeTurret', 'Upgrade Lv.{from}→{to}', '升级 Lv.{from}→{to}'],
-  ['deployNow', 'Deploy Bastion', '开始防线'],
-  ['swapHint', 'Drag to move or swap', '拖动可移位或互换'],
-  ['teamDamage', 'Team damage', '全队伤害'],
-  ['teamHaste', 'Team attack speed', '全队攻速'],
-  ['teamCrit', 'Team crit chance', '全队暴击率'],
+  ['deployNow', 'Start Defense', '开始防线'],
+  ['swapHint', 'Tap below to switch target priority', '点击下方按钮切换优先攻击目标'],
+  ['heroFixed', 'Gunner holds the center wall position.', '防线枪手固定驻守城墙正中。'],
+  ['gunnerTitle', 'Wall Gunner', '防线枪手'],
+  ['teamDamage', 'Gun damage', '枪械伤害'],
+  ['teamHaste', 'Fire rate', '枪械攻速'],
+  ['teamCrit', 'Crit chance', '暴击率'],
   ['freeRerolls', 'Extra rerolls', '额外刷新'],
-  ['critKnockback', 'Critical knockback', '暴击击退'],
-  ['surgeCharges', 'Surge charges', '冲击波充能'],
-  ['surgePower', 'Surge power', '冲击波威力'],
+  ['critKnockback', 'Crit knockback', '暴击击退'],
+  ['surgeCharges', 'Shockwave charges', '冲击波充能'],
+  ['surgePower', 'Shockwave power', '冲击波威力'],
   ['thorns', 'Wall thorns', '城墙反伤'],
-  ['economy', 'War Chest', '战备增幅'],
+  ['economy', 'War Chest', '战备补给'],
   ['stageLabel', 'Stage {n}', '第 {n} 关'],
   ['stageShort', 'S{n}', '第{n}关'],
   ['playStage', 'Start · Stage {n}', '开始游戏 · 第 {n} 关'],
@@ -2893,52 +2916,52 @@ const ROWS = [
   ['nextStageAria', 'Next stage', '下一关'],
 
   ['systems', 'Systems online', '已接入系统'],
-  ['not-planning', 'Cannot move units right now', '现在不能调整站位'],
-  ['no-run', 'Start a run first', '先开始一局'],
-  ['bad-slot', 'Choose a wall slot', '请选择城墙格'],
-  ['bad-choice', 'Choose one of the three cards', '请选择三张卡中的一张'],
+  ['not-planning', 'Gunner stays in the center position', '枪手固定驻守城墙正中'],
+  ['no-run', 'Start a stage first', '请先开始一关'],
+  ['bad-slot', 'Tap the Gunner at center wall', '请点击城墙正中的枪手'],
+  ['bad-choice', 'Pick one of the three upgrades', '请选择三张强化卡中的一张'],
   ['nextStats', 'After this choice', '选择之后'],
-  ['draftWaiting', 'Tap a card to apply immediately.', '点选一张卡片立即生效。'],
+  ['draftWaiting', 'Tap any card to power up right away.', '点击任意一张强化卡，立即生效。'],
   ['cancelPick', 'Back', '返回'],
   ['attacks', 'Attacks', '攻击'],
   ['reduction', 'slow', '减速'],
-  ['kindUpgrade', 'Hero upgrade', '英雄进化'],
-  ['slotLabel', 'Slot', '格子'],
-  ['hero_protected', 'The hero stays on the wall.', '英雄始终驻守防线。'],
-  ['same', 'Choose two different slots.', '请选择两个不同的格子。'],
-  ['same_slot', 'Choose two different slots.', '请选择两个不同的格子。'],
-  ['empty', 'That slot is empty.', '这个格子是空的。'],
-  ['not_planning', 'Cannot rearrange right now.', '现在不能调整站位。'],
-  ['phase', 'Drag defenders to move or swap slots anytime.', '战斗中可随时拖动防守单位调整站位。'],
-  ['max_rank', 'Already at max level (Lv.4).', '已达到最高等级（Lv.4）。'],
+  ['kindUpgrade', 'Gun Mod', '枪械强化'],
+  ['slotLabel', 'Position', '位置'],
+  ['hero_protected', 'The Gunner stays at the center wall.', '防线枪手始终驻守城墙正中。'],
+  ['same', 'Gunner is anchored in the center.', '枪手固定在正中位置。'],
+  ['same_slot', 'Gunner is anchored in the center.', '枪手固定在正中位置。'],
+  ['empty', 'No unit there.', '此处没有单位。'],
+  ['not_planning', 'Gunner holds the center wall position.', '枪手固定驻守城墙正中。'],
+  ['phase', 'Tap the Gunner anytime to check stats or switch target priority.', '战斗中随时点击枪手可查看属性并切换优先攻击目标。'],
+  ['max_rank', 'Already at max level.', '已达到满级。'],
   ['capped', 'Already at max level.', '该强化已满级。'],
-  ['frost', 'Chills and slows enemies in range.', '减速范围内的敌人。'],
-  ['lightning', 'Chains a strike between enemies.', '在敌人之间连锁电击。'],
-  ['execute', 'Deals heavier damage to weakened enemies.', '对残血敌人造成更重伤害。'],
-  ['surge', 'Surge', '冲击波'],
-  ['targeting', 'Targeting', '索敌'],
-  ['reroll', 'Reroll', '刷新'],
+  ['frost', 'Chills and slows zombies in range.', '减速范围内的僵尸。'],
+  ['lightning', 'Chains lightning strikes between zombies.', '在僵尸之间弹射连锁雷击。'],
+  ['execute', 'Deals heavier damage to low-HP zombies.', '对残血僵尸造成额外斩杀伤害。'],
+  ['surge', 'Wave', '冲击波'],
+  ['targeting', 'Target', '优先攻击'],
+  ['reroll', 'Refresh', '刷新'],
   ['free', 'Free', '免费'],
-  ['foremost', 'Foremost', '最前'],
-  ['priority', 'Priority', '高危'],
-  ['strongest', 'Strongest', '最肉'],
-  ['weakest', 'Weakest', '残血'],
-  ['selectMission', 'Sortie', '选择出击'],
-  ['corpseExplode', 'Corpse explosion', '尸爆'],
-  ['thermalShock', 'Thermal shock', '蒸汽爆破'],
-  ['armorPen', 'Armor penetration', '护甲穿透'],
+  ['foremost', 'Closest', '最前'],
+  ['priority', 'Specials', '高危'],
+  ['strongest', 'Tankiest', '最肉'],
+  ['weakest', 'Lowest HP', '残血'],
+  ['selectMission', 'Stage Select', '选择关卡'],
+  ['corpseExplode', 'Blast on kill', '击杀爆炸'],
+  ['thermalShock', 'Thermal blast', '冰火爆破'],
+  ['armorPen', 'Armor pierce', '无视护甲'],
   ['knockback', 'Knockback', '击退'],
-  ['poisonDetonate', 'Poison reaction', '触媒反应'],
-  ['cloud', 'Hazard zone', '火海/毒雾'],
-  ['legacyRunReset', 'Profile migrated! Start a fresh v4 battle.', '档案已自动继承，请开启全新的 v4 爽玩对局！'],
+  ['poisonDetonate', 'Acid burst', '酸液反应'],
+  ['cloud', 'Fire sea', '火海'],
+  ['legacyRunReset', 'Profile migrated! Start a fresh v5 stage.', '档案已自动继承，请开启全新升级的对局！'],
 
   // Brand and navigation
   ['title', 'Fencefall', '最后一道防线'],
   ['titleLockup', 'Fencefall · 最后一道防线', 'Fencefall · 最后一道防线'],
-  ['subtitle', 'Bastion Auto-Shooter', '全自动城墙弹幕防线'],
-  ['tagline', 'Zero active buttons. Pick 1 of 3, unleash full-screen super-weapons.', '零主动按键，三选一构筑满屏弹幕与全自动超武。'],
+  ['subtitle', 'Solo Gunner · Auto-Skill Defense', '单枪死守 · 自动技能割草'],
+  ['tagline', 'Hold the center wall. Upgrade your gun and unleash full-screen auto skills.', '枪手自动瞄准开火，升级三选一解锁满屏枪械强化与自动技能。'],
   ['play', 'Play', '出击'],
-  ['playHint', 'Start a new fight', '开始一场新的防线战斗'],
+  ['playHint', 'Start a new stage', '开始挑战关卡'],
   ['continue', 'Continue', '继续战斗'],
   ['continueHint', 'Resume the saved fight', '继续已保存的战斗'],
   ['restart', 'Restart', '重开'],
@@ -2952,10 +2975,10 @@ const ROWS = [
   ['no', 'No', '否'],
   ['menu', 'Menu', '菜单'],
   ['battle', 'Battle', '战斗'],
-  ['newRun', 'New run', '新对局'],
+  ['newRun', 'New stage', '新关卡'],
   ['abandon', 'Abandon', '放弃'],
   ['loading', 'Loading', '加载中'],
-  ['loadingGame', 'Fortifying the bastion…', '正在架设城墙防线…'],
+  ['loadingGame', 'Fortifying the wall…', '正在架设城墙防线…'],
   ['save', 'Save', '保存'],
   ['saved', 'Saved', '已保存'],
   ['version', 'Version', '版本'],
@@ -2980,8 +3003,8 @@ const ROWS = [
   ['paused', 'Paused', '已暂停'],
   ['pausedHidden', 'Paused while page hidden', '切出页面已自动暂停'],
   ['pausedHiddenBody', 'Tap Resume to jump right back into the fight.', '点击继续即可无缝回到战斗。'],
-  ['planning', 'Ready', '整备'],
-  ['planningHint', 'Tap a unit to switch targeting, or drag to swap slots.', '点击单位切换索敌，拖动可互换站位。'],
+  ['planning', 'Level Up', '升级选卡'],
+  ['planningHint', 'Tap the Gunner to inspect gun stats or switch target priority.', '点击城墙正中的枪手可查看枪械属性或切换优先攻击目标。'],
   ['playing', 'Fighting', '战斗中'],
   ['speed', 'Speed', '倍速'],
   ['speed1', '1×', '1×'],
@@ -2993,8 +3016,8 @@ const ROWS = [
   ['speedWhilePaused', 'Speed applies when the fight resumes.', '恢复战斗后立即生效。'],
   ['fence', 'Wall', '城墙'],
   ['fenceHp', 'Wall {current}/{max}', '城墙 {current}/{max}'],
-  ['fenceBonus', 'Wall HP', '城墙生命'],
-  ['fenceDanger', 'Wall Critical', '防线危急'],
+  ['fenceBonus', 'Wall HP', '城墙血量'],
+  ['fenceDanger', 'Wall Critical', '城墙危急'],
   ['fenceSafe', 'Wall Holding', '城墙稳固'],
   ['wave', 'Wave', '波次'],
   ['waveNumber', 'Wave {wave}', '第 {wave} 波'],
@@ -3016,9 +3039,9 @@ const ROWS = [
   ['time', 'Time', '耗时'],
   ['activeTime', 'Battle time', '战斗耗时'],
   ['timeHint', 'Only live battle time counts.', '仅统计实战时间。'],
-  ['enemy', 'Enemy', '敌人'],
-  ['enemies', 'Enemies', '敌人'],
-  ['enemyCount', 'Enemies {count}', '敌人 {count}'],
+  ['enemy', 'Zombie', '僵尸'],
+  ['enemies', 'Zombies', '僵尸图鉴'],
+  ['enemyCount', 'Zombies {count}', '僵尸 {count}'],
   ['boss', 'Boss', '首领'],
   ['shot', 'Shot', '射击'],
   ['hit', 'Hit', '命中'],
@@ -3031,17 +3054,17 @@ const ROWS = [
   ['normal', 'Normal', '标准'],
   ['hard', 'Hard', '困难'],
   ['nightmare', 'Nightmare', '噩梦'],
-  ['rewardMultiplier', 'Reward multiplier', '报酬倍率'],
+  ['rewardMultiplier', 'Reward multiplier', '奖励倍率'],
   ['rewardMultiplierValue', '×{value}', '×{value}'],
-  ['rewardLine', 'Reward ×{value}', '报酬 ×{value}'],
+  ['rewardLine', 'Reward ×{value}', '奖励 ×{value}'],
   ['timesValue', '×{value}', '×{value}'],
   ['percentValue', '{value}%', '{value}%'],
-  ['higherDifficultyPays', 'Higher difficulties pay more.', '难度越高，报酬越多。'],
-  ['difficultyHint', 'Harder fights pay a higher multiplier.', '战斗越难，报酬倍率越高。'],
-  ['difficultyEasyHint', 'Softer enemies and a baseline reward.', '敌人更温和，报酬为基准。'],
-  ['difficultyNormalHint', 'The intended fight, with a higher reward.', '预定难度，报酬更高。'],
-  ['difficultyHardHint', 'Stronger enemies and a larger reward.', '敌人更强，报酬更大。'],
-  ['difficultyNightmareHint', 'The hardest fight and the largest reward.', '最艰苦的战斗，报酬最高。'],
+  ['higherDifficultyPays', 'Higher difficulties pay more.', '难度越高，奖励越多。'],
+  ['difficultyHint', 'Harder fights pay a higher multiplier.', '战斗越难，奖励倍率越高。'],
+  ['difficultyEasyHint', 'Softer zombies and a baseline reward.', '僵尸更温和，奖励为基准。'],
+  ['difficultyNormalHint', 'The intended fight, with a higher reward.', '标准强度，奖励更高。'],
+  ['difficultyHardHint', 'Stronger zombies and a larger reward.', '僵尸更强，奖励更大。'],
+  ['difficultyNightmareHint', 'The hardest fight and the largest reward.', '极限强度，奖励最高。'],
   ['startDifficulty', 'Play on {difficulty}', '以{difficulty}开始'],
 
   // Settings and language. 中 / EN are the persistent switch labels.
@@ -3052,172 +3075,172 @@ const ROWS = [
   ['langZh', '中', '中'],
   ['langEn', 'EN', 'EN'],
   ['languageCurrent', 'Language: {language}', '语言：{language}'],
-  ['languageHint', 'You can change language during a run. Progress stays.', '对局中可以切换语言，进度会保留。'],
+  ['languageHint', 'You can change language during a run. Progress stays.', '战斗中可随时切换语言，进度会保留。'],
   ['sound', 'Sound', '声音'],
   ['soundOn', 'Sound on', '声音开'],
   ['soundOff', 'Sound off', '声音关'],
-  ['soundHint', 'Sound starts off. The first tap turns on audio for this browser.', '声音默认关闭。在此浏览器中第一次点按后才会打开音频。'],
+  ['soundHint', 'Sound starts off. The first tap turns on audio for this browser.', '声音默认关闭，首次点击开启音效。'],
   ['reducedMotion', 'Reduced motion', '减少动效'],
   ['reducedMotionOn', 'Reduced motion on', '减少动效：开'],
   ['reducedMotionOff', 'Reduced motion off', '减少动效：关'],
-  ['reducedMotionHint', 'Cuts extra flashes, shakes, and motion.', '减少额外的闪光、震动和动态。'],
+  ['reducedMotionHint', 'Cuts extra flashes, shakes, and motion.', '减少额外的闪光、震动和粒子。'],
 
-  // Draft, placement, movement
-  ['draft', 'Draft', '整备'],
-  ['draftTitle', 'Draft', '整备'],
-  ['chooseOneOfThree', 'Choose one of three', '三选一'],
-  ['draftOnField', 'Already on the field', '场上已有'],
-  ['draftNewType', 'Not on the field yet', '场上还没有'],
-  ['chooseUpgrade', 'Choose an upgrade', '选择升级'],
-  ['chooseSlot', 'Choose a slot', '选择格子'],
+  // Draft & upgrades
+  ['draft', 'Level Up', '升级选卡'],
+  ['draftTitle', 'Level Up · Pick 1 of 3', '升级强化 · 三选一'],
+  ['chooseOneOfThree', 'Level Up · Pick 1 of 3', '升级强化 · 三选一'],
+  ['draftOnField', 'Active', '已激活'],
+  ['draftNewType', 'New', '新解锁'],
+  ['chooseUpgrade', 'Choose an upgrade', '选择强化'],
+  ['chooseSlot', 'Center Wall', '城墙正中'],
   ['chooseTower', 'Add {name}', '加入{name}'],
-  ['chooseHeroUpgrade', 'Hero: {name}', '英雄：{name}'],
-  ['chooseReplace', 'Replace a tower with {name}', '用{name}替换一座塔'],
-  ['immediateEffect', 'Takes effect now', '立即生效'],
-  ['cancelPlacement', 'Cancel placement', '取消放置'],
-  ['placementCanceled', 'Placement canceled. The three choices are unchanged.', '已取消放置，三个选项没有变化。'],
-  ['placing', 'Placing', '放置中'],
-  ['placingTitle', 'Place the tower', '放置防御塔'],
-  ['placingHint', 'Empty slots are open. Replacing a tower needs confirmation. The hero cannot be replaced.', '空位可以直接放置。替换防御塔需要确认。英雄不能被替换。'],
-  ['tapToPlace', 'Tap a slot to place', '点一个格子来放置'],
-  ['tapToMove', 'Tap a destination slot', '点一个目标格子'],
-  ['fullBoard', 'The board is full', '格子已满'],
-  ['fullBoardHint', 'Upgrade the hero, or replace a tower.', '可以升级英雄，或替换一座塔。'],
-  ['emptySlot', 'Empty slot', '空位'],
+  ['chooseHeroUpgrade', 'Gunner: {name}', '枪手：{name}'],
+  ['chooseReplace', 'Replace with {name}', '替换为{name}'],
+  ['immediateEffect', 'Applies right away', '立即生效'],
+  ['cancelPlacement', 'Back', '返回'],
+  ['placementCanceled', 'Canceled.', '已取消。'],
+  ['placing', 'Ready', '准备中'],
+  ['placingTitle', 'Center Wall', '城墙正中'],
+  ['placingHint', 'The Gunner holds the center wall position.', '防线枪手固定驻守城墙正中。'],
+  ['tapToPlace', 'Center Wall', '城墙正中'],
+  ['tapToMove', 'Gunner stays centered', '枪手固定正中'],
+  ['fullBoard', 'Maxed out', '已满'],
+  ['fullBoardHint', 'Pick Gun Mods or Auto Skills to keep powering up.', '继续选择枪械强化与自动技能提升火力。'],
+  ['emptySlot', 'Empty', '空位'],
   ['select', 'Select', '选择'],
   ['details', 'Details', '详情'],
   ['hideDetails', 'Hide details', '收起详情'],
   ['selected', 'Selected', '已选中'],
-  ['selectedUnit', 'Selected unit', '当前单位'],
-  ['selectToInspect', 'Select a defender to see its stats', '选中防守者以查看能力'],
+  ['selectedUnit', 'Wall Gunner', '防线枪手'],
+  ['selectToInspect', 'Tap the Gunner to view stats', '点击枪手查看属性'],
   ['noSelection', 'Nothing selected', '未选择'],
-  ['clearSelection', 'Clear selection', '取消选择'],
-  ['place', 'Place', '放置'],
+  ['clearSelection', 'Close', '关闭'],
+  ['place', 'Deploy', '部署'],
   ['move', 'Move', '移动'],
   ['moveHere', 'Move here', '移到这里'],
-  ['swap', 'Swap', '对调'],
+  ['swap', 'Swap', '互换'],
   ['moved', 'Moved', '已移动'],
-  ['swapped', 'Swapped', '已对调'],
-  ['frontRow', 'Front row', '前排'],
-  ['rearRow', 'Rear row', '后排'],
-  ['slotNumber', 'Slot {index}', '格子 {index}'],
-  ['sourceSlot', 'Source slot', '来源格子'],
-  ['targetSlot', 'Target slot', '目标格子'],
-  ['occupied', 'That slot is occupied', '这个格子已有单位'],
-  ['slotOccupied', 'That slot is occupied', '这个格子已有单位'],
-  ['tower', 'Tower', '防御塔'],
-  ['towers', 'Towers', '防御塔'],
-  ['hero', 'Hero', '英雄'],
+  ['swapped', 'Swapped', '已互换'],
+  ['frontRow', 'Wall Line', '城墙防线'],
+  ['rearRow', 'Rear', '后排'],
+  ['slotNumber', 'Position {index}', '位置 {index}'],
+  ['sourceSlot', 'Source', '来源'],
+  ['targetSlot', 'Target', '目标'],
+  ['occupied', 'Occupied', '已有单位'],
+  ['slotOccupied', 'Occupied', '已有单位'],
+  ['tower', 'Turret', '炮塔'],
+  ['towers', 'Turrets', '炮塔'],
+  ['hero', 'Wall Gunner', '防线枪手'],
   ['hybrid', 'Hybrid', '混合'],
-  ['hero_upgrade', 'Hero upgrade', '英雄升级'],
-  ['heroUpgrades', 'Hero upgrades', '英雄升级'],
-  ['runUpgrades', 'This run', '本局强化'],
-  ['nonMergeable', 'Cannot merge', '不可合成'],
-  ['autoAttack', 'Attacks on its own', '自动攻击'],
-  ['noActiveAbility', 'No active skill', '没有主动技能'],
-  ['notControlled', 'Not controlled by hand', '不能手动操纵'],
+  ['hero_upgrade', 'Gun Mod', '枪械强化'],
+  ['heroUpgrades', 'Gun Mods & Auto Skills', '枪械与技能'],
+  ['runUpgrades', 'Active Upgrades', '本局强化'],
+  ['nonMergeable', 'Solo Gunner', '单枪防线'],
+  ['autoAttack', 'Fires automatically', '自动瞄准开火'],
+  ['noActiveAbility', 'Auto Skills trigger on cooldown', '自动技能冷却即释放'],
+  ['notControlled', 'Auto-aimed', '全自动瞄准'],
   ['replace', 'Replace', '替换'],
-  ['replaceConfirm', 'Replace this tower?', '替换这座塔？'],
-  ['replaceConfirmBody', 'The tower in this slot is removed. The hero cannot be replaced.', '此格的防御塔会被移除。英雄不能被替换。'],
-  ['replaceKeep', 'Keep current tower', '保留现有的塔'],
+  ['replaceConfirm', 'Replace?', '替换？'],
+  ['replaceConfirmBody', 'The Gunner always holds the center wall.', '枪手始终驻守城墙正中。'],
+  ['replaceKeep', 'Keep', '保留'],
   ['unknownUnit', 'Unknown unit', '未知单位'],
-  ['unknownEnemy', 'Unknown enemy', '未知敌人'],
+  ['unknownEnemy', 'Unknown zombie', '未知僵尸'],
 
-  // Merge
+  // Legacy reason keys (kept for safe error lookup)
   ['merge', 'Merge', '合成'],
-  ['mergePreview', 'Preview merge', '合成预览'],
-  ['mergeConfirm', 'Confirm merge', '确认合成'],
-  ['mergeCancel', 'Cancel merge', '取消合成'],
+  ['mergePreview', 'Preview', '预览'],
+  ['mergeConfirm', 'Confirm', '确认'],
+  ['mergeCancel', 'Cancel', '取消'],
   ['mergeResult', 'Result', '结果'],
-  ['heroProtected', 'The hero cannot be merged or replaced', '英雄不能合成，也不能被替换'],
-  ['invalidMerge', 'These units cannot merge', '这些单位无法合成'],
-  ['sameTypeResult', 'Same type, rank {rank}', '同种，{rank} 阶'],
-  ['hybridResult', 'Hybrid: {name}', '混合：{name}'],
+  ['heroProtected', 'The Gunner stays on the center wall.', '枪手始终驻守城墙正中。'],
+  ['invalidMerge', 'Unavailable', '不可用'],
+  ['sameTypeResult', 'Lv.{rank}', 'Lv.{rank}'],
+  ['hybridResult', '{name}', '{name}'],
   ['ingredientPair', '{left} + {right}', '{left} + {right}'],
-  ['resultRank', 'Result rank {rank}', '结果 {rank} 阶'],
-  ['previewSafe', 'Preview only. The board has not changed.', '只是预览，棋盘还没有变化。'],
-  ['confirmToMerge', 'Confirm to merge. Cancel keeps both units.', '确认后才会合成。取消则双方都保留。'],
-  ['unitsPreserved', 'Both units were kept', '双方单位都已保留'],
-  ['consumesSource', 'The first unit is consumed', '第一座单位会被消耗'],
+  ['resultRank', 'Lv.{rank}', 'Lv.{rank}'],
+  ['previewSafe', 'Preview only.', '仅预览。'],
+  ['confirmToMerge', 'Confirm.', '确认。'],
+  ['unitsPreserved', 'Kept.', '已保留。'],
+  ['consumesSource', 'Consumed.', '消耗。'],
   ['recipes', 'Recipes', '配方'],
   ['ingredients', 'Ingredients', '材料'],
   ['effect', 'Effect', '效果'],
-  ['baseTowers', 'Base towers', '基础塔'],
-  ['hybrids', 'Hybrids', '混合塔'],
-  ['rank', 'Rank', '阶'],
-  ['rankValue', 'Rank {rank}', '{rank} 阶'],
-  ['rankCap', 'Ranks run from 1 to 4', '阶数从 1 到 4'],
-  ['equalRank', 'Requires equal rank', '需要相同阶数'],
-  ['maxRank', 'Already at max rank', '已经达到最高阶'],
-  ['notPlanning', 'You cannot move or merge right now', '现在不能移动或合成'],
-  ['planningRequired', 'You cannot move or merge right now', '现在不能移动或合成'],
-  ['cannotMoveDuringFight', 'You can move units while the fight is running', '战斗进行时也可以移动单位'],
-  ['sameSlot', 'Choose two different slots', '请选择两个不同的格子'],
-  ['invalidSlot', 'That slot is not on the board', '没有这个格子'],
-  ['missingUnit', 'Choose two occupied slots', '请选择两个有单位的格子'],
-  ['reasonEmpty', 'That slot is empty', '这个格子是空的'],
-  ['emptySource', 'The first slot is empty', '第一个格子是空的'],
-  ['emptyTarget', 'The second slot is empty', '第二个格子是空的'],
-  ['rankMismatch', 'Both units must be the same rank', '两座单位必须同阶'],
-  ['noRecipe', 'No recipe matches this pair', '没有符合这对组合的配方'],
-  ['hybridMix', 'A hybrid merges only with the same hybrid', '混合单位只能与相同的混合单位合成'],
-  ['hybridMismatch', 'A hybrid merges only with the same hybrid', '混合单位只能与相同的混合单位合成'],
-  ['kindMismatch', 'These units cannot combine', '这些单位不能组合'],
-  ['incompatible', 'This pair is not compatible', '这个组合不兼容'],
-  ['heroSlot', 'The hero occupies this slot', '英雄在这个格子里'],
-  ['replaceRequired', 'Confirm replacement to use an occupied slot', '要占用已有格子，需要确认替换'],
-  ['invalidChoice', 'That choice is not available', '没有这个选项'],
-  ['noDraft', 'There is no draft right now', '当前没有整备'],
-  ['notPlacing', 'There is nothing to place', '当前没有要放置的单位'],
-  ['noPending', 'There is nothing waiting to place', '没有等待放置的单位'],
+  ['baseTowers', 'Base', '基础'],
+  ['hybrids', 'Hybrid', '混合'],
+  ['rank', 'Lv', '级'],
+  ['rankValue', 'Lv.{rank}', 'Lv.{rank}'],
+  ['rankCap', 'Max Lv.4', '最高 4 级'],
+  ['equalRank', 'Same level', '同级'],
+  ['maxRank', 'Already max level', '已达满级'],
+  ['notPlanning', 'Gunner holds the center wall', '枪手固定驻守城墙正中'],
+  ['planningRequired', 'Gunner holds the center wall', '枪手固定驻守城墙正中'],
+  ['cannotMoveDuringFight', 'Gunner holds the center wall', '枪手固定驻守城墙正中'],
+  ['sameSlot', 'Gunner stays in the center', '枪手固定驻守正中'],
+  ['invalidSlot', 'Invalid position', '无效位置'],
+  ['missingUnit', 'No unit', '没有单位'],
+  ['reasonEmpty', 'Empty', '空位'],
+  ['emptySource', 'Empty', '空位'],
+  ['emptyTarget', 'Empty', '空位'],
+  ['rankMismatch', 'Level mismatch', '等级不符'],
+  ['noRecipe', 'Unavailable', '不可用'],
+  ['hybridMix', 'Unavailable', '不可用'],
+  ['hybridMismatch', 'Unavailable', '不可用'],
+  ['kindMismatch', 'Unavailable', '不可用'],
+  ['incompatible', 'Unavailable', '不可用'],
+  ['heroSlot', 'Gunner position', '枪手位置'],
+  ['replaceRequired', 'Unavailable', '不可用'],
+  ['invalidChoice', 'That card is not available', '该强化卡不可用'],
+  ['noDraft', 'No active upgrade pick', '当前没有升级选卡'],
+  ['notPlacing', 'Nothing to place', '无需放置'],
+  ['noPending', 'Nothing pending', '无待放置项'],
 
-  // Combat stats. Keys match UnitStats fields and status type ids where noted.
+  // Combat stats
   ['damage', 'Damage', '伤害'],
   ['range', 'Range', '射程'],
-  ['attackSpeed', 'Attack speed', '攻速'],
+  ['attackSpeed', 'Fire rate', '攻速'],
   ['crit', 'Crit', '暴击'],
   ['critChance', 'Crit chance', '暴击率'],
-  ['critMultiplier', 'Crit multiplier', '暴击倍率'],
+  ['critMultiplier', 'Crit damage', '暴击伤害'],
   ['interval', 'Interval', '间隔'],
-  ['projectileSpeed', 'Projectile speed', '弹速'],
-  ['splash', 'Splash', '溅射'],
-  ['chain', 'Chain', '连锁'],
-  ['chainRange', 'Chain range', '连锁范围'],
+  ['projectileSpeed', 'Bullet speed', '弹速'],
+  ['splash', 'Blast', '溅射'],
+  ['chain', 'Chain', '弹射'],
+  ['chainRange', 'Chain range', '弹射范围'],
   ['pierce', 'Pierce', '穿透'],
   ['burn', 'Burn', '燃烧'],
   ['poison', 'Poison', '中毒'],
   ['slow', 'Slow', '减速'],
-  ['stun', 'Stun', '眩晕'],
+  ['stun', 'Stun', '麻痹'],
   ['brittle', 'Brittle', '易伤'],
   ['aura', 'Aura', '光环'],
   ['support', 'Support', '支援'],
-  ['haste', 'Haste', '急速'],
-  ['vitality', 'Fence HP', '栅栏生命'],
+  ['haste', 'Fire rate', '攻速'],
+  ['vitality', 'Wall HP', '城墙血量'],
   ['status', 'Status', '状态'],
   ['statuses', 'Statuses', '状态'],
   ['duration', 'Duration', '持续'],
   ['stacks', 'Stacks', '层数'],
   ['dps', 'Damage per second', '每秒伤害'],
-  ['factor', 'Speed factor', '速度系数'],
-  ['mechanics', 'Mechanics', '机制'],
+  ['factor', 'Speed factor', '移速系数'],
+  ['mechanics', 'Effects', '特效'],
   ['statDamage', 'Damage {value}', '伤害 {value}'],
   ['statRange', 'Range {value}', '射程 {value}'],
   ['statInterval', 'Every {value}s', '每 {value} 秒'],
   ['statCrit', 'Crit {chance} ×{multiplier}', '暴击 {chance} ×{multiplier}'],
-  ['statProjectile', 'Shot speed {value}', '弹速 {value}'],
-  ['statSplash', 'Splash {value}', '溅射 {value}'],
-  ['statChain', 'Chain {count}', '连锁 {count}'],
+  ['statProjectile', 'Bullet speed {value}', '弹速 {value}'],
+  ['statSplash', 'Blast {value}', '溅射 {value}'],
+  ['statChain', 'Chain {count}', '弹射 {count}'],
   ['statPierce', 'Pierce {count}', '穿透 {count}'],
-  ['slowFactor', 'Moves at {value}', '移速变为 {value}'],
+  ['slowFactor', 'Moves at {value}', '移速降至 {value}'],
   ['auraDamage', 'Damage bonus', '伤害加成'],
-  ['auraHaste', 'Attack speed bonus', '攻速加成'],
+  ['auraHaste', 'Fire rate bonus', '攻速加成'],
   ['auraRange', 'Aura range', '光环范围'],
 
   // Armory and permanent meta
   ['armory', 'Armory', '军械库'],
   ['codex', 'Codex', '图鉴'],
-  ['currency', 'Currency', '货币'],
-  ['currencyAmount', 'Currency {amount}', '货币 {amount}'],
+  ['currency', 'Coins', '金币'],
+  ['currencyAmount', 'Coins {amount}', '金币 {amount}'],
   ['buy', 'Buy', '购买'],
   ['equip', 'Equip', '装备'],
   ['equipped', 'Equipped', '已装备'],
@@ -3229,111 +3252,112 @@ const ROWS = [
   ['cost', 'Cost', '花费'],
   ['costValue', 'Cost {cost}', '花费 {cost}'],
   ['level', 'Level', '等级'],
-  ['levelValue', 'Level {level}', '{level} 级'],
-  ['levelOf', 'Level {level}/{max}', '{level} / {max} 级'],
+  ['levelValue', 'Lv.{level}', 'Lv.{level}'],
+  ['levelOf', 'Lv.{level}/{max}', 'Lv.{level}/{max}'],
   ['maxLevel', 'Max level', '已满级'],
+  ['maxed', 'Maxed', '已满级'],
   ['levelCap', 'Max level', '等级上限'],
-  ['insufficientCurrency', 'Not enough currency', '货币不足'],
+  ['insufficientCurrency', 'Not enough coins', '金币不足'],
   ['locked', 'Locked', '未解锁'],
-  ['weapon', 'Weapon', '武器'],
+  ['weapon', 'Weapon', '枪械'],
   ['charm', 'Charm', '护符'],
-  ['armor', 'Armor', '护甲'],
-  ['equipment', 'Equipment', '装备'],
-  ['permanent', 'Permanent upgrades', '永久升级'],
-  ['permanentUpgrades', 'Permanent upgrades', '永久升级'],
+  ['armor', 'Armor', '城墙装甲'],
+  ['equipment', 'Gear', '武装装备'],
+  ['permanent', 'Permanent upgrades', '永久强化'],
+  ['permanentUpgrades', 'Permanent upgrades', '永久强化'],
   ['headStart', 'Head start', '开局优势'],
   ['bonus', 'Bonus', '加成'],
   ['currentBonuses', 'Current bonuses', '当前加成'],
   ['bonusDamage', 'Damage +{value}', '伤害 +{value}'],
-  ['bonusHaste', 'Attack speed +{value}', '攻速 +{value}'],
+  ['bonusHaste', 'Fire rate +{value}', '攻速 +{value}'],
   ['bonusRange', 'Range +{value}', '射程 +{value}'],
   ['bonusCritChance', 'Crit chance +{value}', '暴击率 +{value}'],
-  ['bonusFence', 'Fence +{value}', '栅栏 +{value}'],
-  ['bonusReward', 'Rewards +{value}', '报酬 +{value}'],
+  ['bonusFence', 'Wall +{value}', '城墙 +{value}'],
+  ['bonusReward', 'Coins +{value}', '金币 +{value}'],
   ['noneEquipped', 'Nothing equipped', '未装备'],
   ['unequip', 'Unequip', '卸下'],
-  ['noEquipment', 'No equipment yet', '还没有装备'],
-  ['noUpgrades', 'No permanent upgrades yet', '还没有永久升级'],
+  ['noEquipment', 'No gear yet', '还没有武装装备'],
+  ['noUpgrades', 'No permanent upgrades yet', '还没有永久强化'],
   ['notOwned', 'Not owned yet', '尚未拥有'],
   ['alreadyOwned', 'Already owned', '已经拥有'],
   ['alreadyEquipped', 'Already equipped', '已经装备'],
-  ['wrongSlot', 'That item does not fit this slot', '这件物品不能装在这个位置'],
+  ['wrongSlot', 'Wrong gear slot', '装备部位不符'],
   ['unknownItem', 'Unknown item', '未知物品'],
-  ['unknownUpgrade', 'Unknown upgrade', '未知升级'],
+  ['unknownUpgrade', 'Unknown upgrade', '未知强化'],
   ['profile', 'Profile', '档案'],
   ['best', 'Best runs', '最佳记录'],
-  ['noBest', 'No settled runs yet', '还没有结算过的对局'],
+  ['noBest', 'No settled runs yet', '还没有结算记录'],
   ['bestWave', 'Best wave', '最高波次'],
   ['bestKills', 'Best kills', '最高击杀'],
   ['bestLine', 'Best · wave {wave} · {kills} kills', '最佳 · 第 {wave} 波 · 击杀 {kills}'],
-  ['runsSettled', 'Settled runs', '已结算局数'],
+  ['runsSettled', 'Completed runs', '已结算局数'],
   ['newRecord', 'New record', '新纪录'],
 
   // Results
-  ['results', 'Results', '结算'],
-  ['victory', 'Victory', '胜利'],
-  ['defeat', 'Defeat', '失败'],
-  ['abandoned', 'Abandoned', '已放弃'],
-  ['runComplete', 'Run complete', '本局结束'],
+  ['results', 'Results', '战斗结算'],
+  ['victory', 'Victory', '防线守住！'],
+  ['defeat', 'Defeat', '城墙失守'],
+  ['abandoned', 'Abandoned', '已撤离'],
+  ['runComplete', 'Stage complete', '本关结束'],
   ['resultSummary', '{result} · {difficulty}', '{result} · {difficulty}'],
-  ['victoryBody', 'The fence held. The reward is saved once.', '栅栏守住了。报酬只保存一次。'],
-  ['defeatBody', 'The fence fell. Progress can still pay once.', '栅栏倒下了。已有的进度仍会结算一次。'],
-  ['defeatNext', 'Easy lowers enemy health, speed, and damage. An Armory bonus applies on the next run.', '简单难度会降低敌人的生命、速度和伤害。军械库加成会在下一局生效。'],
-  ['defeatNextEasy', 'An Armory bonus applies on the next run. A hero upgrade from a draft applies immediately.', '军械库加成会在下一局生效。整备中的英雄升级会立刻生效。'],
-  ['defeatBuy', 'You can buy {name} for {cost}. It applies on the next run.', '可以购买{name}，价格 {cost}。下一局生效。'],
-  ['defeatEquip', 'Equip {name} before the next run.', '下一局开始前装备{name}。'],
-  ['defeatShort', 'You need {short} more for {name}, which costs {cost}.', '还差 {short} 才能购买{name}，价格 {cost}。'],
-  ['abandonBody', 'You left this fight. That reward is saved once.', '你离开了这一局。这笔报酬只保存一次。'],
+  ['victoryBody', 'The wall held! Your coin reward has been saved.', '城墙守住了！通关金币已入账。'],
+  ['defeatBody', 'The wall fell, but you still earned coins for your progress.', '城墙倒下了，但本局进度仍会发放金币奖励。'],
+  ['defeatNext', 'Visit the Armory to equip Core Gems or upgrade firepower before retrying.', '前往军械库镶嵌核心宝石或升级枪械火力，再来挑战更轻松！'],
+  ['defeatNextEasy', 'Armory bonuses apply right away on your next attempt.', '军械库强化会在下一关立即生效。'],
+  ['defeatBuy', 'You can buy {name} for {cost}. It applies on your next run.', '可以购买【{name}】（花费 {cost} 金币），下一关生效。'],
+  ['defeatEquip', 'Equip {name} before your next run.', '下一关开始前记得装备【{name}】。'],
+  ['defeatShort', 'You need {short} more coins for {name} (costs {cost}).', '再赚 {short} 金币即可解锁【{name}】（{cost} 金币）。'],
+  ['abandonBody', 'You left this stage. Progress reward saved once.', '你已撤离本关，本局进度金币已结算。'],
   ['earned', 'Earned', '获得'],
   ['earnedAmount', 'Earned {amount}', '获得 {amount}'],
-  ['damageDealt', 'Damage dealt', '造成伤害'],
-  ['mergesMade', 'Merges made', '合成次数'],
+  ['damageDealt', 'Damage dealt', '总伤害'],
+  ['mergesMade', 'Upgrades', '强化次数'],
   ['critsLanded', 'Critical hits', '暴击次数'],
-  ['fenceDamageTaken', 'Fence damage taken', '栅栏承受伤害'],
-  ['noReward', 'No reward', '没有报酬'],
-  ['freshAbandon', 'This run is too short to earn a reward', '本局太短，没有报酬'],
-  ['alreadySettled', 'This run was already rewarded', '本局报酬已经发过'],
-  ['notFinished', 'This run is not ready to settle', '本局还不能结算'],
-  ['noDoublePay', 'Each run pays at most once.', '每局最多发放一次。'],
-  ['rewardRule', 'Higher difficulties multiply this reward.', '更高难度会提高这笔报酬。'],
-  ['playAgain', 'Play again', '再来一局'],
-  ['returnMenu', 'Main menu', '主菜单'],
+  ['fenceDamageTaken', 'Wall damage taken', '城墙承伤'],
+  ['noReward', 'No reward', '无金币'],
+  ['freshAbandon', 'Play at least 30s or 3 kills to earn coins.', '战斗不足 30 秒且击杀少于 3 只，不发放金币。'],
+  ['alreadySettled', 'Already rewarded', '本局金币已发放'],
+  ['notFinished', 'Stage not finished yet', '本关尚未结束'],
+  ['noDoublePay', 'Each stage attempt pays once.', '每局最多结算一次。'],
+  ['rewardRule', 'First-time stage clears pay extra bonus coins.', '首次通关每一关都有额外首通金币奖励。'],
+  ['playAgain', 'Play again', '再来一关'],
+  ['returnMenu', 'Main menu', '返回主页'],
   ['endless', 'Endless', '无尽'],
-  ['endlessOffer', 'Enter endless? The victory reward is already saved.', '进入无尽？胜利报酬已经保存。'],
-  ['endlessEnter', 'Enter endless', '进入无尽'],
+  ['endlessOffer', 'Continue into Endless mode? Your victory reward is saved.', '继续挑战无尽模式？本关通关金币已经安全保存。'],
+  ['endlessEnter', 'Enter Endless', '继续无尽模式'],
   ['endlessStay', 'Not now', '暂不进入'],
-  ['endlessNote', 'Endless does not pay the main reward again.', '无尽不会再次发放主线报酬。'],
+  ['endlessNote', 'Endless does not pay the stage clear reward twice.', '无尽模式不会重复发放通关奖励。'],
 
   // Save, import, confirmations
   ['exportSave', 'Export save', '导出存档'],
   ['importSave', 'Import save', '导入存档'],
   ['importError', 'That save could not be imported', '无法导入这份存档'],
-  ['invalid_json', 'That text is not valid save data. The current save was kept.', '这段文字不是有效的存档。当前存档已保留。'],
-  ['invalid_format', 'That file is not a Fencefall save. The current save was kept.', '这不是最后一道防线的存档。当前存档已保留。'],
-  ['invalid_version', 'That save is from another version. The current save was kept.', '这份存档的版本不同。当前存档已保留。'],
-  ['invalid_profile', 'The profile in that save is not valid. The current save was kept.', '存档里的档案无效。当前存档已保留。'],
-  ['invalid_run', 'The battle in that save is not valid. The current save was kept.', '存档里的对局无效。当前存档已保留。'],
-  ['invalid_bounds', 'That save has a number outside the allowed range. The current save was kept.', '存档里有超出允许范围的数字。当前存档已保留。'],
-  ['invalid_enum', 'That save has an unknown setting. The current save was kept.', '存档里有无法识别的设置。当前存档已保留。'],
-  ['invalid_hero', 'That save does not contain exactly one hero. The current save was kept.', '存档里不是恰好一名英雄。当前存档已保留。'],
-  ['invalid_slots', 'That save does not have the ten defender slots. The current save was kept.', '存档里没有十个防守格。当前存档已保留。'],
-  ['invalid_settlement', 'That save has an invalid result. The current save was kept.', '存档里的结算无效。当前存档已保留。'],
-  ['storage_unavailable', 'Storage is not available. The current save was kept.', '无法使用本地存储。当前存档已保留。'],
-  ['too_large', 'That save is too large. The current save was kept.', '这份存档太大。当前存档已保留。'],
-  ['quota', 'Storage is full. The current save was kept.', '存储空间已满。当前存档已保留。'],
+  ['invalid_json', 'That text is not valid save data. The current save was kept.', '这段文字不是有效的存档，当前存档已保留。'],
+  ['invalid_format', 'That file is not a Fencefall save. The current save was kept.', '这不是最后一道防线的存档，当前存档已保留。'],
+  ['invalid_version', 'That save is from another version. The current save was kept.', '这份存档的版本不同，当前存档已保留。'],
+  ['invalid_profile', 'The profile in that save is not valid. The current save was kept.', '存档里的档案无效，当前存档已保留。'],
+  ['invalid_run', 'The battle in that save is not valid. The current save was kept.', '存档里的对局无效，当前存档已保留。'],
+  ['invalid_bounds', 'That save has a number outside the allowed range. The current save was kept.', '存档里有超出允许范围的数字，当前存档已保留。'],
+  ['invalid_enum', 'That save has an unknown setting. The current save was kept.', '存档里有无法识别的设置，当前存档已保留。'],
+  ['invalid_hero', 'That save does not contain one gunner. The current save was kept.', '存档里枪手数据异常，当前存档已保留。'],
+  ['invalid_slots', 'That save has invalid board data. The current save was kept.', '存档阵地数据异常，当前存档已保留。'],
+  ['invalid_settlement', 'That save has an invalid result. The current save was kept.', '存档里的结算数据无效，当前存档已保留。'],
+  ['storage_unavailable', 'Storage is not available. The current save was kept.', '无法使用本地存储，当前存档已保留。'],
+  ['too_large', 'That save is too large. The current save was kept.', '这份存档太大，当前存档已保留。'],
+  ['quota', 'Storage is full. The current save was kept.', '存储空间已满，当前存档已保留。'],
   ['importSuccess', 'Save imported', '存档已导入'],
-  ['noSave', 'No saved run', '没有已保存的对局'],
+  ['noSave', 'No saved battle', '没有已保存的对局'],
   ['saveFailed', 'Could not save', '保存失败'],
-  ['saveData', 'Save data', '存档数据'],
+  ['saveData', 'Save backup', '存档备份'],
   ['pasteHere', 'Paste save data here', '在此粘贴存档数据'],
-  ['exportHint', 'Copy this backup and store it somewhere safe.', '复制这份备份，并另行保管。'],
-  ['importHint', 'Paste a backup exported from this game.', '粘贴从本游戏导出的备份。'],
+  ['exportHint', 'Copy this backup and keep it somewhere safe.', '复制这份存档文本即可在其他设备恢复进度。'],
+  ['importHint', 'Paste a backup exported from this game.', '粘贴之前导出的存档文本即可恢复。'],
   ['importEmpty', 'Paste save data first', '请先粘贴存档数据'],
-  ['confirmImport', 'Importing replaces the profile and saved run on this device.', '导入会替换此设备上的档案和已保存对局。'],
-  ['confirmRestart', 'Restart and clear this fight?', '重开并清除这场战斗？'],
-  ['confirmNewRun', 'Start a new run and clear the saved fight?', '开始新对局，并清除已保存的战斗？'],
-  ['abandonConfirm', 'Abandon this run?', '放弃本局？'],
-  ['abandonDetail', 'Leaving before 30 seconds and 3 kills earns nothing. A finished victory or defeat pays once.', '不足 30 秒且击杀少于 3 就离开，没有报酬。胜利或失败结算后只发放一次。'],
+  ['confirmImport', 'Importing replaces your current save on this device.', '导入会覆盖当前设备上的存档。'],
+  ['confirmRestart', 'Restart this stage from wave 1?', '重新开始本关？'],
+  ['confirmNewRun', 'Start a new stage and clear the paused battle?', '开始新关卡并放弃已暂停的战斗？'],
+  ['abandonConfirm', 'Abandon this stage?', '确定撤离本关？'],
+  ['abandonDetail', 'Leaving before 30s and 3 kills earns no coins. Victory or defeat pays once.', '不足 30 秒且击杀少于 3 只撤离没有金币；正常结束都会结算一次。'],
   ['corruptSave', 'This save is damaged', '这份存档已损坏'],
   ['invalidSave', 'This save is not valid', '这份存档无效'],
   ['invalid', 'Not valid', '无效'],
@@ -3345,34 +3369,34 @@ const ROWS = [
   ['unknownReason', 'That action is not available', '现在不能这么做'],
   ['tryAgain', 'Try again', '再试一次'],
 
-  // How to play. Bodies are the help* keys; titles can reuse the short labels.
-  ['howto', 'How to play', '玩法说明'],
-  ['howtoLead', 'Pick 1 of 3. Unleash full-screen auto super-weapons.', '三选一构筑，零主动按键全自动割草。'],
-  ['helpOverview', 'Zombies surge down toward your bastion wall. Hero rifles, auto super-weapons, and wall turrets fire automatically. Kill zombies to level up and pick 1 of 3 upgrades.', '尸潮从上方涌向钢铁城墙。英雄主炮、全自动超武与城墙炮塔全自动开火。击杀积累经验，通过三选一不断进化成型。'],
-  ['helpPlacement', 'Picking a new turret deploys it automatically onto the wall; picking the same turret again upgrades it directly (Lv.1→Lv.4). Drag any defender on the wall anytime to move or swap slots.', '选中新炮塔会自动部署上墙；再次抽中同种炮塔将直接升级（Lv.1→Lv.4）。战斗中随时可拖动城墙单位移动或互换位置。'],
-  ['helpDraft', 'Kills fill the XP bar. Each level-up pauses the fight and offers 3 cards: Hero weapon mods, Auto Super-Weapons, or Bastion Turret deploys & upgrades. One tap applies immediately.', '击杀填充经验条。每次升级都会暂停并弹出三选一：英雄弹幕强化、全自动超武或城墙炮塔部署/升级，单次点击立即生效。'],
-  ['helpFence', 'Enemies attack only the bastion wall. Defenders never die. Auto-Surge shockwaves and Aegis Wall Immunity protect you at critical moments. If wall HP hits zero, the run ends.', '敌人只攻击钢铁城墙，防守单位无血条。危急时自动触发冲击波与城墙免疫保命。城墙生命归零则本局结束。'],
-  ['helpRange', 'Tap any defender on the wall to see its range ring and switch targeting priority (Foremost, Priority, Strongest, Weakest) in one tap.', '点击城墙上的任意单位可查看射程圈，并一键切换索敌优先级（最前 / 高危 / 最肉 / 残血）。'],
-  ['helpSpeed', 'Speeds are 1×, 1.5×, 3×, and 10×. They share one simulation clock and never alter rewards.', '支持 1×、1.5×、3×、10× 四档倍速，共用同一模拟时钟，不影响任何掉落与奖励。'],
-  ['helpHero', 'Every run begins with your Hero in the front center. Evolve Hero bullets into Split Shrapnel, EM Ricochet, Napalm Fire Sea, Armored Sweeper, Glacial Barrage, and Orbital Laser.', '开局英雄驻守前排中央，可一路进化出子母分裂弹、电磁穿刺、燃油火海、重装装甲车、干冰连发柱与高能射线。'],
-  ['helpRewards', 'Victory and defeat pay coins once. Higher difficulties multiply rewards. Claim the free Starter Pack on the home screen to skip early grind!', '胜负结算均可获得货币，难度越高倍率越高。主页可免费一键领取开荒补给包，直接跳过前期刮痧！'],
-  ['helpEquipment', 'Spend coins in the Armory on 3-socket Core Gems, Gear, and Permanent Upgrades. Purchases take effect on your next sortie.', '在军械库镶嵌最多 3 颗核心宝石、装备武器护符装甲或强化永久属性，下一局立即生效。'],
-  ['helpLanguage', 'Switch 中 / EN anytime from the top bar without losing your run.', '随时点击顶部 中 / EN 切换语言，保留当前对局与进度。'],
-  ['helpLanes', 'No lanes — enemies stream across the entire field toward the bastion wall.', '无分路设计，尸潮从全屏上方涌向钢铁城墙。'],
-  ['helpWin', 'Clear all waves to win, then optionally continue into Endless mode.', '清空全部波次即胜利，胜利后可继续挑战无尽模式。'],
-  ['helpBoss', 'Bosses arrive on schedule with high HP and special traits. Use Armor-Pen, Crit Shredder, and Orbital Laser to melt them.', '首领按波次降临，善用穿甲、斩血宝石与高能射线集中融化。'],
-  ['helpSave', 'Your profile and paused run save automatically in browser storage. Export or import JSON backups anytime.', '档案与暂停对局自动存于本地浏览器，随时可导出/导入 JSON 备份。'],
-  ['helpStatuses', 'Burn, Poison, Slow, Stun, and Brittle stack together — pair them with the Elemental Surge Gem for +25% bonus damage.', '燃烧、中毒、减速、眩晕、易伤可叠加，搭配【冰火共鸣宝石】额外增伤 25%。'],
-  ['helpDifficulty', 'Easy, Normal, Hard, and Nightmare scale enemy strength, wall HP, and coin rewards.', '轻松、标准、困难、噩梦分别调整敌人强度、城墙生命与结算奖励倍率。'],
-  ['helpSupport', 'Banner turrets buff nearby allies (+damage & +attack speed) while firing brittle rounds.', '旌旗台一边攻击一边为周围友军提供伤害与攻速光环。'],
-  ['helpCrit', 'Critical hits deal multiplied damage and trigger HP Shredder & Knockback bonuses.', '暴击造成倍率伤害，并可触发斩血与击退特效。'],
-  ['helpTouch', 'Built mobile-first: thumb-zone bottom dock, one-tap 3-of-1 cards, and direct 4-mode targeting pills.', '专为手机单手优化：底部拇指操作栏、一键三选一卡片与四档索敌直选。'],
-  ['helpEndless', 'Endless unlocks after clearing the main waves without paying the main victory bonus twice.', '通关主线后可继续无尽模式挑战极限波次。'],
+  // How to play — crisp Pure Solo-Gunner guide
+  ['howto', 'How to Play', '玩法说明'],
+  ['howtoLead', 'Hold the center wall · Pick 1 of 3 · Unleash Auto Skills!', '单枪死守正中 · 升级三选一 · 满屏自动技能割草！'],
+  ['helpOverview', 'Your Gunner holds the center of the steel wall and shoots incoming zombies automatically—no grid, no turret placement needed.', '防线枪手固定驻守城墙正中，自动瞄准并射杀来袭尸潮，无需摆塔或操作格子。'],
+  ['helpPlacement', 'Clear 20 handcrafted stages across 4 chapters, earning 1–3 stars and first-clear bonus coins on every stage.', '按顺序闯过四大章节共 20 关，每关根据剩余城墙血量评定 1–3 星并领取首通金币。'],
+  ['helpDraft', 'Kills fill the XP bar. Each level-up pauses the battle and lets you pick 1 of 3 upgrades: Gun Mods (枪械强化) or Auto Skills (自动技能).', '击杀僵尸攒经验升级，每次升级弹出三选一：直接提升主枪威力的「枪械强化」，以及冷却一到自动轰炸全场的「自动技能」。'],
+  ['helpFence', 'Zombies only attack the wall. Wall Shield blocks and emergency shockwaves protect you in close calls—if Wall HP hits 0, the stage ends.', '僵尸只会攻击城墙，枪手不会阵亡。城墙免伤护盾与危急冲击波会在关键时刻护墙，城墙血量归零则失败。'],
+  ['helpRange', 'Tap the Gunner anytime during battle to check live weapon stats and switch target priority (Closest / Specials / Tankiest / Lowest HP).', '战斗中随时点击城墙正中的枪手，可查看实时属性并一键切换优先攻击目标（最前 / 高危 / 最肉 / 残血）。'],
+  ['helpSpeed', 'Switch freely between 1×, 1.5×, 3×, and 10× speed without affecting drops or coins.', '支持 1×、1.5×、3×、10× 四档倍速，随时加速割草且不影响任何金币奖励。'],
+  ['helpHero', 'Combine Gun Mods (Multi-Volley, Armor Pierce, Flame/Frost Rounds) with Auto Skills (Napalm Fire Sea, Armored Sweeper, Glacial Barrage, Orbital Laser, EM Chain Strike, Split Shrapnel).', '自由组合齐射、穿甲、冰火子弹等「枪械强化」，与燃油火海、装甲车、干冰柱、高能激光、电磁天雷、子母分裂等「自动技能」。'],
+  ['helpRewards', 'Spend coins in the Armory on Core Gems, Gear, and Permanent Upgrades. Claim the free Starter Pack on the home screen!', '通关与战败均可获得金币，去军械库镶嵌核心宝石、换武装、升永久属性。主页还可免费领新手补给包！'],
+  ['helpEquipment', 'Equip up to 3 Core Gems, plus Weapon, Charm, and Wall Armor in the Armory—all bonuses apply automatically.', '在军械库最多镶嵌 3 颗核心宝石，并穿戴枪械、护符与城墙装甲，开局自动生效。'],
+  ['helpLanguage', 'Switch 中 / EN anytime from the top bar without losing your run.', '随时点击顶部 中 / EN 切换中英文，保留当前进度。'],
+  ['helpLanes', 'Zombies surge across the whole highway toward your fortified wall.', '尸潮铺满整条荒原公路涌向钢铁城墙。'],
+  ['helpWin', 'Survive all waves and defeat the finale or Boss to clear the stage and unlock the next one!', '顶住全部波次并击溃终局尸潮或首领即可过关，自动解锁下一关！'],
+  ['helpBoss', 'Bosses appear every 5 stages (Stages 5, 10, 15, 20) and enrage at 50% HP. Pair Armor Pierce, Deadeye Crit, and Orbital Laser!', '每 5 关出现首领关（第 5、10、15、20 关），首领半血狂暴，善用穿甲、暴击与高能激光柱融化它！'],
+  ['helpSave', 'Progress saves automatically in your browser. Export or import JSON backups anytime in Settings.', '闯关进度自动保存在本地浏览器，随时可在设置页导出/导入备份。'],
+  ['helpStatuses', 'Burn, Slow, Stun, and Brittle stack together—pair them with the Elemental Surge Gem for +25% bonus damage.', '燃烧、减速、麻痹、易伤可叠加，搭配【冰火增伤宝石】额外增伤 25%。'],
+  ['helpDifficulty', 'Each stage increases zombie strength and introduces new special zombies across 4 chapters.', '20 关逐级递增强度，逐步解锁喷酸、分裂、治疗、护盾、自爆等 15 种僵尸。'],
+  ['helpSupport', 'Auto Skills recharge automatically and show their cooldown progress along the bottom of the battlefield.', '所有自动技能冷却结束后自动释放，战场下方会实时显示各技能充能进度。'],
+  ['helpCrit', 'Critical hits deal multiplied damage and trigger knockback and HP-shred bonuses.', '暴击造成高额倍率伤害，并可触发击退与百分比斩血特效。'],
+  ['helpTouch', 'Built for one-hand mobile play: thumb-zone bottom bar, 1-tap upgrade cards, and instant target switching.', '专为手机单手优化：底部拇指操作栏、一键三选一与快捷索敌切换。'],
+  ['helpEndless', 'After clearing a stage, you can optionally keep playing in Endless mode to test your maxed build!', '通关后可选择继续进入无尽模式，测试成型弹幕的极限清场爽感！'],
 
   // Accessibility labels
   ['ariaBattlefield', 'Battlefield', '战场'],
-  ['ariaFence', 'Bastion wall', '钢铁城墙'],
-  ['ariaSlot', 'Wall slot {index}', '城墙槽位 {index}'],
+  ['ariaFence', 'Steel wall', '钢铁城墙'],
+  ['ariaSlot', 'Wall position {index}', '城墙位置 {index}'],
   ['ariaPause', 'Pause the fight', '暂停战斗'],
   ['ariaResume', 'Resume the fight', '继续战斗'],
   ['ariaSpeed', 'Game speed', '倍速'],
@@ -3384,31 +3408,31 @@ const ROWS = [
   ['ariaDialog', 'Dialog', '对话框'],
 
   // Panel copy
-  ['armoryIntro', 'Equip up to 3 Core Gems, gear up, and level permanent upgrades to crush tougher hordes.', '镶嵌最多 3 颗核心宝石、更换武装并升级永久属性，轻松横扫高难尸潮。'],
+  ['armoryIntro', 'Equip up to 3 Core Gems, gear up, and level permanent upgrades to crush tougher stages.', '镶嵌最多 3 颗核心宝石、穿戴武装并升级永久属性，轻松突破高难关卡。'],
   ['bonuses', 'Active Loadout Bonuses', '当前配置加成'],
-  ['rewardBonusNote', 'Reward bonuses multiply coins earned when a battle finishes.', '奖励加成会在战斗结算时与难度倍率叠乘。'],
-  ['equipReplaces', 'Equipping an item swaps it into that gear slot.', '点击装备即可直接替换当前槽位武装。'],
-  ['codexRankNote', 'Bastion turrets upgrade directly from Lv.1 to Lv.4 when picked again during battle.', '战斗中再次抽中同种炮塔可直接从 Lv.1 升至 Lv.4。'],
+  ['rewardBonusNote', 'Coin bonuses increase earnings at stage settlement.', '金币加成会在战斗结算时生效。'],
+  ['equipReplaces', 'Equipping an item swaps it into that gear slot.', '点击装备即可直接替换当前部位武装。'],
+  ['codexRankNote', 'Pick Gun Mods and Auto Skills during battle to stack levels and unlock explosive synergies.', '战斗中升级三选一可叠加「枪械强化」与「自动技能」等级，组合出满屏弹幕！'],
   ['settingsKeepRun', 'Changes apply immediately without interrupting your saved run.', '设置实时生效，不会丢失当前已保存的对局。'],
-  ['difficultyNextRun', 'Difficulty applies when you start your next battle.', '难度将在下一局出击时生效。'],
-  ['difficultyRewards', 'Higher difficulties increase zombie pressure and coin rewards.', '更高难度带来更猛尸潮与更高货币倍率。'],
-  ['helpRole', 'Zero active combat skills — focus on building explosive synergies while your bastion handles the firing.', '严格零主动技能——专注构筑弹幕与超武联动，火力全自动倾泻。'],
-  ['helpAura', 'Banner auras boost nearby defenders within range.', '旌旗光环会强化射程圆内的周边防守单位。'],
-  ['helpBoard', 'Zombies advance toward the steel bastion wall with 2×5 defender slots behind it.', '尸潮自上而下推进，城墙后方设有 2×5 阵列供英雄与炮塔驻守。'],
-  ['helpRows', 'Front row beside the Hero fills first; drag units anytime to rearrange.', '前排英雄两侧优先部署，可随时拖拽换位。'],
+  ['difficultyNextRun', 'Applies on your next sortie.', '将在下一关出击时生效。'],
+  ['difficultyRewards', 'Higher stages pay bigger first-clear coin rewards.', '越靠后的关卡首通金币奖励越丰厚。'],
+  ['helpRole', 'Zero active buttons — focus on choosing Gun Mods & Auto Skills while your Gunner handles the firing.', '无需复杂走位与主动按键——专注三选一搭配枪械强化与自动技能，火力全自动倾泻。'],
+  ['helpAura', 'Elemental effects combine for huge damage.', '元素异常叠加可打出巨额伤害。'],
+  ['helpBoard', 'Zombies surge down the wasteland road toward your fortified steel wall.', '尸潮沿荒原公路涌向钢铁城墙，防线枪手在城墙正中迎击。'],
+  ['helpRows', 'Your Gunner stays anchored at the center of the steel wall.', '防线枪手固定驻守在城墙正中炮位。'],
   ['enemyApproach', 'Approaches from top.', '从上方涌入。'],
-  ['enemyFenceOnly', 'Targets the bastion wall.', '仅攻击城墙防线。'],
+  ['enemyFenceOnly', 'Targets the steel wall.', '仅攻击城墙。'],
   ['fenceDamage', 'Wall damage taken', '城墙承伤'],
   ['health', 'Health', '生命'],
-  ['enemyHealth', 'Enemy HP', '敌人生命'],
-  ['enemySpeed', 'Enemy speed', '敌人移速'],
-  ['enemyDamage', 'Enemy damage', '敌人伤害'],
+  ['enemyHealth', 'Zombie HP', '僵尸血量'],
+  ['enemySpeed', 'Zombie speed', '僵尸移速'],
+  ['enemyDamage', 'Zombie damage', '僵尸伤害'],
   ['pressureCount', 'Horde size', '尸潮规模'],
-  ['saveHelp', 'Export a JSON backup of your profile & run, or paste a backup to restore.', '导出档案与对局的 JSON 备份，或粘贴已有存档进行恢复。'],
+  ['saveHelp', 'Export a JSON backup of your profile & progress, or paste a backup to restore.', '导出档案与闯关进度的 JSON 备份，或粘贴已有存档恢复。'],
   ['copySave', 'Copy save', '复制存档'],
   ['copyUnavailable', 'Select the text above to copy.', '请选中上方文本手动复制。'],
   ['noOutcome', 'No settled outcome yet.', '本局尚未结算。'],
-  ['settlementPending', 'Rewards appear after battle settlement.', '战斗结算后将在此显示报酬。'],
+  ['settlementPending', 'Coins appear after battle settlement.', '战斗结算后将在此显示金币收益。'],
   ['on', 'On', '开启'],
   ['off', 'Off', '关闭'],
   ['unavailable', 'Not available', '暂不可用'],
@@ -3420,35 +3444,35 @@ const ROWS = [
   ['bad-language', 'Language must be EN or ZH', '语言仅支持中/英'],
   ['bad-screen', 'Unknown screen', '未知界面'],
   ['unknown-action', 'Unknown action', '未知操作'],
-  ['backRow', 'Rear deck', '后排'],
+  ['backRow', 'Wall Deck', '城墙阵地'],
   ['critDamage', 'Crit×', '暴伤'],
-  ['projectile', 'Projectile', '投射'],
-  ['pauseToPlan', 'Drag defenders anytime to move or swap.', '随时拖动防守单位即可移动或换位。'],
-  ['planningLocked', 'Drag defenders anytime to move or swap.', '随时拖动防守单位即可移动或换位。'],
+  ['projectile', 'Bullet', '子弹'],
+  ['pauseToPlan', 'Tap the Gunner anytime to switch target priority.', '随时点击枪手即可查看属性或切换优先攻击目标。'],
+  ['planningLocked', 'Tap the Gunner anytime to switch target priority.', '随时点击枪手即可查看属性或切换优先攻击目标。'],
   ['statsUnavailable', 'Stats unavailable.', '属性暂不可用。'],
-  ['emptySelection', 'Tap a defender on the wall to inspect or set targeting.', '点击城墙上的单位可查看属性或切换索敌。'],
-  ['supportNote', 'Support aura buffs defenders inside the range ring.', '支援光环强化射程圈内的所有友军。'],
+  ['emptySelection', 'Tap the Gunner at center wall to view stats or switch target priority.', '点击城墙正中的枪手可查看属性或切换优先攻击目标。'],
+  ['supportNote', 'Auto Skills fire automatically on cooldown.', '自动技能冷却就绪后自动释放。'],
   ['youGain', 'Result', '效果'],
   ['currentStats', 'Stats', '属性'],
-  ['chooseEmpty', 'Empty wall slot — drag any unit here to reposition.', '空城墙槽位——可将任意单位拖至此处。'],
-  ['heroStays', 'Hero stays on the bastion.', '英雄始终驻守城墙。'],
-  ['moveHint', 'Drag to an empty slot to move, or onto another unit to swap.', '拖至空位移动，拖至其他单位直接互换。'],
-  ['buildPanelLabel', 'Draft and unit controls', '选卡与单位控制'],
+  ['chooseEmpty', 'Tap the Gunner at center wall.', '点击城墙正中的枪手。'],
+  ['heroStays', 'Gunner holds the center wall.', '枪手固定驻守城墙正中。'],
+  ['moveHint', 'Tap below to switch target priority.', '点击下方切换优先攻击目标。'],
+  ['buildPanelLabel', 'Upgrades and gunner controls', '强化选卡与枪手控制'],
   ['kindTower', 'Turret', '炮塔'],
-  ['no_draft', 'No active draft', '当前没有三选一'],
+  ['no_draft', 'No active upgrade pick', '当前没有三选一'],
   ['no_options', 'All upgrades maxed', '全部强化已满级'],
   ['not_playing', 'Fight is not active', '当前不在战斗中'],
   ['not_ready', 'Need more XP', '经验尚未满'],
-  ['busy', 'Draft already open', '三选一已打开'],
-  ['bad_index', 'Invalid option', '无效选项'],
-  ['bad_option', 'Invalid option', '无效选项'],
+  ['busy', 'Upgrade pick already open', '三选一已打开'],
+  ['bad_index', 'Invalid choice', '无效选项'],
+  ['bad_option', 'Invalid choice', '无效选项'],
   ['upgrade_failed', 'Upgrade failed', '强化未生效'],
-  ['unknown_tower', 'Unknown turret', '未知炮塔'],
-  ['no_slot', 'Wall slots full', '城墙槽位已满'],
-  ['draft_missing', 'Draft closed', '选卡已关闭'],
+  ['unknown_tower', 'Unknown unit', '未知单位'],
+  ['no_slot', 'No open space', '无可用位置'],
+  ['draft_missing', 'Upgrade closed', '选卡已关闭'],
   ['unknown_upgrade', 'Unknown upgrade', '未知强化'],
   ['upgrade_capped', 'Already max level', '已达满级'],
-  ['no_hero', 'Hero missing', '未找到英雄'],
+  ['no_hero', 'Gunner missing', '未找到枪手'],
   ['invalid_state', 'Action unavailable', '当前不可操作']
 ];
 
@@ -3649,1295 +3673,483 @@ __ff_factories["src/render/defenders.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["defenderSize"] = defenderSize;
 __ff_exports["drawDefender"] = drawDefender;
-const __ff_m0 = __ff_load("src/shared.js");
-const __ff_m1 = __ff_load("src/data/towers.js");
-const ARENA = __ff_m0["ARENA"];
-const BASE_TYPES = __ff_m0["BASE_TYPES"];
-const clamp = __ff_m0["clamp"];
-const getUnitStats = __ff_m1["getUnitStats"];
 /**
- * Fencefall defender sprites (logical pixels, bottom-center anchor).
+ * Fencefall v5 — PvZ2-Style Sharp Cel-Shaded Wall Gunner (Hero) Vector Renderer.
  *
- * drawDefender(ctx, unit, x, y) plants the sprite's feet — including the
- * contact-shadow row — on (x, y). The cached image is 40×40, inside the
- * 24–40px art range, and that body stays inside the slot.
- *
- * Base turret silhouettes draw each defender's distinct weapon — bow, flame
- * bowl, crystal, spark coil, flask, or banner. Rank 1–4 is shown as chevrons
- * on the plinth, one mark per level.
- * A defender whose stats include an aura wears a teal ring around the sprite.
- * Nothing here reads or writes gameplay RNG or run state.
+ * Bottom-center anchor (x, y) places the Gunner's boots & contact shadow right on
+ * the central Commander Gunnery Platform. Supports smooth continuous breathing,
+ * fluttering crimson scarf, 360° articulated weapon tracking (`options.aimAngle`),
+ * spring kickback (`options.recoil`), starburst muzzle flash, and live visual weapon
+ * evolutions as Gun Mods & Auto Skills are unlocked.
  */
 
+const HERO_W = 50;
+const HERO_H = 54;
+const INK = '#11171d';
 
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.ellipse === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+  );
+}
 
-const W = 40;
-const H = 40;
-const FRAMES = 4;
-
-const PALETTE = {
-  K: '#140e0c',
-  k: '#2a221c',
-  R: '#4a2c18',
-  r: '#8a552c',
-  Y: '#e0a05a',
-  N: '#3a4450',
-  n: '#8494a4',
-  M: '#e2eaf0',
-  B: '#7a4e18',
-  b: '#f0c14a',
-  X: '#322e2a',
-  x: '#6a635c',
-  w: '#c4bbb0',
-  d: '#3c1018',
-  C: '#6e2430',
-  e: '#8e3844',
-  c: '#c44a56',
-  H: '#e6c15a',
-  h: '#fff0c0',
-  s: '#c49068',
-  S: '#f0c4a0',
-  y: '#f6d8b4',
-  P: '#5c3818',
-  p: '#a06a38',
-  F: '#5c140c',
-  f: '#e04018',
-  A: '#ffb030',
-  a: '#fff4c8',
-  I: '#102e3c',
-  i: '#2a7c9c',
-  L: '#8ae4f8',
-  l: '#f6feff',
-  V: '#1c1438',
-  v: '#6840d0',
-  Z: '#ffe050',
-  z: '#fffce8',
-  U: '#7a4018',
-  u: '#e08840',
-  G: '#142010',
-  g: '#3c882c',
-  Q: '#b0e848',
-  q: '#f0ffd0',
-  o: '#7aa090',
-  O: '#d8f0e4',
-  T: '#145850',
-  t: '#38a898',
-  D: '#e0fff6',
-  E: '#f6f2e6',
-  W: '#ffffff',
-  J: '#1c1612',
-  j: '#4a3c2c',
-  m: '#d8c4a4'
-};
-
-const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
-const BASE_SET = new Set(BASE_TYPES);
-
-const ALIASES = {
-  hero: 'hero',
-  warden: 'hero',
-  champion: 'hero',
-  keeper: 'hero',
-  sentinel: 'hero',
-  bolt: 'bolt',
-  arrow: 'bolt',
-  arrows: 'bolt',
-  projectile: 'bolt',
-  ballista: 'bolt',
-  crossbow: 'bolt',
-  quarrel: 'bolt',
-  archer: 'bolt',
-  fire: 'fire',
-  flame: 'fire',
-  burn: 'fire',
-  ember: 'fire',
-  frost: 'frost',
-  ice: 'frost',
-  cold: 'frost',
-  slow: 'frost',
-  lightning: 'lightning',
-  lightening: 'lightning',
-  lighning: 'lightning',
-  shock: 'lightning',
-  thunder: 'lightning',
-  electric: 'lightning',
-  spark: 'lightning',
-  poison: 'poison',
-  posion: 'poison',
-  toxin: 'poison',
-  venom: 'poison',
-  plague: 'poison',
-  support: 'support',
-  aura: 'support',
-  banner: 'support',
-  buff: 'support',
-  buffer: 'support',
-  healer: 'support'
-};
-
-const FLAVOR_PAIRS = {};
-const recipeById = new Map();
-
-const cache = new Map();
-
-const TOWER_PAINTERS = {
-  bolt: paintBolt,
-  fire: paintFire,
-  frost: paintFrost,
-  lightning: paintLightning,
-  poison: paintPoison,
-  support: paintSupport
-};
-
-const HYBRID_PAINTERS = {
-  'bolt+fire': paintCinderQuarrel,
-  'bolt+frost': paintHailSpike,
-  'bolt+lightning': paintStormLance,
-  'bolt+poison': paintVenomSpine,
-  'bolt+support': paintSignalShot,
-  'fire+frost': paintSteamVent,
-  'fire+lightning': paintPlasmaBrazier,
-  'fire+poison': paintBlightKiln,
-  'fire+support': paintWarBeacon,
-  'frost+lightning': paintPrismCoil,
-  'frost+poison': paintRimeUrn,
-  'frost+support': paintWardBell,
-  'lightning+poison': paintAcidArc,
-  'lightning+support': paintRelayStandard,
-  'poison+support': paintPlagueAltar
-};
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
 
 function defenderSize(unit) {
-  void unit;
-  return {width: W, height: H};
-}
-
-function statsHaveAura(stats) {
-  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return false;
-  const aura = stats.aura;
-  if (aura && typeof aura === 'object' && !Array.isArray(aura)) return true;
-  const mechanics = stats.mechanics;
-  if (!Array.isArray(mechanics)) return false;
-  for (let i = 0; i < mechanics.length; i++) {
-    if (String(mechanics[i]).trim().toLowerCase() === 'aura') return true;
+  if (unit && (unit.kind === 'hero' || unit.type === 'hero')) {
+    return {width: HERO_W, height: HERO_H};
   }
-  return false;
+  return {width: 40, height: 40};
 }
 
-function unitHasAura(unit) {
-  if (statsHaveAura(unit.stats)) return true;
-  try {
-    return statsHaveAura(getUnitStats(unit));
-  } catch {
-    return false;
+function drawMuzzleStar(ctx, x, y, radius, tint) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Outer luminous burst
+  const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 1.45);
+  glow.addColorStop(0, '#ffffff');
+  glow.addColorStop(0.42, tint);
+  glow.addColorStop(1, 'rgba(255, 190, 70, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 1.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Sharp PvZ2 cartoon 6-point starburst
+  ctx.beginPath();
+  const spikes = 6;
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 === 0 ? radius : radius * 0.42;
+    const a = (i * Math.PI) / spikes;
+    const px = Math.cos(a) * r;
+    const py = Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
   }
+  ctx.closePath();
+  ctx.fillStyle = '#fff9d8';
+  ctx.fill();
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.restore();
 }
 
-function drawPixelCircle(ctx, cx, cy, radius, color) {
-  const r = Math.round(radius);
-  if (r <= 0 || typeof ctx.fillRect !== 'function') return;
-  let x = r;
-  let y = 0;
-  let decision = 1 - r;
-  ctx.fillStyle = color;
-  while (x >= y) {
-    ctx.fillRect(cx + x, cy + y, 1, 1);
-    ctx.fillRect(cx + y, cy + x, 1, 1);
-    ctx.fillRect(cx - x, cy + y, 1, 1);
-    ctx.fillRect(cx - y, cy + x, 1, 1);
-    ctx.fillRect(cx + x, cy - y, 1, 1);
-    ctx.fillRect(cx + y, cy - x, 1, 1);
-    ctx.fillRect(cx - x, cy - y, 1, 1);
-    ctx.fillRect(cx - y, cy - x, 1, 1);
-    y += 1;
-    if (decision <= 0) decision += 2 * y + 1;
-    else {
-      x -= 1;
-      decision += 2 * (y - x) + 1;
-    }
-  }
-}
-
-// Halo in the slot padding, outside the 40px body. Outer radius stays inside
-// the slot and off the silhouette, chevrons, and contact shadow.
-function drawAuraRing(ctx, dx, dy, dw, dh) {
-  const cx = Math.round(dx + dw / 2);
-  const cy = Math.round(dy + dh / 2);
-  const reach = Math.round(Math.min(dw, dh) / 2);
-  const wanted = reach + Math.max(4, Math.round(Math.min(dw, dh) * 0.12));
-  const slotLimit = Math.floor(Math.min(ARENA.slotWidth, ARENA.slotHeight) / 2) - 1;
-  const outer = Math.min(wanted, slotLimit);
-  if (!(outer > reach + 1)) return;
-  drawPixelCircle(ctx, cx, cy, outer, '#0c3f36');
-  drawPixelCircle(ctx, cx, cy, outer - 1, '#7dcec0');
-  drawPixelCircle(ctx, cx, cy, outer - 2, '#e7fff8');
-}
-
-function drawDefender(ctx, unit, x, y, options = {}) {
-  if (!ctx || !unit || typeof unit !== 'object' || typeof ctx.save !== 'function') return;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  const opts = options || {};
+function drawHeroGunner(ctx, unit, x, y, opts) {
   const time = Number.isFinite(opts.time) ? opts.time : 0;
   const scale = Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1;
   const flash = Number.isFinite(opts.flash) && opts.flash > 0 ? Math.min(1, opts.flash) : 0;
-  const visual = resolveVisual(unit);
-  const rank = clamp(Math.round(Number.isFinite(unit.rank) ? unit.rank : 1), 1, 4);
-  const stars = visual.family === 'hero' ? starCount(unit) : 0;
-  const frame = frameOf(time);
-  const sprite = getSprite(visual, rank, stars, frame);
-  const dw = Math.max(1, Math.round(W * scale));
-  const dh = Math.max(1, Math.round(H * scale));
-  const dx = Math.round(x - dw / 2);
-  const dy = Math.round(y - dh);
-  const aura = unitHasAura(unit);
+  const recoil = Number.isFinite(opts.recoil) ? Math.max(0, Math.min(1, opts.recoil)) : 0;
+  const aimAngle = Number.isFinite(opts.aimAngle) ? opts.aimAngle : -Math.PI / 2;
+  const upg = (opts.upgrades && typeof opts.upgrades === 'object') ? opts.upgrades : (unit.upgrades || {});
+
+  const hasMulti = (upg.volley || 0) > 0 || (upg.split_shot || 0) > 0;
+  const hasFire = (upg.shrapnel || 0) > 0 || (upg.napalm || 0) > 0;
+  const hasFrost = (upg.frostbite || 0) > 0 || (upg.cryo_barrage || 0) > 0;
+  const hasArc = (upg.ricochet || 0) > 0 || (upg.orbital_beam || 0) > 0;
+  const totalLevels = Object.values(upg).reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+  const eliteTrim = totalLevels >= 6;
+
+  const bob = Math.sin(time * 3.4) * 1.3;
+  const sway = Math.cos(time * 2.1) * 0.6;
+  const aimCos = Math.cos(aimAngle);
+  const aimSin = Math.sin(aimAngle);
+  const kickX = -aimCos * recoil * 3.6;
+  const kickY = -aimSin * recoil * 2.4;
+
   ctx.save();
-  try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* older contexts */ }
-    blit(ctx, sprite, dx, dy, dw, dh);
-    if (flash > 0) {
-      ctx.globalAlpha = flash;
-      ctx.globalCompositeOperation = 'lighter';
-      blit(ctx, sprite, dx, dy, dw, dh);
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+
+  // 1. Soft Ground Contact Shadow
+  ctx.fillStyle = 'rgba(6, 10, 14, 0.52)';
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 18, 7.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle Hero Commander Aura when heavily upgraded
+  if (totalLevels >= 4) {
+    const auraAlpha = 0.14 + 0.08 * Math.sin(time * 4.2);
+    const auraColor = hasArc ? `rgba(96, 236, 255, ${auraAlpha})`
+      : hasFire ? `rgba(255, 138, 56, ${auraAlpha})`
+      : hasFrost ? `rgba(128, 232, 255, ${auraAlpha})`
+      : `rgba(248, 206, 94, ${auraAlpha})`;
+    ctx.strokeStyle = auraColor;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.ellipse(0, -3, 21.5, 8.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 2. Fluttering Crimson Commander Scarf (behind torso)
+  const wave1 = Math.sin(time * 5.6) * 3.2;
+  const wave2 = Math.cos(time * 6.8) * 2.6;
+  ctx.save();
+  ctx.translate(kickX * 0.5, bob * 0.8 + kickY * 0.5);
+  const scarfGrad = ctx.createLinearGradient(-16, -24, -22, -6);
+  scarfGrad.addColorStop(0, '#e8464c');
+  scarfGrad.addColorStop(1, '#981e28');
+  ctx.fillStyle = scarfGrad;
+  ctx.beginPath();
+  ctx.moveTo(-6, -25);
+  ctx.quadraticCurveTo(-15 + wave1 * 0.5, -21, -21 + wave1, -12 + wave2 * 0.5);
+  ctx.lineTo(-15 + wave2, -9 + wave1 * 0.3);
+  ctx.quadraticCurveTo(-10, -16, -3, -21);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  // 3. Sturdy Armored Tactical Boots & Legs
+  for (const side of [-1, 1]) {
+    const lx = side * 6.5;
+    // Armored shin + boot
+    const bootGrad = ctx.createLinearGradient(lx - 4, -15, lx + 4, -3);
+    bootGrad.addColorStop(0, '#465866');
+    bootGrad.addColorStop(1, '#1e2830');
+    rRect(ctx, lx - 4.4, -14.5, 8.8, 11.5, 3.2);
+    ctx.fillStyle = bootGrad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.9;
+    ctx.stroke();
+
+    // Brass knee-pad highlight
+    ctx.fillStyle = eliteTrim ? '#f4cc62' : '#7b92a2';
+    rRect(ctx, lx - 3, -13.2, 6, 3.6, 1.5);
+    ctx.fill();
+  }
+
+  // 4. Torso Armor & Brass Shoulder Pauldrons
+  ctx.save();
+  ctx.translate(sway + kickX * 0.7, bob + kickY * 0.7);
+
+  // Chest cuirass (3-tone cel shaded steel blue)
+  const torsoGrad = ctx.createLinearGradient(-12, -31, 12, -13);
+  torsoGrad.addColorStop(0, '#4e7898');
+  torsoGrad.addColorStop(0.55, '#2b4a62');
+  torsoGrad.addColorStop(1, '#182b3a');
+  rRect(ctx, -11.5, -30, 23, 18.5, 6);
+  ctx.fillStyle = torsoGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  // Tactical Utility Belt & Brass Buckle
+  ctx.fillStyle = '#3b2c20';
+  ctx.fillRect(-10.5, -16, 21, 4.2);
+  ctx.fillStyle = '#f4cb62';
+  rRect(ctx, -3.5, -16.4, 7, 5, 1.4);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // Glowing chest power core (reflects strongest Auto Skill element!)
+  const coreColor = hasArc ? '#62f2ff' : hasFire ? '#ff7c34' : hasFrost ? '#86eeff' : '#f8d264';
+  ctx.fillStyle = '#121d24';
+  ctx.beginPath();
+  ctx.arc(0, -22.5, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = coreColor;
+  ctx.beginPath();
+  ctx.arc(0, -22.5, 2.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(-0.8, -23.3, 1.0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Left & Right Gold/Brass Shoulder Pauldrons
+  for (const side of [-1, 1]) {
+    const px = side * 12.2;
+    const py = -25.5;
+    const pGrad = ctx.createLinearGradient(px - 4, py - 5, px + 4, py + 5);
+    pGrad.addColorStop(0, '#fae08a');
+    pGrad.addColorStop(0.5, '#d69c36');
+    pGrad.addColorStop(1, '#7c5116');
+    ctx.fillStyle = pGrad;
+    ctx.beginPath();
+    ctx.ellipse(px, py, 5.2, 6.2, side * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.9;
+    ctx.stroke();
+    // Specular rim dot
+    ctx.fillStyle = 'rgba(255, 252, 232, 0.72)';
+    ctx.beginPath();
+    ctx.ellipse(px - side * 1.2, py - 2.2, 1.8, 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Crimson Neck Scarf Collar
+  rRect(ctx, -8.5, -31.5, 17, 5, 2.5);
+  ctx.fillStyle = '#d93d44';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // 5. Oversized Expressive PvZ2-Style Combat Helmet & Glowing Visor
+  const headX = aimCos * 1.6;
+  const headY = -39.5 + aimSin * 0.8;
+
+  // Helmet Dome (glossy cel-shaded tactical steel-blue with warm gold brow trim)
+  const helmGrad = ctx.createRadialGradient(headX - 4, headY - 5, 2, headX, headY, 13.5);
+  helmGrad.addColorStop(0, '#78a8c8');
+  helmGrad.addColorStop(0.55, '#3b6482');
+  helmGrad.addColorStop(1, '#1c3346');
+  ctx.fillStyle = helmGrad;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 11.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.1;
+  ctx.stroke();
+
+  // Golden Helmet Crest Stripe
+  ctx.fillStyle = '#f6cf66';
+  ctx.beginPath();
+  ctx.moveTo(headX - 2.6, headY - 11.2);
+  ctx.lineTo(headX + 2.6, headY - 11.2);
+  ctx.lineTo(headX + 1.8, headY - 3.5);
+  ctx.lineTo(headX - 1.8, headY - 3.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // Glossy Specular Highlight on Helmet Crown
+  ctx.fillStyle = 'rgba(235, 250, 255, 0.55)';
+  ctx.beginPath();
+  ctx.ellipse(headX - 4.8, headY - 5.2, 3.2, 1.7, -0.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tactical Glowing Visor Goggles (points subtly toward aim direction!)
+  const visorX = headX + aimCos * 2.2;
+  const visorY = headY - 0.5 + aimSin * 1.4;
+  rRect(ctx, visorX - 7.8, visorY - 3.4, 15.6, 6.8, 3.2);
+  const vGrad = ctx.createLinearGradient(visorX - 7, visorY - 3, visorX + 7, visorY + 3);
+  vGrad.addColorStop(0, '#9cf8ff');
+  vGrad.addColorStop(0.5, '#38c8ec');
+  vGrad.addColorStop(1, '#166e92');
+  ctx.fillStyle = vGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Visor diagonal glossy glint
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.beginPath();
+  ctx.moveTo(visorX - 4.8, visorY - 2.2);
+  ctx.lineTo(visorX - 1.8, visorY - 2.2);
+  ctx.lineTo(visorX - 3.5, visorY + 2.1);
+  ctx.lineTo(visorX - 6.0, visorY + 2.1);
+  ctx.closePath();
+  ctx.fill();
+
+  // 6. ARTICULATED ROTATING HEAVY ASSAULT CANNON / RAILGUN
+  ctx.save();
+  ctx.translate(6.5, -23.5);
+  ctx.rotate(aimAngle);
+  const gunBack = -recoil * 5.2;
+
+  // Heavy Assault Rifle / Railgun Receiver Body
+  const recGrad = ctx.createLinearGradient(gunBack - 4, -5.5, gunBack - 4, 5.5);
+  recGrad.addColorStop(0, '#96aebc');
+  recGrad.addColorStop(0.45, '#526876');
+  recGrad.addColorStop(1, '#243038');
+  rRect(ctx, gunBack - 6, -5.2, 22, 10.4, 3);
+  ctx.fillStyle = recGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.9;
+  ctx.stroke();
+
+  // Brass / Gold tactical receiver rail
+  ctx.fillStyle = '#f2c862';
+  ctx.fillRect(gunBack - 2, -4.4, 13, 2.2);
+
+  // Extended Gun Barrel(s) — evolves visually with Volley/Split!
+  const barrelLen = hasMulti ? 26 : 24;
+  if (hasMulti) {
+    // Twin heavy barrels
+    for (const by of [-3.3, 1.1]) {
+      rRect(ctx, gunBack + 12, by, barrelLen - 10, 3.0, 1.2);
+      ctx.fillStyle = '#6c8492';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-    if (aura) {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      drawAuraRing(ctx, dx, dy, dw, dh);
-    }
-  } finally {
+  } else {
+    // Sleek single heavy rail barrel
+    rRect(ctx, gunBack + 12, -2.5, barrelLen - 10, 5.0, 1.5);
+    ctx.fillStyle = '#738b9a';
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // Elemental Evolution Visual Attachments on the Cannon!
+  if (hasFire) {
+    // Glowing orange thermal cooling vents
+    ctx.fillStyle = '#ff7228';
+    ctx.fillRect(gunBack + 14, -1.2, 7, 2.4);
+    ctx.fillStyle = '#ffe27a';
+    ctx.fillRect(gunBack + 15.5, -0.6, 4, 1.2);
+  }
+  if (hasFrost) {
+    // Gleaming cyan cryo fins flanking barrel
+    ctx.fillStyle = '#7ceeff';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 13, -4.8);
+    ctx.lineTo(gunBack + 21, -7.2);
+    ctx.lineTo(gunBack + 20, -3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 13, 4.8);
+    ctx.lineTo(gunBack + 21, 7.2);
+    ctx.lineTo(gunBack + 20, 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  if (hasArc) {
+    // Electric cyan/gold rail coils near muzzle
+    ctx.strokeStyle = '#62f2ff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(gunBack + 18, -4.5);
+    ctx.lineTo(gunBack + 24, -4.5);
+    ctx.moveTo(gunBack + 18, 4.5);
+    ctx.lineTo(gunBack + 24, 4.5);
+    ctx.stroke();
+  }
+
+  // Heavy Muzzle Brake Tip
+  rRect(ctx, gunBack + barrelLen, -3.8, 4.5, 7.6, 1.4);
+  ctx.fillStyle = '#2d3a42';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Armored Glove Gripping the Gun
+  ctx.fillStyle = '#d49a38';
+  ctx.beginPath();
+  ctx.arc(gunBack + 2, 3.2, 3.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Crisp Cartoon Muzzle Flash Starburst on Shot!
+  if (recoil > 0.25) {
+    const flashSize = 9 + recoil * 9;
+    const flashTint = hasFire ? '#ff7c32' : hasFrost ? '#7aefff' : hasArc ? '#ffe858' : '#ffb848';
+    drawMuzzleStar(ctx, gunBack + barrelLen + 7, 0, flashSize, flashTint);
+  }
+
+  ctx.restore(); // end gun rotation
+  ctx.restore(); // end torso bob
+
+  // Subtle warm radial muzzle bounce glow
+  if (flash > 0.05) {
+    ctx.save();
+    const glow = ctx.createRadialGradient(0, -28, 2, 0, -28, 22);
+    glow.addColorStop(0, `rgba(255, 244, 198, ${(flash * 0.28).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(255, 244, 198, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, -28, 22, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
+
+  ctx.restore();
 }
 
-function frameOf(time) {
-  if (!Number.isFinite(time) || time <= 0) return 0;
-  return Math.floor(time * 6) % FRAMES;
-}
-
-function starCount(unit) {
-  const upgrades = unit.upgrades;
-  if (!upgrades || typeof upgrades !== 'object') return 0;
-  let count = 0;
-  for (const key of Object.keys(upgrades)) {
-    const value = upgrades[key];
-    if (typeof value === 'number' && Number.isFinite(value)) count += Math.max(0, Math.min(6, Math.round(value)));
-    else if (value) count += 1;
-    if (count >= 6) return 6;
-  }
-  return count;
-}
-
-function indexRecipes(catalog) {
-  const list = Array.isArray(catalog)
-    ? catalog
-    : (catalog && typeof catalog === 'object'
-      ? Object.entries(catalog).map(([id, value]) => ({id, ...(value && typeof value === 'object' ? value : {})}))
-      : []);
-  for (const recipe of list) {
-    if (!recipe || typeof recipe !== 'object') continue;
-    const pair = parentsOfRecipe(recipe);
-    const id = String(recipe.id ?? '').trim().toLowerCase();
-    if (!id || !pair) continue;
-    recipeById.set(id, pair);
-    recipeById.set(id.replace(/[^a-z0-9]/g, ''), pair);
-  }
-}
-
-function parentsOfRecipe(recipe) {
-  return pairFromList(recipe.parents)
-    || pairFromList(recipe.ingredients)
-    || pairFromList(recipe.types)
-    || pairFromList(recipe.components)
-    || pairFromList(recipe.pair)
-    || (recipe.a != null && recipe.b != null ? pairFromList([recipe.a, recipe.b]) : null)
-    || (recipe.left != null && recipe.right != null ? pairFromList([recipe.left, recipe.right]) : null);
-}
-
-function canonToken(value) {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (!raw) return '';
-  return ALIASES[raw] || raw;
-}
-
-function canonBase(value) {
-  const mapped = canonToken(value);
-  return BASE_SET.has(mapped) ? mapped : '';
-}
-
-function pairKey(a, b) {
-  return BASE_TYPES.indexOf(a) < BASE_TYPES.indexOf(b) ? `${a}+${b}` : `${b}+${a}`;
-}
-
-function pairFromList(list) {
-  if (typeof list === 'string') return pairFromIdString(list);
-  if (!Array.isArray(list) || list.length < 2) return null;
-  const bases = [];
-  for (const entry of list) {
-    const base = canonBase(entry && typeof entry === 'object' ? (entry.type || entry.id || entry.kind) : entry);
-    if (base && !bases.includes(base)) bases.push(base);
-  }
-  if (bases.length < 2) return null;
-  return pairKey(bases[0], bases[1]);
-}
-
-function pairFromIdString(id) {
-  const raw = String(id ?? '').trim().toLowerCase();
-  if (!raw) return null;
-  const compact = raw.replace(/[^a-z0-9]/g, '');
-  if (recipeById.has(raw)) return recipeById.get(raw);
-  if (recipeById.has(compact)) return recipeById.get(compact);
-  if (FLAVOR_PAIRS[compact]) return pairFromList(FLAVOR_PAIRS[compact]);
-  const found = [];
-  const push = (base) => { if (base && !found.includes(base)) found.push(base); };
-  for (const part of raw.split(/[^a-z0-9]+/)) push(canonBase(part));
-  if (found.length >= 2) return pairKey(found[0], found[1]);
-  const tokens = [...BASE_TYPES, ...Object.keys(ALIASES).filter((key) => BASE_SET.has(ALIASES[key]))];
-  tokens.sort((a, b) => b.length - a.length);
-  const hits = [];
-  for (const token of tokens) {
-    if (!raw.includes(token)) continue;
-    const base = BASE_SET.has(token) ? token : ALIASES[token];
-    if (base && !hits.includes(base)) hits.push(base);
-  }
-  if (hits.length >= 2) return pairKey(hits[0], hits[1]);
-  return null;
-}
-
-function findPair(unit, typeName) {
-  return pairFromList(unit.parents)
-    || pairFromList(unit.ingredients)
-    || pairFromList(unit.components)
-    || pairFromList(unit.sourceTypes)
-    || pairFromIdString(typeName);
-}
-
-function accentFor(name) {
-  const accents = ['f', 'L', 'Z', 'Q', 't', 'b', 'c', 'v'];
-  let hash = 2166136261;
-  const text = String(name || 'unknown');
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return accents[(hash >>> 0) % accents.length];
-}
-
-function resolveVisual(unit) {
-  const typeName = canonToken(unit.type);
-  const kind = typeof unit.kind === 'string' ? unit.kind.toLowerCase() : '';
-  if (kind === 'hero' || typeName === 'hero') return {family: 'hero', key: 'hero'};
-  const base = BASE_SET.has(typeName) ? typeName : '';
-  if (base && kind !== 'hybrid') return {family: 'tower', key: base};
-  const pair = findPair(unit, typeName);
-  if (pair) return {family: 'hybrid', key: pair};
-  const accent = accentFor(typeName || kind || 'hybrid');
-  return {family: 'unknown', key: `unknown:${accent}`, accent};
-}
-
-function createPainter(frame) {
-  const cells = Array.from({length: H}, () => Array(W).fill('.'));
-  return {
-    frame,
-    cells,
-    px(x, y, color) {
-      const ix = Math.round(x);
-      const iy = Math.round(y);
-      if (ix < 0 || iy < 0 || ix >= W || iy >= H || !color || color === '.' || !PALETTE[color]) return;
-      cells[iy][ix] = color;
-    },
-    fill(x, y, w, h, color) {
-      for (let j = 0; j < h; j++) {
-        for (let i = 0; i < w; i++) this.px(x + i, y + j, color);
-      }
-    },
-    hline(x, y, w, color) { this.fill(x, y, w, 1, color); },
-    vline(x, y, h, color) { this.fill(x, y, 1, h, color); }
+/** Crisp vector fallback if a legacy tower unit is ever drawn directly by a test. */
+function drawLegacyTurret(ctx, unit, x, y, opts) {
+  const scale = Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+  const type = String(unit.type || 'bolt').toLowerCase();
+  const colorMap = {
+    bolt: '#f2d56a',
+    fire: '#ff6c30',
+    frost: '#7ce8ff',
+    lightning: '#ffe14a',
+    poison: '#7dce6a',
+    support: '#68d8c4',
   };
+  const accent = colorMap[type] || '#f0cb72';
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  rRect(ctx, -12, -26, 24, 22, 6);
+  ctx.fillStyle = '#334652';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.arc(0, -16, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
-function mx(x) {
-  return W - 1 - x;
-}
+function drawDefender(ctx, unit, x, y, options = {}) {
+  if (!ctx || !unit || typeof unit !== 'object') return;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const opts = options || {};
 
-function speckle(p, x, y, w, h, base, dark, light) {
-  for (let j = 0; j < h; j++) {
-    for (let i = 0; i < w; i++) {
-      const n = (i * 17 + j * 11) & 15;
-      p.px(x + i, y + j, n === 0 ? light : n < 3 ? dark : base);
-    }
-  }
-}
-
-function oval(p, cx, cy, rx, ry, color, test) {
-  if (!(rx > 0) || !(ry > 0)) return;
-  const y0 = Math.floor(cy - ry);
-  const y1 = Math.ceil(cy + ry);
-  const x0 = Math.floor(cx - rx);
-  const x1 = Math.ceil(cx + rx);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const nx = (x + 0.5 - cx) / rx;
-      const ny = (y + 0.5 - cy) / ry;
-      if (nx * nx + ny * ny <= 1 && (!test || test(x, y))) p.px(x, y, color);
-    }
-  }
-}
-
-function drawFlame(p, cx, top, height, style) {
-  const cols = {
-    fire: ['a', 'A', 'f', 'F'],
-    green: ['q', 'Q', 'g', 'G'],
-    steam: ['l', 'L', 'E', 'i'],
-    plasma: ['z', 'Z', 'a', 'f']
-  }[style] || ['a', 'A', 'f', 'F'];
-  const sway = [0, 1, 0, -1][p.frame] || 0;
-  const tall = Math.max(3, height - (p.frame === 2 ? 1 : 0));
-  for (let i = 0; i < tall; i++) {
-    const t = tall <= 1 ? 0 : i / (tall - 1);
-    const wobble = (i + p.frame * 2) % 4 === 0 ? 1 : 0;
-    const half = Math.max(0, Math.round((1 - t) * 3.4 + wobble * (1 - t)));
-    const y = top + i;
-    const x = cx + (t > 0.4 ? sway : 0);
-    const col = cols[t < 0.2 ? 0 : t < 0.48 ? 1 : t < 0.75 ? 2 : 3];
-    p.hline(x - half, y, half * 2 + 1, col);
-    if (half > 0 && (i + p.frame) % 3 === 0) p.px(x, y, cols[0]);
-  }
-}
-
-function drawCrystal(p, cx, top, height, wide) {
-  const mid = top + Math.max(1, Math.floor(height * 0.42));
-  const bot = top + height - 1;
-  for (let y = top; y <= bot; y++) {
-    const span = y <= mid ? (y - top) / Math.max(1, mid - top) : (bot - y) / Math.max(1, bot - mid);
-    const half = Math.max(0, Math.round(span * wide));
-    for (let x = cx - half; x <= cx + half; x++) {
-      let color = 'L';
-      if (x === cx - half || x === cx + half) color = 'I';
-      else if (x < cx - 1) color = 'i';
-      else if ((y + p.frame * 3) % 7 === 0 && x === cx) color = 'W';
-      else if (x === cx) color = 'l';
-      p.px(x, y, color);
-    }
-  }
-  p.px(cx, top, 'W');
-}
-
-function drawCoils(p, cx, top, count, gap) {
-  for (let i = 0; i < count; i++) {
-    const y = top + i * gap;
-    p.hline(cx - 5, y, 11, 'U');
-    p.hline(cx - 4, y + 1, 9, 'u');
-    p.px(cx - 5, y + 1, 'B');
-    p.px(cx + 5, y + 1, 'B');
-    p.hline(cx - 2, y + 2, 5, 'V');
-    p.px(cx, y + 1, (i + p.frame) % 2 === 0 ? 'Z' : 'z');
-  }
-  p.vline(cx, top - 1, count * gap + 1, 'n');
-  p.vline(cx + 1, top - 1, count * gap, 'N');
-}
-
-function drawSparks(p, points) {
-  const cols = ['z', 'Z', 'h', 'v'];
-  for (let i = 0; i < points.length; i++) {
-    const shift = (i + p.frame) % 2;
-    p.px(points[i][0] + (i % 2 === 0 ? shift : -shift), points[i][1] - (p.frame === 3 && i === 0 ? 1 : 0), cols[(i + p.frame) % cols.length]);
-  }
-}
-
-function drawZig(p, points, color, hot) {
-  for (let i = 0; i < points.length - 1; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[i + 1];
-    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      p.px(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t), (s + p.frame) % 3 === 0 ? hot : color);
-    }
-  }
-}
-
-function drawFlag(p, x, y, w, h) {
-  const ox = [0, 1, 1, 0][p.frame];
-  speckle(p, x + ox, y, w, h, 't', 'T', 'D');
-  p.hline(x + ox, y, w, 'D');
-  p.vline(x + ox, y, h, 'T');
-  p.vline(x + ox + w - 1, y, h, 'T');
-  const cx = x + ox + Math.floor(w / 2);
-  const cy = y + Math.floor(h / 2);
-  p.px(cx, cy - 1, 'h');
-  p.px(cx, cy, p.frame % 2 === 0 ? 'H' : 'b');
-  p.px(cx - 1, cy + 1, 'E');
-  p.px(cx + 1, cy + 1, 'E');
-  p.px(cx, cy + 2, 'T');
-  p.px(x + ox + 2, y + 3, 'E');
-  p.px(x + ox + w - 3, y + h - 3, 'T');
-}
-
-function drawBow(p, limbHi, limb, limbDk, stringC, stock) {
-  const pts = [[5, 23], [6, 22], [7, 21], [8, 20], [9, 19], [10, 18], [11, 17], [12, 16], [13, 16], [14, 15], [15, 15]];
-  for (const [x, y] of pts) {
-    p.px(x, y, limbHi);
-    p.px(x, y + 1, limb);
-    p.px(x, y + 2, limbDk);
-    p.px(mx(x), y, limbHi);
-    p.px(mx(x), y + 1, limb);
-    p.px(mx(x), y + 2, limbDk);
-  }
-  p.fill(4, 24, 3, 2, 'N');
-  p.fill(mx(6), 24, 3, 2, 'N');
-  p.px(5, 24, 'M');
-  p.px(mx(5), 24, 'M');
-  p.hline(12, 17, 16, stringC);
-  speckle(p, 14, 20, 12, 11, stock, 'R', 'Y');
-  p.hline(14, 22, 12, 'N');
-  p.hline(14, 27, 12, 'n');
-  p.fill(18, 17, 4, 4, 'r');
-  p.vline(18, 17, 4, 'N');
-  p.vline(21, 17, 4, 'N');
-  p.px(15, 22, 'b');
-  p.px(24, 22, 'b');
-}
-
-function drawQuarrel(p, tip, shaft, lift = 0) {
-  const y = 4 + lift;
-  p.px(19, y, tip);
-  p.px(20, y, tip);
-  p.px(18, y + 1, tip);
-  p.px(21, y + 1, tip);
-  p.px(19, y + 1, 'M');
-  p.px(20, y + 1, 'W');
-  p.vline(19, y + 2, 10, shaft);
-  p.vline(20, y + 2, 10, 'n');
-  p.px(17, y + 10, 'Y');
-  p.px(18, y + 9, 'Y');
-  p.px(22, y + 10, 'Y');
-  p.px(21, y + 9, 'r');
-}
-
-function drawWinch(p, rank) {
-  p.fill(16, 23, 5, 5, 'N');
-  p.fill(17, 24, 3, 3, 'n');
-  p.px(18, 25, p.frame % 2 === 0 ? 'M' : 'b');
-  p.px(17, 24, 'K');
-  p.px(19, 26, 'K');
-  if (rank >= 3) p.px(21, 23, 'H');
-  if (rank >= 4) p.px(18, 22, 'h');
-}
-
-function drawFlask(p, cx, top, liquid, glassHi) {
-  p.fill(cx - 1, top, 4, 2, 'Y');
-  p.px(cx, top, 'y');
-  p.fill(cx - 2, top + 2, 6, 2, 'r');
-  p.vline(cx - 2, top + 2, 2, 'R');
-  p.fill(cx - 1, top + 4, 4, 3, 'O');
-  p.vline(cx - 1, top + 4, 3, 'o');
-  p.vline(cx + 2, top + 4, 3, 'o');
-  oval(p, cx + 0.5, top + 14, 8, 8, 'O');
-  oval(p, cx + 0.5, top + 16, 6.2, 5.2, liquid, (_x, y) => y >= top + 14);
-  p.hline(cx - 5, top + 14, 12, liquid === 'g' ? 'Q' : 'L');
-  p.vline(cx - 4, top + 10, 4, glassHi);
-  p.px(cx - 3, top + 11, 'W');
-  const bubbleY = top + 12 + ((4 - p.frame + 8) % 5);
-  p.px(cx - 2, bubbleY, 'q');
-  p.px(cx + 2, bubbleY + 1, 'W');
-  p.px(cx, top + 17, p.frame % 2 === 0 ? 'q' : 'Q');
-}
-
-function drawPlinth(p, rank) {
-  speckle(p, 9, 31, 22, 7, 'x', 'X', 'w');
-  p.fill(10, 32, 20, 2, 'w');
-  p.fill(10, 35, 20, 2, 'X');
-  p.fill(6, 33, 4, 5, 'X');
-  p.fill(30, 33, 4, 5, 'X');
-  p.px(7, 34, 'w');
-  p.px(32, 34, 'w');
-  p.px(13, 33, 'X');
-  p.px(22, 36, 'k');
-  p.px(18, 37, 'X');
-  p.px(25, 34, 'k');
-  if (rank >= 2) {
-    p.px(10, 32, 'b');
-    p.px(29, 32, 'b');
-  }
-  if (rank >= 4) {
-    p.hline(10, 32, 20, 'b');
-    p.px(6, 33, 'H');
-    p.px(33, 33, 'H');
-    p.px(6, 37, 'h');
-    p.px(33, 37, 'h');
-  }
-}
-
-function drawRankGems(p, rank) {
-  // One upward chevron per rank. White reads on the ink plaque and on dark
-  // stone. The crimson edge reads on gold trim, so the count stays a mark
-  // rather than another gold highlight. An ink row sits between the marks
-  // and the rank-4 band.
-  const mark = 3;
-  const gap = 2;
-  const total = rank * mark + (rank - 1) * gap;
-  let x = Math.floor((W - total) / 2);
-  p.fill(x - 1, 34, total + 2, 4, 'K');
-  for (let i = 0; i < rank; i++) {
-    p.px(x, 35, 'W');
-    p.px(x + 2, 35, 'W');
-    p.px(x + 1, 36, 'W');
-    p.px(x, 36, 'c');
-    p.px(x + 2, 36, 'c');
-    p.px(x + 1, 37, 'c');
-    x += mark + gap;
-  }
-}
-
-function drawLineage(p, pair) {
-  const [a, b] = pair.split('+');
-  // Sit on the plinth highlight, above the rank gems, so the two marks stay separate.
-  p.fill(11, 32, 2, 2, ROLE[a] || 'E');
-  p.fill(27, 32, 2, 2, ROLE[b] || 'E');
-  p.px(11, 32, 'W');
-  p.px(27, 32, 'W');
-}
-
-function drawHeroSeal(p) {
-  p.fill(16, 17, 8, 7, 'H');
-  p.fill(17, 18, 6, 5, 'B');
-  p.vline(19, 18, 5, 'K');
-  p.vline(20, 18, 5, 'K');
-  p.px(17, 17, 'h');
-  p.px(22, 17, 'W');
-  p.px(16, 19, 'b');
-  p.px(23, 20, 'b');
-}
-
-function drawStars(p, stars) {
-  for (let i = 0; i < stars; i++) {
-    const x = 3 + i * 3;
-    p.px(x, 2, 'h');
-    p.px(x - 1, 3, 'b');
-    p.px(x, 3, 'H');
-    p.px(x + 1, 3, 'b');
-  }
-}
-
-function drawShadow(p) {
-  p.hline(10, 39, 20, 'k');
-  p.px(9, 39, 'k');
-  p.px(30, 39, 'k');
-}
-
-function applyOutline(cells) {
-  const marks = [];
-  for (let y = 0; y < H - 1; y++) {
-    for (let x = 0; x < W; x++) {
-      if (cells[y][x] !== '.') continue;
-      const near = (x > 0 && cells[y][x - 1] !== '.')
-        || (x + 1 < W && cells[y][x + 1] !== '.')
-        || (y > 0 && cells[y - 1][x] !== '.')
-        || (y + 1 < H && cells[y + 1][x] !== '.');
-      if (near) marks.push(x, y);
-    }
-  }
-  for (let i = 0; i < marks.length; i += 2) cells[marks[i + 1]][marks[i]] = 'K';
-}
-
-function paintHero(p) {
-  const glow = ['A', 'a', 'h', 'f'][p.frame];
-  p.vline(28, 5, 14, 'N');
-  p.vline(29, 8, 10, 'n');
-  p.px(28, 2, p.frame % 2 === 0 ? 'W' : 'M');
-  p.px(27, 3, 'n');
-  p.px(28, 3, 'M');
-  p.px(29, 3, 'n');
-  p.px(27, 4, 'N');
-  p.px(28, 4, 'M');
-  p.px(29, 4, 'N');
-  // Pointed hood, narrow face, sloping shoulders — not a rectangular block.
-  p.px(19, 5, 'd');
-  p.hline(18, 6, 3, 'C');
-  p.hline(17, 7, 5, 'C');
-  p.hline(16, 8, 7, 'd');
-  p.hline(18, 8, 3, 'H');
-  p.px(19, 8, 'h');
-  p.fill(15, 9, 9, 3, 'C');
-  p.px(14, 10, 'd');
-  p.px(24, 10, 'd');
-  p.px(14, 11, 'C');
-  p.px(24, 11, 'e');
-  p.fill(17, 9, 5, 4, 'S');
-  p.px(17, 9, 's');
-  p.px(21, 9, 's');
-  p.px(18, 10, 'K');
-  p.px(20, 10, 'K');
-  p.px(18, 9, 'W');
-  p.px(19, 11, 's');
-  p.hline(16, 12, 8, 'C');
-  p.hline(14, 13, 12, 'e');
-  p.hline(13, 14, 14, 'C');
-  speckle(p, 12, 15, 16, 8, 'C', 'd', 'e');
-  p.vline(19, 15, 8, 'd');
-  p.hline(11, 23, 7, 'c');
-  p.hline(22, 23, 7, 'e');
-  p.hline(10, 24, 8, 'C');
-  p.hline(22, 24, 8, 'd');
-  p.px((p.frame === 1 || p.frame === 2) ? 9 : 31, 23, 'C');
-  p.fill(24, 14, 4, 5, 'p');
-  p.px(27, 15, 'S');
-  p.px(27, 16, 'y');
-  p.px(8, 15, 'b');
-  p.fill(7, 16, 5, 2, 'B');
-  p.fill(6, 18, 7, 6, 'O');
-  p.fill(8, 19, 3, 4, glow);
-  p.px(7, 19, 'W');
-  p.vline(7, 20, 3, 'a');
-  p.fill(7, 24, 5, 2, 'B');
-  p.px(6, 20, 'n');
-  p.px(12, 20, 'n');
-  p.fill(14, 26, 4, 7, 'P');
-  p.fill(22, 26, 4, 7, 'P');
-  p.vline(15, 26, 6, 'p');
-  p.vline(23, 26, 6, 'p');
-  p.fill(13, 32, 5, 4, 'J');
-  p.fill(22, 32, 5, 4, 'J');
-  p.hline(13, 32, 5, 'j');
-  p.hline(22, 32, 5, 'j');
-  p.px(14, 33, 'j');
-  p.px(23, 34, 'y');
-}
-
-function paintBolt(p, rank) {
-  drawBow(p, 'Y', 'r', 'R', rank >= 3 ? 'b' : 'M', 'r');
-  drawQuarrel(p, 'M', 'N', p.frame === 1 ? -1 : 0);
-  drawWinch(p, rank);
-  if (rank >= 4) {
-    p.px(19, 3, 'h');
-    p.px(20, 3, 'W');
-  }
-}
-
-function drawCoupling(p, rank) {
-  p.fill(3, 27, 34, 3, 'X');
-  p.hline(3, 27, 34, 'n');
-  p.hline(5, 29, 30, 'k');
-  p.fill(16, 17, 6, 7, 'N');
-  p.hline(16, 17, 6, 'n');
-  p.px(18, 19, p.frame % 2 ? 'b' : 'M');
-  p.px(19, 21, 'k');
-  if (rank >= 3) p.px(17, 18, 'H');
-  if (rank >= 4) p.px(20, 18, 'h');
-}
-
-function drawCompactBow(p, ox, oy, rank) {
-  const lift = p.frame === 1 ? -1 : 0;
-  const cx = ox + 8;
-  const y0 = oy + lift;
-  p.fill(ox + 4, oy + 16, 9, 13, 'r');
-  p.vline(ox + 4, oy + 16, 13, 'R');
-  p.vline(ox + 12, oy + 16, 13, 'R');
-  p.hline(ox + 4, oy + 16, 9, 'Y');
-  p.hline(ox + 4, oy + 22, 9, 'N');
-  p.hline(ox + 5, oy + 27, 7, 'n');
-  p.fill(ox + 6, oy + 14, 5, 4, 'R');
-  p.px(ox + 7, oy + 15, 'Y');
-  p.fill(ox + 6, oy + 19, 5, 4, 'N');
-  p.fill(ox + 7, oy + 20, 3, 2, 'n');
-  p.px(ox + 8, oy + 20, p.frame % 2 ? 'b' : 'M');
-  const limb = [[0, 18], [1, 17], [2, 16], [3, 15], [4, 14], [5, 13], [6, 12], [7, 12]];
-  for (const [dx, dy] of limb) {
-    p.px(ox + dx, oy + dy, 'Y');
-    p.px(ox + dx, oy + dy + 1, 'r');
-    p.px(ox + dx, oy + dy + 2, 'R');
-    const right = ox + 16 - dx;
-    p.px(right, oy + dy, 'Y');
-    p.px(right, oy + dy + 1, 'r');
-    p.px(right, oy + dy + 2, 'R');
-  }
-  p.fill(ox, oy + 19, 3, 2, 'N');
-  p.fill(ox + 14, oy + 19, 3, 2, 'N');
-  p.px(ox, oy + 19, 'n');
-  p.px(ox + 16, oy + 19, 'n');
-  p.hline(ox + 3, oy + 13, 11, 'N');
-  p.px(cx, oy + 13, 'n');
-  p.px(cx, y0, 'W');
-  p.px(cx - 1, y0 + 1, 'n');
-  p.px(cx, y0 + 1, 'M');
-  p.px(cx + 1, y0 + 1, 'n');
-  p.vline(cx, y0 + 2, 8, 'N');
-  p.vline(cx + 1, y0 + 2, 8, 'k');
-  p.px(cx - 2, y0 + 9, 'Y');
-  p.px(cx - 1, y0 + 8, 'r');
-  p.px(cx + 2, y0 + 8, 'r');
-  p.px(cx + 3, y0 + 9, 'Y');
-  if (rank >= 3) p.px(cx, Math.max(0, y0 - 1), 'h');
-  if (rank >= 4) p.px(cx + 1, Math.max(0, y0 - 1), 'W');
-}
-
-function drawEmberBowl(p, cx, top, flameH, wide) {
-  drawFlame(p, cx, top, flameH, 'fire');
-  const rim = top + flameH;
-  const depth = Math.max(6, 27 - rim);
-  for (let i = 0; i < depth; i++) {
-    const t = depth <= 1 ? 0 : i / (depth - 1);
-    const half = Math.max(3, Math.round(wide * (1 - t * 0.2)));
-    const y = rim + i;
-    if (y > 29) break;
-    let color = 'F';
-    if (i === 0) color = 'n';
-    else if (i === 2 || i === Math.floor(depth * 0.55)) color = 'X';
-    else if (i === depth - 1) color = 'k';
-    p.hline(cx - half, y, half * 2 + 1, color);
-    if (color === 'F') p.px(cx - half + 1, y, 'u');
-    if (i === 1) {
-      p.px(cx - 1, y, p.frame % 2 ? 'a' : 'A');
-      p.px(cx + 1, y, 'f');
-    }
-  }
-  const baseY = Math.min(30, rim + depth);
-  if (baseY <= 30) {
-    const bw = Math.max(4, wide * 2 - 3);
-    const bx = cx - Math.floor(bw / 2);
-    p.fill(bx, baseY, bw, Math.max(1, 31 - baseY), 'N');
-    p.hline(bx, baseY, bw, 'n');
-  }
-}
-
-function drawCrystalMount(p, cx, top, height, wide) {
-  const tall = Math.max(14, Math.min(height, 27 - top));
-  drawCrystal(p, cx, top, tall, wide);
-  const seat = top + tall;
-  if (seat <= 30) {
-    p.hline(cx - 4, seat, 9, 'N');
-    p.px(cx - 4, seat, 'M');
-    p.px(cx + 4, seat, 'M');
-    if (seat + 1 <= 30) p.fill(cx - 2, seat + 1, 5, 30 - seat, 'I');
-  }
-}
-
-function drawSparkColumn(p, cx, top, rank) {
-  const sag = p.frame % 2;
-  const rise = rank >= 4 ? 0 : 1;
-  drawZig(p, [
-    [cx, top + rise],
-    [cx + 4, top + 3],
-    [cx - 3, top + 6],
-    [cx + 3, top + 9 + sag],
-    [cx, top + 12]
-  ], 'Z', 'W');
-  drawSparks(p, [[cx - 4, top + 4], [cx + 4, top + 7], [cx, top + rise]]);
-  drawCoils(p, cx, top + 13, 3, 4);
-  p.fill(cx - 4, 26, 9, 4, 'X');
-  p.hline(cx - 4, 26, 9, 'U');
-  p.px(cx, 27, p.frame % 2 ? 'Z' : 'u');
-  if (rank >= 4) p.px(cx + (p.frame % 2 ? 4 : -4), top + 2, 'h');
-}
-
-function drawVial(p, cx, top, liquid, rank) {
-  p.fill(cx - 1, top, 3, 2, 'Y');
-  p.px(cx, top, rank >= 4 ? 'h' : 'y');
-  p.fill(cx - 1, top + 2, 3, 3, 'r');
-  p.px(cx - 1, top + 2, 'R');
-  p.px(cx + 1, top + 3, 'Y');
-  p.fill(cx - 1, top + 5, 3, 2, 'O');
-  p.vline(cx - 1, top + 5, 2, 'o');
-  p.vline(cx + 1, top + 5, 2, 'o');
-  oval(p, cx, top + 12, 6, 6, 'O');
-  oval(p, cx, top + 13, 4.3, 4, liquid, (_x, y) => y >= top + 11);
-  p.hline(cx - 3, top + 11, 7, liquid === 'g' ? 'Q' : 'L');
-  p.px(cx - 4, top + 10, 'W');
-  p.px(cx - 3, top + 12, 'q');
-  const bubble = top + 14 + ((p.frame + 4) % 3);
-  p.px(cx + 2, bubble, 'W');
-  if (rank >= 3) p.px(cx - 1, bubble + 1, 'q');
-  const foot = top + 18;
-  if (foot <= 30) {
-    p.fill(cx - 3, foot, 7, Math.max(1, 30 - foot), 'x');
-    p.hline(cx - 3, foot, 7, 'o');
-  }
-  p.px(cx, Math.min(29, top + 17), p.frame % 2 ? 'Q' : 'g');
-}
-
-function drawBanner(p, ox, top, clothW, clothH) {
-  const poleTop = top + 3;
-  p.vline(ox, poleTop, Math.max(4, 31 - poleTop), 'n');
-  p.vline(ox + 1, poleTop + 1, Math.max(3, 30 - poleTop), 'N');
-  p.fill(ox - 1, top, 4, 3, 'H');
-  p.px(ox, top, p.frame % 2 ? 'W' : 'h');
-  p.px(ox + 1, top + 1, 'b');
-  drawFlag(p, ox + 2, top + 4, clothW, clothH);
-}
-
-function paintFire(p, rank) {
-  const flameH = rank >= 4 ? 14 : 12;
-  const wide = rank >= 3 ? 8 : 7;
-  drawEmberBowl(p, 20, 1, flameH, wide);
-  if (rank >= 2) {
-    p.px(20 - 4, 1 + flameH, 'b');
-    p.px(20 + 4, 1 + flameH, 'b');
-  }
-  if (rank >= 4) p.px(20, 0, 'W');
-}
-
-function paintFrost(p, rank) {
-  const wide = rank >= 3 ? 7 : 6;
-  const tall = rank >= 4 ? 24 : 22;
-  p.fill(12, 24, 16, 6, 'I');
-  p.hline(11, 24, 18, 'i');
-  p.hline(13, 29, 14, 'N');
-  p.px(14, 25, 'l');
-  p.px(25, 26, 'L');
-  p.px(20, 27, p.frame % 2 ? 'W' : 'l');
-  if (rank >= 2) {
-    p.px(11, 24, 'b');
-    p.px(28, 24, 'b');
-  }
-  drawCrystal(p, 20, 1, tall, wide);
-}
-
-function paintLightning(p, rank) {
-  const sag = p.frame === 2 ? 1 : 0;
-  drawZig(p, [[20, 1], [31, 5], [11, 9], [29, 13], [15, 17 + sag]], 'Z', 'W');
-  drawSparks(p, [[9, 4], [33, 7], [10, 13], [32, 15], [20, 2]]);
-  drawCoils(p, 20, 18, 3, 4);
-  p.hline(12, 29, 16, 'U');
-  p.vline(13, 26, 5, 'V');
-  p.vline(26, 26, 5, 'V');
-  p.px(15, 27, 'Z');
-  p.px(24, 28, 'v');
-  if (rank >= 3) p.px(20, 0, 'h');
-  if (rank >= 4) {
-    p.px(8, 6, 'W');
-    p.px(34, 10, 'z');
-  }
-}
-
-function paintPoison(p, rank) {
-  drawFlask(p, 18, 2, 'g', 'E');
-  if (rank >= 2) {
-    p.px(14, 8, 'Q');
-    p.px(24, 8, 'Q');
-  }
-  if (rank >= 4) {
-    p.px(20, 30, 'Q');
-    p.px(21, 29, 'g');
-  }
-  p.hline(14, 30, 12, 'o');
-}
-
-function paintSupport(p, rank) {
-  p.vline(12, 3, 28, 'n');
-  p.vline(13, 4, 26, 'N');
-  p.fill(11, 2, 4, 3, 'H');
-  p.px(12, 2, p.frame % 2 ? 'W' : 'h');
-  drawFlag(p, 15, 6, 16, 15);
-  p.fill(15, 22, 4, 3, 'B');
-  p.px(16, 23, 'H');
-  const pulse = 28 + (p.frame % 2);
-  p.px(16, pulse, 'D');
-  p.px(20, pulse, 't');
-  p.px(24, 28, p.frame === 0 ? 'E' : 'D');
-  if (rank >= 3) p.hline(15, 6, 16, 'H');
-  if (rank >= 4) p.px(13, 1, 'W');
-}
-
-function paintHarvest(p, rank) {
-  const sway = [0, 0, 1, 0][p.frame];
-  const pulse = p.frame % 2 === 0;
-  const cx = 20 + sway;
-  const cy = 12;
-
-  // Carved bronze & wood planter basin resting on the plinth
-  p.fill(14, 26, 12, 5, 'R');
-  p.fill(15, 26, 10, 4, 'r');
-  p.hline(13, 25, 14, rank >= 2 ? 'H' : 'Y');
-  p.hline(14, 26, 12, 'B');
-  p.px(15, 27, 'Y');
-  p.px(24, 27, 'R');
-  if (rank >= 2) {
-    p.hline(15, 28, 10, 'b');
-    p.px(19, 28, 'h');
-    p.px(20, 28, 'h');
-  }
-
-  // Living emerald stalk & curling twin leaves
-  p.vline(19 + sway, 17, 9, 'g');
-  p.vline(20 + sway, 17, 9, 'G');
-  p.px(19 + sway, 19, 'Q');
-  // Left curling leaf
-  p.hline(12, 22, 7, 'g');
-  p.hline(11, 23, 6, 'G');
-  p.hline(13, 21, 5, 'Q');
-  p.px(11, 22, 'Q');
-  // Right curling leaf
-  p.hline(21, 21, 7, 'g');
-  p.hline(22, 22, 7, 'G');
-  p.hline(22, 20, 5, 'Q');
-  p.px(28, 21, 'Q');
-
-  // Rank 3+ twin side sun-buds blooming off the leaves
-  if (rank >= 3) {
-    for (const bx of [10, 29]) {
-      p.fill(bx - 1, 17, 3, 3, 'A');
-      p.px(bx, 18, pulse ? 'W' : 'h');
-      p.px(bx, 16, 'Z');
-      p.px(bx, 20, 'g');
-    }
-  }
-
-  // Radiant golden solar petal ring (8 petals around the blossom)
-  const petals = [
-    [0, -7, 3, 3], [0, 5, 3, 3],
-    [-7, -1, 3, 3], [5, -1, 3, 3],
-    [-5, -5, 3, 3], [3, -5, 3, 3],
-    [-5, 3, 3, 3], [3, 3, 3, 3]
-  ];
-  for (let i = 0; i < petals.length; i++) {
-    const [dx, dy, pw, ph] = petals[i];
-    const outer = (i + p.frame) % 2 === 0 ? 'Z' : 'A';
-    const tip = (i + p.frame) % 2 === 0 ? 'h' : 'b';
-    p.fill(cx + dx - 1, cy + dy, pw, ph, outer);
-    p.px(cx + dx, cy + dy + 1, tip);
-  }
-  // Cardinal sunlit petal tips
-  p.px(cx, cy - 8, pulse ? 'W' : 'h');
-  p.px(cx, cy + 8, 'A');
-  p.px(cx - 8, cy, pulse ? 'h' : 'Z');
-  p.px(cx + 8, cy, pulse ? 'h' : 'Z');
-
-  // Warm solar core & luminous heart
-  oval(p, cx, cy, 4.5, 4.5, 'B');
-  oval(p, cx, cy, 3.3, 3.3, 'u');
-  oval(p, cx, cy, 2.2, 2.2, pulse ? 'a' : 'A');
-  p.px(cx, cy, pulse ? 'W' : 'h');
-  p.px(cx - 1, cy - 1, 'h');
-  p.px(cx + 1, cy + 1, 'b');
-
-  // Rising golden pollen / repair motes
-  const lift = p.frame % 3;
-  p.px(cx - 5, 4 - (lift & 1), 'h');
-  p.px(cx + 5, 5 - ((lift + 1) & 1), rank >= 2 ? 'q' : 'Z');
-  if (rank >= 4) {
-    // Gilded solar crown halo rays
-    p.px(cx - 6, cy - 7, 'W');
-    p.px(cx + 6, cy - 7, 'W');
-    p.px(cx, 1, 'W');
-    p.px(cx - 9, cy - 2, 'h');
-    p.px(cx + 9, cy - 2, 'h');
-  }
-}
-
-function paintCinderQuarrel(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-}
-
-function paintHailSpike(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawCrystalMount(p, 29, 2, rank >= 4 ? 25 : 23, 6);
-}
-
-function paintStormLance(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawSparkColumn(p, 28, 1, rank);
-}
-
-function paintVenomSpine(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawVial(p, 29, 4, 'g', rank);
-}
-
-function paintSignalShot(p, rank) {
-  drawCoupling(p, rank);
-  drawCompactBow(p, 0, 2, rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintSteamVent(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-  p.px(18, 7 + (p.frame % 3), 'l');
-  p.px(20, 10, 'E');
-  p.px(19, 12, p.frame % 2 ? 'L' : 'a');
-  p.px(21, 14, 'A');
-}
-
-function paintPlasmaBrazier(p, rank) {
-  drawCoupling(p, rank);
-  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
-  drawSparkColumn(p, 29, 1, rank);
-}
-
-function paintBlightKiln(p, rank) {
-  drawCoupling(p, rank);
-  drawEmberBowl(p, 10, 1, rank >= 4 ? 11 : 10, 5);
-  drawVial(p, 29, 4, 'g', rank);
-  p.px(16, 12, 'Q');
-  p.px(18, 15, 'g');
-  p.px(22, 18, p.frame % 2 ? 'Q' : 'q');
-}
-
-function paintWarBeacon(p, rank) {
-  drawCoupling(p, rank);
-  drawBanner(p, 1, 2, 12, rank >= 4 ? 15 : 13);
-  drawEmberBowl(p, 29, 1, rank >= 4 ? 11 : 10, 5);
-}
-
-function paintPrismCoil(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawSparkColumn(p, 29, 1, rank);
-  p.px(16, 10, 'Z');
-  p.px(18, 13, p.frame % 2 ? 'W' : 'z');
-}
-
-function paintRimeUrn(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 22 : 20, 5);
-  drawVial(p, 29, 4, 'g', rank);
-  p.px(24, 16, 'L');
-  p.px(33, 18, 'l');
-}
-
-function paintWardBell(p, rank) {
-  drawCoupling(p, rank);
-  drawCrystalMount(p, 10, 2, rank >= 4 ? 24 : 22, 6);
-  drawBanner(p, 21, 2, 13, 14);
-}
-
-function paintAcidArc(p, rank) {
-  drawCoupling(p, rank);
-  drawSparkColumn(p, 10, 1, rank);
-  drawVial(p, 29, 4, 'g', rank);
-  const sag = p.frame % 2;
-  drawZig(p, [[15, 7], [20, 4 - sag], [25, 7]], 'Z', 'Q');
-}
-
-function paintRelayStandard(p, rank) {
-  drawCoupling(p, rank);
-  drawSparkColumn(p, 10, 1, rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintPlagueAltar(p, rank) {
-  drawCoupling(p, rank);
-  drawVial(p, 10, 4, 'g', rank);
-  drawBanner(p, 21, 2, 13, rank >= 4 ? 15 : 13);
-}
-
-function paintReliquary(p, rank, accent) {
-  const gem = PALETTE[accent] ? accent : 'b';
-  speckle(p, 11, 16, 18, 14, 'x', 'X', 'w');
-  p.fill(12, 12, 16, 5, 'X');
-  p.px(14, 11, 'N');
-  p.px(25, 11, 'N');
-  p.px(16, 10, 'n');
-  p.px(23, 10, 'n');
-  p.hline(15, 9, 10, 'N');
-  p.fill(17, 18, 6, 7, gem);
-  p.px(18, 19, 'W');
-  p.px(21, 22, 'h');
-  p.fill(18, 20, 4, 4, 'K');
-  p.vline(19, 21, 3, gem);
-  p.fill(13, 24, 5, 5, 'N');
-  p.fill(14, 25, 3, 3, 'n');
-  p.px(15, 26, p.frame % 2 ? 'M' : 'b');
-  p.px(12, 18, 'b');
-  p.px(27, 18, 'b');
-  if (rank >= 3) {
-    p.px(16, 14, 'H');
-    p.px(23, 14, 'H');
-  }
-  if (rank >= 4) p.px(20, 8, 'h');
-}
-
-function paintGrid(visual, rank, stars, frame) {
-  const p = createPainter(frame);
-  if (visual.family === 'hero') paintHero(p);
-  else if (visual.family === 'tower') (TOWER_PAINTERS[visual.key] || paintReliquary)(p, rank, visual.accent);
-  else if (visual.family === 'hybrid') (HYBRID_PAINTERS[visual.key] || paintReliquary)(p, rank, visual.accent);
-  else paintReliquary(p, rank, visual.accent);
-  if (visual.family !== 'hero') {
-    drawPlinth(p, rank);
-    if (rank >= 4) {
-      p.px(14, 30, 'H');
-      p.px(25, 30, 'H');
-      p.px(15, 29, 'h');
-      p.px(24, 29, 'h');
-    }
-  }
-  applyOutline(p.cells);
-  if (visual.family === 'hero') {
-    drawHeroSeal(p);
-    drawStars(p, stars);
-  } else {
-    drawRankGems(p, rank);
-    if (visual.key.includes('+')) drawLineage(p, visual.key);
-  }
-  drawShadow(p);
-  return p.cells;
-}
-
-function getSprite(visual, rank, stars, frame) {
-  const key = `${visual.family}|${visual.key}|${rank}|${stars}|${frame}`;
-  const cached = cache.get(key);
-  if (cached) return cached;
-  const grid = paintGrid(visual, rank, stars, frame);
-  const sprite = {grid, canvas: rasterize(grid), width: W, height: H};
-  cache.set(key, sprite);
-  if (cache.size > 480) cache.delete(cache.keys().next().value);
-  return sprite;
-}
-
-function createSurface(width, height) {
-  if (typeof OffscreenCanvas === 'function') {
-    try { return new OffscreenCanvas(width, height); } catch { /* fall through */ }
-  }
-  const doc = globalThis.document;
-  if (doc && typeof doc.createElement === 'function') {
-    const canvas = doc.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-  return null;
-}
-
-function rasterize(grid) {
-  const canvas = createSurface(W, H);
-  if (!canvas || typeof canvas.getContext !== 'function') return null;
-  const context = canvas.getContext('2d');
-  if (!context) return null;
-  try { context.imageSmoothingEnabled = false; } catch { /* ignore */ }
-  blitGrid(context, grid, 0, 0, W, H);
-  return canvas;
-}
-
-function blit(ctx, sprite, dx, dy, dw, dh) {
-  if (sprite.canvas && typeof ctx.drawImage === 'function') {
-    ctx.drawImage(sprite.canvas, dx, dy, dw, dh);
+  if (!isRichCtx(ctx)) {
+    const sz = defenderSize(unit);
+    ctx.save?.();
+    ctx.fillStyle = '#f0cb72';
+    ctx.fillRect?.(Math.round(x - sz.width / 2), Math.round(y - sz.height), sz.width, sz.height);
+    ctx.restore?.();
     return;
   }
-  blitGrid(ctx, sprite.grid, dx, dy, dw, dh);
-}
 
-function blitGrid(ctx, grid, dx, dy, dw, dh) {
-  if (typeof ctx.fillRect !== 'function') return;
-  for (let y = 0; y < H; y++) {
-    const row = grid[y];
-    const y0 = Math.round(dy + (y * dh) / H);
-    const y1 = Math.round(dy + ((y + 1) * dh) / H);
-    const ph = Math.max(1, y1 - y0);
-    for (let x = 0; x < W; x++) {
-      const color = PALETTE[row[x]];
-      if (!color) continue;
-      const x0 = Math.round(dx + (x * dw) / W);
-      const x1 = Math.round(dx + ((x + 1) * dw) / W);
-      ctx.fillStyle = color;
-      ctx.fillRect(x0, y0, Math.max(1, x1 - x0), ph);
-    }
+  if (unit.kind === 'hero' || unit.type === 'hero') {
+    drawHeroGunner(ctx, unit, x, y, opts);
+  } else {
+    drawLegacyTurret(ctx, unit, x, y, opts);
   }
 }
 
@@ -6456,8 +5668,28 @@ function createEffects() {
     }
   }
 
+  function isRich(ctx) {
+    return typeof ctx.beginPath === 'function' && typeof ctx.arc === 'function' && typeof ctx.stroke === 'function';
+  }
+
   function drawPixelRing(ctx, x, y, radius, color, alpha, weight) {
     if (!(radius > 0) || alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = (weight > 1 ? 4.2 : 2.6);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = (weight > 1 ? 2.2 : 1.4);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const size = weight > 1 ? 2 : 1;
     const steps = Math.max(8, Math.min(48, Math.round(radius * 1.15)));
     const cx = Math.round(x);
@@ -6472,14 +5704,37 @@ function createEffects() {
 
   function drawStreak(ctx, particle, alpha) {
     if (alpha < 0.02) return;
-    const ox = Math.round(particle.x);
-    const oy = Math.round(particle.y);
     const ux = particle.ux | 0;
     const uy = particle.uy | 0;
     if (ux === 0 && uy === 0) return;
+    const len = particle.length | 0;
+    if (isRich(ctx)) {
+      const mag = Math.hypot(ux, uy) || 1;
+      const dx = (ux / mag) * len;
+      const dy = (uy / mag) * len;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.strokeStyle = particle.shaft;
+      ctx.lineWidth = particle.crit ? 4.0 : 2.8;
+      ctx.beginPath();
+      ctx.moveTo(particle.x, particle.y);
+      ctx.lineTo(particle.x + dx, particle.y + dy);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = particle.head;
+      ctx.lineWidth = particle.crit ? 2.0 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(particle.x + dx * 0.35, particle.y + dy * 0.35);
+      ctx.lineTo(particle.x + dx, particle.y + dy);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
     const px = -uy;
     const py = ux;
-    const len = particle.length | 0;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.edge;
     for (let i = 0; i <= len - 3; i++) {
@@ -6500,14 +5755,34 @@ function createEffects() {
 
   function drawNeedle(ctx, particle, alpha) {
     if (alpha < 0.02) return;
-    const ox = Math.round(particle.x);
-    const oy = Math.round(particle.y);
     const ux = particle.ux | 0;
     const uy = particle.uy | 0;
     if (ux === 0 && uy === 0) return;
+    const len = particle.length | 0;
+    if (isRich(ctx)) {
+      const mag = Math.hypot(ux, uy) || 1;
+      const nx = ux / mag;
+      const ny = uy / mag;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = alpha * 0.65;
+      ctx.strokeStyle = particle.shaft;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(particle.x - nx * 5, particle.y - ny * 5);
+      ctx.lineTo(particle.x + nx * len, particle.y + ny * len);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const ox = Math.round(particle.x);
+    const oy = Math.round(particle.y);
     const px = -uy;
     const py = ux;
-    const len = particle.length | 0;
     const back = 5;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.shaft;
@@ -6523,9 +5798,29 @@ function createEffects() {
 
   function drawBurst(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    const radius = Math.max(5, particle.radius | 0);
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.fillStyle = particle.edge || particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = particle.core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
-    const radius = Math.max(5, particle.radius | 0);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.edge || particle.color;
     for (let i = 0; i < 12; i++) {
@@ -6547,6 +5842,30 @@ function createEffects() {
 
   function drawJump(ctx, particle, alpha) {
     if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(particle.points[0].x, particle.points[0].y);
+      for (let i = 1; i < particle.points.length; i++) {
+        ctx.lineTo(particle.points[i].x, particle.points[i].y);
+      }
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.strokeStyle = particle.edge || '#58b8ff';
+      ctx.lineWidth = 5.0;
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.strokeStyle = particle.color || '#a6e4ff';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
     for (let i = 1; i < particle.points.length; i++) {
@@ -6573,6 +5892,36 @@ function createEffects() {
 
   function drawFlash(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const cy = particle.y;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.globalAlpha = alpha;
+      // 4-point blazing cartoon golden crit star
+      ctx.beginPath();
+      const spikes = 4;
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? 12 : 4.2;
+        const a = (i * Math.PI) / spikes;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#ffe56a';
+      ctx.fill();
+      ctx.strokeStyle = '#5c340e';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const cy = Math.round(particle.y);
     ctx.globalAlpha = alpha;
@@ -6592,10 +5941,41 @@ function createEffects() {
 
   function drawImpact(ctx, particle, alpha, short) {
     if (alpha < 0.02) return;
-    const cx = Math.round(particle.x);
-    const cy = Math.round(particle.y);
     let arm = Math.max(3, particle.arm | 0);
     if (short) arm = particle.crit ? 4 : 3;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const cy = particle.y;
+      const spikes = short ? 4 : 6;
+      const outer = arm + 2.5;
+      const inner = Math.max(2.2, outer * 0.42);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = (i * Math.PI) / spikes;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = short && particle.crit ? '#ffe56a' : particle.color;
+      ctx.fill();
+      ctx.strokeStyle = '#140e0c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = particle.core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(1.5, inner * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    const cx = Math.round(particle.x);
+    const cy = Math.round(particle.y);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#140e0c';
     ctx.fillRect(cx - arm, cy - 1, arm * 2 + 1, 3);
@@ -6619,17 +5999,26 @@ function createEffects() {
       ctx.fillRect(cx + arm, cy, 1, 1);
       ctx.fillRect(cx, cy - arm, 1, 1);
       ctx.fillRect(cx, cy + arm, 1, 1);
-      if (short) {
-        ctx.fillRect(cx - 2, cy - 2, 1, 1);
-        ctx.fillRect(cx + 2, cy - 2, 1, 1);
-        ctx.fillRect(cx - 2, cy + 2, 1, 1);
-        ctx.fillRect(cx + 2, cy + 2, 1, 1);
-      }
     }
   }
 
   function drawNotch(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      const cx = particle.x;
+      const y = particle.y;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ff5a3c';
+      ctx.beginPath();
+      ctx.arc(cx, y, particle.heavy ? 8 : 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff2dd';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(particle.x);
     const y = Math.round(particle.y);
     const heavy = particle.heavy ? 1 : 0;
@@ -6658,6 +6047,25 @@ function createEffects() {
 
   function drawPlus(ctx, x, y, arm, color, core, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x - arm, y);
+      ctx.lineTo(x + arm, y);
+      ctx.moveTo(x, y - arm);
+      ctx.lineTo(x, y + arm);
+      ctx.stroke();
+      ctx.fillStyle = core || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     const cx = Math.round(x);
     const cy = Math.round(y);
     const reach = Math.max(1, arm | 0);
@@ -6671,10 +6079,21 @@ function createEffects() {
 
   function drawDot(ctx, particle, alpha) {
     if (alpha < 0.02 || !Number.isFinite(particle.x) || !Number.isFinite(particle.y)) return;
-    const size = particle.life < particle.maxLife * 0.35 ? 1 : (particle.size || 2);
+    const size = particle.life < particle.maxLife * 0.35 ? 1.2 : (particle.size || 2.2);
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, Math.max(1, size * 0.68), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    const s = Math.max(1, Math.round(size));
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
-    ctx.fillRect(Math.round(particle.x - size / 2), Math.round(particle.y - size / 2), size, size);
+    ctx.fillRect(Math.round(particle.x - s / 2), Math.round(particle.y - s / 2), s, s);
   }
 
   function drawSegment(ctx, x0, y0, x1, y1) {
@@ -6700,6 +6119,26 @@ function createEffects() {
 
   function drawArc(ctx, particle, alpha) {
     if (alpha < 0.02 || !particle.points || particle.points.length < 2) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(particle.points[0].x, particle.points[0].y);
+      for (let i = 1; i < particle.points.length; i++) {
+        ctx.lineTo(particle.points[i].x, particle.points[i].y);
+      }
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 4.6;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = particle.color;
     for (let i = 1; i < particle.points.length; i++) {
@@ -6737,6 +6176,18 @@ function createEffects() {
 
   function drawGlowline(ctx, particle, alpha) {
     if (alpha < 0.02) return;
+    if (isRich(ctx)) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(8, particle.y);
+      ctx.lineTo(ARENA.width - 8, particle.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.globalAlpha = alpha * 0.9;
     ctx.fillStyle = particle.color;
     const y = Math.round(particle.y);
@@ -6747,8 +6198,25 @@ function createEffects() {
     }
   }
 
-  function drawText(ctx, text, x, y, color, scale, alpha) {
+  function drawText(ctx, text, x, y, color, scale, alpha, pop = 1) {
     if (!text || alpha < 0.02) return;
+    if (typeof ctx.fillText === 'function' && typeof ctx.strokeText === 'function') {
+      const isCritNum = (scale || 1) >= 2;
+      const fontSize = Math.round((isCritNum ? 13 : 10) * pop);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = isCritNum ? 3.2 : 2.5;
+      ctx.strokeStyle = '#11161b';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+      ctx.restore();
+      return;
+    }
     const size = Math.max(1, scale | 0);
     const advance = 3 * size + size;
     const origin = Math.round(x - (text.length * advance - size) / 2);
@@ -6781,11 +6249,21 @@ function createEffects() {
     const alpha = fade(floater);
     const x = reduced ? floater.originX : floater.x;
     const y = reduced ? floater.originY : floater.y;
-    drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha);
+    const age = floater.maxLife > 0 ? 1 - floater.life / floater.maxLife : 1;
+    const pop = reduced ? 1 : (age < 0.16 ? 1 + (1 - age / 0.16) * 0.32 : 1);
+    drawText(ctx, floater.text, x, y, floater.color, floater.scale, alpha, pop);
     if (floater.execute === true && alpha >= 0.02) {
+      ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#ff3a32';
-      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+      if (isRich(ctx)) {
+        ctx.beginPath();
+        ctx.arc(x, y - 9, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 2);
+      }
+      ctx.restore();
     }
   }
 
@@ -6866,7 +6344,7 @@ function createEffects() {
     const reduced = Boolean(options && options.reducedMotion);
     ctx.save();
     try {
-      try { ctx.imageSmoothingEnabled = false; } catch { /* partial mock contexts */ }
+      try { ctx.imageSmoothingEnabled = true; } catch { /* partial mock contexts */ }
       for (let i = 0; i < rings.length; i++) {
         const ring = rings[i];
         const veil = Number.isFinite(ring.veil) ? ring.veil : 0.95;
@@ -6894,1078 +6372,1163 @@ __ff_factories["src/render/enemies.js"] = function(__ff_exports, __ff_load) {
 __ff_exports["enemySize"] = enemySize;
 __ff_exports["drawEnemy"] = drawEnemy;
 /**
- * Original enemy sprites. Bottom-center anchor, one logical pixel per cell.
- * enemySize is the opaque grid drawEnemy paints. Walk and attack frames
- * share that box. Hit flash stays a flat wash. No simulation state is touched.
+ * Fencefall v5 — PvZ2-Style Sharp Cel-Shaded Vector Zombies (All 15 Species).
  *
- * Each kind keeps one opaque box on every frame:
- * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
- * spitter 22×26, swarm 12×14, boss 48×52,
- * leaper 20×28, splitter 24×22, mender 22×28, shade 16×30,
- * banner 26×32, warden 22×30, charge 18×26, hush 20×26.
- * A light rim (palette k) is the outer pixel so the shape reads on #122128.
- * enemy.enraged on a boss repaints the crown and core hotter inside that box.
+ * Bottom-center anchor (x, y) grounds each zombie's feet and contact shadow.
+ * Drawn directly at native high-DPI resolution with bold cartoon ink outlines,
+ * multi-tone cel gradients, expressive PvZ2 faces/eyes/teeth, smooth continuous
+ * 60fps skeletal motion (stride, bob, reach, bite lunge, squash-and-stretch on hit),
+ * and signature animated props per species.
  */
-const PALETTES = {
-  shambler: {k: '#efe6d2', '#': '#2a241c', o: '#8c8374', h: '#d9d0c0', e: '#f4e27a', s: '#1a1612'},
-  runner: {k: '#ffe0b8', '#': '#4a240e', o: '#e08a3a', h: '#fff0d0', e: '#fff6d8', s: '#2a1408'},
-  brute: {k: '#f0c0b4', '#': '#3a1410', o: '#a84838', h: '#f4d0c4', e: '#ffe0a0', s: '#1a0c0a'},
-  armored: {k: '#f4f7fb', '#': '#1c2430', o: '#8a96a4', h: '#ffffff', e: '#9fd0ea', s: '#10141a'},
-  spitter: {k: '#d8f0b0', '#': '#142818', o: '#3f7a48', h: '#c6ee78', e: '#e8f58a', s: '#0c140c'},
-  swarm: {k: '#f4e2b4', '#': '#3a2810', o: '#c4a05a', h: '#fff0c0', e: '#fff6d0', s: '#1a1208'},
-  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'},
-  leaper: {k: '#ffe6b4', '#': '#24180c', o: '#d4842c', h: '#f6c56e', e: '#fff3c4', s: '#140e08'},
-  splitter: {k: '#f3e6e0', '#': '#2c1a24', o: '#6d5560', h: '#c4a8a4', e: '#e4d0d4', s: '#160e12'},
-  mender: {k: '#fbf8e4', '#': '#1c2816', o: '#7d9a58', h: '#e8d78a', e: '#f7f0bc', s: '#121a0e'},
-  shade: {k: '#e7f1f6', '#': '#1a242e', o: '#607888', h: '#b7c9d4', e: '#b7e4ea', s: '#101820'},
-  banner: {k: '#fbf1e2', '#': '#3a1218', o: '#8a2c34', h: '#f4e2c4', e: '#fff6ea', s: '#1a080c'},
-  warden: {k: '#e4eef6', '#': '#1a222c', o: '#5e7388', h: '#d6a84a', e: '#f4e0a4', s: '#141c24'},
-  charge: {k: '#f8e2c8', '#': '#2a120c', o: '#a84828', h: '#f0c56a', e: '#fff0c8', s: '#1a0c08'},
-  hush: {k: '#d5e4ea', '#': '#142028', o: '#4a6874', h: '#9fd0c8', e: '#e7f4f2', s: '#10181c'}
-};
 
-function makeGrid(width, height) {
-  const rows = [];
-  for (let y = 0; y < height; y += 1) rows.push(Array(width).fill('.'));
-  return {
-    width,
-    height,
-    rows,
-    put(x, y, ink) {
-      const ix = x | 0;
-      const iy = y | 0;
-      if (ix < 0 || iy < 0 || ix >= width || iy >= height) return;
-      rows[iy][ix] = ink;
-    }
-  };
-}
+const INK = '#12181e';
 
-function fillEllipse(grid, cx, cy, rx, ry, ink) {
-  const radiusX = rx | 0;
-  const radiusY = ry | 0;
-  if (radiusX < 0 || radiusY < 0) return;
-  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
-    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
-      const dx = radiusX === 0 ? (x === cx ? 0 : 2) : (x - cx) / radiusX;
-      const dy = radiusY === 0 ? (y === cy ? 0 : 2) : (y - cy) / radiusY;
-      if (dx * dx + dy * dy <= 1) grid.put(x, y, ink);
-    }
-  }
-}
-
-function eraseEllipse(grid, cx, cy, rx, ry) {
-  fillEllipse(grid, cx, cy, rx, ry, '.');
-}
-
-function glaze(grid, cx, cy, rx, ry, ink) {
-  const radiusX = rx | 0;
-  const radiusY = ry | 0;
-  if (radiusX < 0 || radiusY < 0) return;
-  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
-    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
-      const ix = x | 0;
-      const iy = y | 0;
-      if (iy < 0 || ix < 0 || iy >= grid.height || ix >= grid.width) continue;
-      const prev = grid.rows[iy][ix];
-      if (prev === '.' || prev === 'e' || prev === 'r') continue;
-      const dx = radiusX === 0 ? 0 : (ix - cx) / radiusX;
-      const dy = radiusY === 0 ? 0 : (iy - cy) / radiusY;
-      if (dx * dx + dy * dy <= 1) grid.put(ix, iy, ink);
-    }
-  }
-}
-
-function limb(grid, x0, y0, x1, y1, r0, r1, ink) {
-  let x = x0 | 0;
-  let y = y0 | 0;
-  const xEnd = x1 | 0;
-  const yEnd = y1 | 0;
-  const dx = Math.abs(xEnd - x);
-  const dy = Math.abs(yEnd - y);
-  const sx = x < xEnd ? 1 : -1;
-  const sy = y < yEnd ? 1 : -1;
-  let err = dx - dy;
-  const total = Math.max(dx, dy, 1);
-  let walked = 0;
-  const stamp = () => {
-    const t = Math.min(1, walked / total);
-    const radius = Math.max(0, Math.round(r0 + (r1 - r0) * t));
-    fillEllipse(grid, x, y, radius, radius, ink);
-    walked += 1;
-  };
-  stamp();
-  while (x !== xEnd || y !== yEnd) {
-    const e2 = err * 2;
-    if (e2 > -dy) {
-      err -= dy;
-      x += sx;
-      stamp();
-    }
-    if (e2 < dx) {
-      err += dx;
-      y += sy;
-      stamp();
-    }
-  }
-}
-
-function bresenham(x0, y0, x1, y1, plot) {
-  let x = x0 | 0;
-  let y = y0 | 0;
-  const xEnd = x1 | 0;
-  const yEnd = y1 | 0;
-  const dx = Math.abs(xEnd - x);
-  const dy = Math.abs(yEnd - y);
-  const sx = x < xEnd ? 1 : -1;
-  const sy = y < yEnd ? 1 : -1;
-  let err = dx - dy;
-  plot(x, y);
-  while (x !== xEnd || y !== yEnd) {
-    const e2 = err * 2;
-    if (e2 > -dy) {
-      err -= dy;
-      x += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      y += sy;
-    }
-    plot(x, y);
-  }
-}
-
-function fillPoly(grid, points, ink) {
-  const n = points.length;
-  if (n < 3) return;
-  let minY = points[0][1];
-  let maxY = points[0][1];
-  for (let i = 1; i < n; i += 1) {
-    if (points[i][1] < minY) minY = points[i][1];
-    if (points[i][1] > maxY) maxY = points[i][1];
-  }
-  for (let y = minY; y <= maxY; y += 1) {
-    const nodes = [];
-    let j = n - 1;
-    for (let i = 0; i < n; i += 1) {
-      const yi = points[i][1];
-      const yj = points[j][1];
-      if ((yi < y && yj >= y) || (yj < y && yi >= y)) {
-        const xi = points[i][0];
-        const xj = points[j][0];
-        nodes.push(xi + ((y - yi) / (yj - yi)) * (xj - xi));
-      }
-      j = i;
-    }
-    nodes.sort((a, b) => a - b);
-    for (let i = 0; i + 1 < nodes.length; i += 2) {
-      const x0 = Math.ceil(nodes[i]);
-      const x1 = Math.floor(nodes[i + 1]);
-      for (let x = x0; x <= x1; x += 1) grid.put(x, y, ink);
-    }
-  }
-  for (let i = 0; i < n; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % n];
-    bresenham(a[0], a[1], b[0], b[1], (x, y) => grid.put(x, y, ink));
-  }
-}
-
-function applyRim(grid) {
-  const {width, height, rows} = grid;
-  const src = rows.map((row) => row.slice());
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const ink = src[y][x];
-      if (ink === '.' || ink === 'e' || ink === 'r') continue;
-      const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1
-        || src[y - 1][x] === '.'
-        || src[y + 1][x] === '.'
-        || src[y][x - 1] === '.'
-        || src[y][x + 1] === '.';
-      if (edge) rows[y][x] = 'k';
-    }
-  }
-}
-
-function sprite(width, height, paint) {
-  const grid = makeGrid(width, height);
-  paint(grid);
-  applyRim(grid);
-  return grid.rows.map((row) => row.join(''));
-}
-
-function eye(grid, x, y) {
-  for (let dx = 0; dx < 2; dx += 1) {
-    const px = x + dx;
-    if (y < 0 || px < 0 || y >= grid.height || px >= grid.width) continue;
-    if (grid.rows[y][px] === '.') continue;
-    grid.put(px, y, 'e');
-  }
-}
-
-function over(grid, x, y, ink) {
-  if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
-  if (grid.rows[y][x] === '.' || grid.rows[y][x] === 'e' || grid.rows[y][x] === 'r') return;
-  grid.put(x, y, ink);
-}
-
-function seam(grid, x, y, length) {
-  if (y < 0 || y >= grid.height) return;
-  for (let i = 0; i < length; i += 1) {
-    const px = x + i;
-    if (px < 0 || px >= grid.width) continue;
-    const prev = grid.rows[y][px];
-    if (prev === '.' || prev === 'e' || prev === 'r') continue;
-    grid.put(px, y, '#');
-  }
-}
-
-function shambler(step, attack) {
-  return sprite(22, 26, (grid) => {
-    fillEllipse(grid, 8, 7, 6, 8, 'o');
-    fillEllipse(grid, 14, 15, 3, 3, 'o');
-    glaze(grid, 7, 4, 3, 2, 'h');
-    over(grid, 8, 3, 'h');
-    over(grid, 8, 6, '#');
-    eye(grid, 12, 15);
-    eye(grid, 14, 15);
-    seam(grid, 12, 14, 4);
-    if (attack) {
-      over(grid, 13, 17, '#');
-      over(grid, 14, 17, '#');
-      over(grid, 15, 17, '#');
-    } else {
-      seam(grid, 13, 17, 3);
-    }
-    fillEllipse(grid, 10, 19, 3, 3, 'o');
-    const lift = attack ? 12 : 19;
-    limb(grid, 4, 12, 2, lift, 1, 1, 'o');
-    limb(grid, 13, 14, 19, 19, 1, 1, 'o');
-    fillEllipse(grid, 1, lift, 2, 2, 'o');
-    fillEllipse(grid, 20, 19, 2, 2, 'o');
-    glaze(grid, 1, lift - 1, 1, 0, 'h');
-    glaze(grid, 20, 18, 1, 0, 'h');
-    const spread = step ? 2 : 0;
-    limb(grid, 8, 21, 7 - spread, 24, 1, 1, 'o');
-    limb(grid, 13, 21, 14 + spread, 24, 1, 1, 'o');
-    fillEllipse(grid, 7 - spread, 24, 2, 1, 'o');
-    fillEllipse(grid, 14 + spread, 24, 2, 1, 'o');
-    eraseEllipse(grid, 11, 23, 1, 2);
-  });
-}
-
-function runner(step, attack) {
-  return sprite(18, 24, (grid) => {
-    limb(grid, 8, 0, 8, 4, 0, 0, 'h');
-    fillEllipse(grid, 8, 6, 2, 2, 'o');
-    fillEllipse(grid, 9, 10, 1, 2, 'o');
-    fillEllipse(grid, 9, 13, 2, 1, 'o');
-    glaze(grid, 8, 5, 1, 1, 'h');
-    eye(grid, 7, 6);
-    if (attack) {
-      over(grid, 7, 8, '#');
-      over(grid, 8, 8, '#');
-      over(grid, 9, 8, '#');
-    } else {
-      over(grid, 8, 7, '#');
-    }
-    const leftY = attack ? 6 : (step ? 5 : 11);
-    const rightY = attack ? 13 : (step ? 12 : 6);
-    limb(grid, 8, 9, 0, leftY, 0, 0, 'o');
-    limb(grid, 10, 9, 17, rightY, 0, 0, 'o');
-    fillEllipse(grid, 0, leftY, 1, 1, 'h');
-    fillEllipse(grid, 17, rightY, 1, 1, 'h');
-    seam(grid, 8, 11, 3);
-    // Walk frames open and close the stride. Attack keeps the shorter plant.
-    const knee = attack ? -2 : (step ? 2 : -4);
-    const plant = attack ? 0 : (step ? -1 : 1);
-    limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6 + plant, 22, 1, 0, 'o');
-    limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12 - plant, 22, 1, 0, 'o');
-    fillEllipse(grid, 6 + plant, 22, 1, 1, 'o');
-    fillEllipse(grid, 12 - plant, 22, 1, 1, 'o');
-    eraseEllipse(grid, 9, 20, 1, 3);
-  });
-}
-
-function brute(step, attack) {
-  return sprite(32, 34, (grid) => {
-    fillEllipse(grid, 16, 4, 5, 5, 'o');
-    fillEllipse(grid, 16, 15, 9, 6, 'o');
-    fillEllipse(grid, 16, 23, 7, 4, 'o');
-    glaze(grid, 14, 3, 2, 1, 'h');
-    seam(grid, 13, 3, 6);
-    eye(grid, 13, 5);
-    eye(grid, 17, 5);
-    over(grid, 15, 7, '#');
-    over(grid, 17, 7, '#');
-    if (attack) {
-      over(grid, 15, 8, '#');
-      over(grid, 16, 8, '#');
-      over(grid, 17, 8, '#');
-    } else {
-      seam(grid, 15, 8, 3);
-    }
-    const fistY = attack ? 11 : 16;
-    limb(grid, 11, 14, 6, fistY, 2, 1, 'o');
-    limb(grid, 21, 14, 25, 16, 2, 1, 'o');
-    fillEllipse(grid, 3, fistY, 3, 4, 'o');
-    fillEllipse(grid, 28, 16, 3, 4, 'o');
-    glaze(grid, 3, fistY - 2, 2, 1, 'h');
-    glaze(grid, 28, 14, 2, 1, 'h');
-    seam(grid, 2, fistY - 1, 3);
-    seam(grid, 27, 15, 3);
-    const spread = step ? 2 : 0;
-    limb(grid, 12, 26, 10 - spread, 32, 2, 2, 'o');
-    limb(grid, 20, 26, 22 + spread, 32, 2, 2, 'o');
-    fillEllipse(grid, 10 - spread, 32, 3, 1, 'o');
-    fillEllipse(grid, 22 + spread, 32, 3, 1, 'o');
-    eraseEllipse(grid, 16, 31, 2, 2);
-  });
-}
-
-function armored(step, attack) {
-  return sprite(26, 30, (grid) => {
-    fillEllipse(grid, 13, 6, 5, 7, 'o');
-    fillEllipse(grid, 3, 12, 3, 3, 'o');
-    fillEllipse(grid, 22, 12, 3, 3, 'o');
-    limb(grid, 8, 11, 5, 12, 1, 1, 'o');
-    limb(grid, 18, 11, 20, 12, 1, 1, 'o');
-    fillEllipse(grid, 13, 18, 4, 5, 'o');
-    fillEllipse(grid, 13, 22, 5, 2, 'o');
-    glaze(grid, 12, 3, 2, 1, 'h');
-    glaze(grid, 2, 11, 1, 1, 'h');
-    glaze(grid, 23, 11, 1, 1, 'h');
-    seam(grid, 10, 16, 6);
-    seam(grid, 11, 19, 4);
-    over(grid, 12, 17, 'h');
-    over(grid, 13, 20, 'h');
-    seam(grid, 10, 7, 6);
-    const slit = attack ? 'h' : 'e';
-    for (let x = 10; x <= 15; x += 1) over(grid, x, 8, slit);
-    if (attack) {
-      for (let x = 11; x <= 14; x += 1) over(grid, x, 9, 'e');
-    }
-    seam(grid, 10, 9, 6);
-    const punch = attack ? 22 : 18;
-    limb(grid, 3, 14, 2, punch, 1, 1, 'o');
-    limb(grid, 22, 14, 23, 18, 1, 1, 'o');
-    fillEllipse(grid, 2, punch, 2, 2, 'o');
-    fillEllipse(grid, 23, 18, 2, 2, 'o');
-    glaze(grid, 2, punch - 1, 1, 0, 'h');
-    glaze(grid, 23, 17, 1, 0, 'h');
-    const spread = step ? 1 : 0;
-    limb(grid, 11, 23, 9 - spread, 28, 2, 1, 'o');
-    limb(grid, 15, 23, 17 + spread, 28, 2, 1, 'o');
-    fillEllipse(grid, 9 - spread, 28, 2, 1, 'o');
-    fillEllipse(grid, 17 + spread, 28, 2, 1, 'o');
-    eraseEllipse(grid, 13, 27, 1, 2);
-  });
-}
-
-function spitter(step, attack) {
-  return sprite(22, 26, (grid) => {
-    fillEllipse(grid, 11, 4, 3, 4, 'o');
-    fillEllipse(grid, 11, 12, 8, 6, 'h');
-    fillEllipse(grid, 2, 12, 2, 3, 'h');
-    fillEllipse(grid, 19, 12, 2, 3, 'h');
-    if (!attack) {
-      glaze(grid, 11, 11, 3, 2, 'e');
-      seam(grid, 9, 12, 2);
-      seam(grid, 13, 14, 2);
-    }
-    eye(grid, 9, 4);
-    eye(grid, 12, 4);
-    if (attack) {
-      over(grid, 10, 6, '#');
-      over(grid, 11, 6, 'e');
-      over(grid, 12, 6, 'e');
-      over(grid, 13, 6, '#');
-    } else {
-      seam(grid, 10, 6, 3);
-    }
-    fillEllipse(grid, 11, 18, 3, 2, 'o');
-    const spread = step ? 2 : 0;
-    limb(grid, 9, 19, 7 - spread, 24, 1, 0, 'o');
-    limb(grid, 13, 19, 15 + spread, 24, 1, 0, 'o');
-    fillEllipse(grid, 7 - spread, 24, 1, 1, 'o');
-    fillEllipse(grid, 15 + spread, 24, 1, 1, 'o');
-    eraseEllipse(grid, 11, 23, 1, 2);
-    if (attack) {
-      const mark = (x, y, ink) => {
-        if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
-        if (grid.rows[y][x] === '.') return;
-        grid.put(x, y, ink);
-      };
-      // Open sac: dark cavity in the belly, sap in the throat, drip toward the fence.
-      const cavity = [[10, 1], [11, 2], [12, 3], [13, 4], [14, 3], [15, 2], [16, 1]];
-      for (const [y, mid] of cavity) {
-        for (let dx = -mid; dx <= mid; dx += 1) mark(11 + dx, y, '#');
-      }
-      for (let y = 12; y <= 14; y += 1) {
-        mark(10, y, 'e');
-        mark(11, y, 'e');
-        mark(12, y, 'e');
-      }
-      for (let y = 15; y <= 19; y += 1) mark(11, y, 'e');
-    }
-  });
-}
-
-function swarm(step, attack) {
-  return sprite(12, 14, (grid) => {
-    const lift = attack ? 4 : (step ? 6 : 1);
-    fillPoly(grid, [
-      [3, 4], [0, lift], [0, lift + 3], [3, 8]
-    ], 'h');
-    fillPoly(grid, [
-      [8, 4], [11, lift], [11, lift + 3], [8, 8]
-    ], 'h');
-    fillEllipse(grid, 5, 5, 2, 2, 'o');
-    fillEllipse(grid, 5, 8, 2, 2, '#');
-    limb(grid, 4, 4, 4, 0, 0, 0, 'o');
-    limb(grid, 7, 4, 7, 0, 0, 0, 'o');
-    eye(grid, 4, 5);
-    if (attack) {
-      over(grid, 5, 7, '#');
-      over(grid, 6, 7, 'e');
-    }
-    limb(grid, 4, 9, 4, 13, 0, 0, 'o');
-    limb(grid, 6, 9, 6, 13, 0, 0, 'o');
-    if (step) {
-      limb(grid, 4, 12, 3, 13, 0, 0, 'o');
-      limb(grid, 6, 12, 8, 13, 0, 0, 'o');
-    }
-  });
-}
-
-function claw(grid, side, y, ink) {
-  const x = side < 0 ? 0 : 47;
-  const dir = side < 0 ? 1 : -1;
-  fillPoly(grid, [
-    [x, y],
-    [x + dir * 2, y - 6],
-    [x + dir * 4, y - 1],
-    [x + dir * 6, y - 7],
-    [x + dir * 8, y],
-    [x + dir * 8, y + 4],
-    [x, y + 4]
-  ], ink);
-}
-
-function boss(step, attack, enraged = false) {
-  const horn = enraged ? 'f' : '#';
-  const crown = enraged ? 'c' : 'h';
-  const coreShell = enraged ? 'f' : '#';
-  const coreInk = enraged ? 'w' : 'r';
-  const glint = enraged ? 'c' : 'h';
-  return sprite(48, 52, (grid) => {
-    fillPoly(grid, [
-      [18, 20], [12, 28], [14, 34], [11, 42],
-      [18, 44], [24, 42], [30, 44], [37, 42],
-      [34, 34], [36, 28], [30, 20]
-    ], 'o');
-    fillEllipse(grid, 24, 18, 8, 8, 'o');
-    fillPoly(grid, [
-      [16, 20], [12, 14], [9, 8], [7, 3], [8, 0],
-      [12, 2], [13, 8], [16, 14], [19, 18]
-    ], horn);
-    fillPoly(grid, [
-      [31, 20], [35, 14], [38, 8], [40, 3], [39, 0],
-      [35, 2], [34, 8], [31, 14], [28, 18]
-    ], horn);
-    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], crown);
-    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], crown);
-    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], crown);
-    seam(grid, 19, 15, 10);
-    eye(grid, 19, 17);
-    eye(grid, 26, 17);
-    if (attack) {
-      over(grid, 22, 21, '#');
-      over(grid, 23, 21, '#');
-      over(grid, 24, 21, '#');
-      over(grid, 25, 21, '#');
-    } else {
-      seam(grid, 22, 21, 4);
-    }
-    const core = attack ? 6 : 4;
-    fillEllipse(grid, 24, 31, core + 2, core + 3, coreShell);
-    fillEllipse(grid, 24, 31, core, core + 1, coreInk);
-    grid.put(22, 30, glint);
-    grid.put(23, 29, glint);
-    const clawY = attack ? 24 : 30;
-    limb(grid, 14, 28, 8, clawY, 2, 2, 'o');
-    limb(grid, 34, 28, 39, 30, 2, 2, 'o');
-    claw(grid, -1, clawY, 'o');
-    claw(grid, 1, 30, 'o');
-    glaze(grid, 4, clawY, 2, 1, 'h');
-    glaze(grid, 43, 29, 2, 1, 'h');
-    const spread = step ? 2 : 0;
-    limb(grid, 18, 42, 15 - spread, 50, 3, 3, 'o');
-    limb(grid, 30, 42, 32 + spread, 50, 3, 3, 'o');
-    fillEllipse(grid, 15 - spread, 50, 4, 1, 'o');
-    fillEllipse(grid, 32 + spread, 50, 4, 1, 'o');
-    eraseEllipse(grid, 24, 49, 2, 3);
-  });
-}
-
-function leaper(step, attack) {
-  return sprite(20, 28, (grid) => {
-    fillPoly(grid, [
-      [6, 24], [11, 24], [12, 26], [9, 27], [0, 27], [0, 25], [3, 24]
-    ], 'o');
-    over(grid, 2, 26, '#');
-    over(grid, 5, 26, '#');
-    over(grid, 8, 26, '#');
-    glaze(grid, 5, 25, 3, 0, 'h');
-
-    const coils = attack ? [17, 19, 21] : (step ? [16, 19, 22] : [14, 18, 22]);
-    for (let i = 0; i < coils.length; i += 1) {
-      const y = coils[i];
-      const x0 = i % 2 === 0 ? 3 : 6;
-      limb(grid, x0, y, x0 + 5, y, 1, 1, i % 2 ? '#' : 'o');
-      if (i + 1 < coils.length) {
-        const joint = i % 2 === 0 ? x0 + 5 : x0;
-        limb(grid, joint, y, joint, coils[i + 1], 0, 0, 'h');
-      }
-    }
-    limb(grid, 6, 14, 5, coils[0], 1, 0, 'o');
-    limb(grid, 8, coils[coils.length - 1], 8, 25, 0, 0, 'o');
-
-    fillPoly(grid, [
-      [3, 11], [9, 10], [10, 13], [6, 15], [2, 13]
-    ], 'o');
-    fillPoly(grid, [
-      [7, 9], [13, 10], [12, 14], [6, 14], [4, 11]
-    ], 'o');
-    glaze(grid, 8, 11, 2, 1, 'h');
-    seam(grid, 6, 12, 4);
-    over(grid, 7, 13, 's');
-
-    fillEllipse(grid, 11, 6, 3, 3, 'o');
-    fillPoly(grid, [
-      [12, 4], [19, 6], [19, 8], [13, 9], [12, 7]
-    ], 'o');
-    fillPoly(grid, [[10, 0], [8, 3], [12, 3]], '#');
-    glaze(grid, 10, 4, 2, 1, 'h');
-    glaze(grid, 16, 5, 2, 0, 'h');
-    over(grid, 9, 5, '#');
-    over(grid, 10, 5, '#');
-    eye(grid, 10, 6);
-    if (attack) {
-      eraseEllipse(grid, 16, 7, 2, 0);
-      over(grid, 15, 6, '#');
-      over(grid, 16, 6, '#');
-      over(grid, 17, 6, '#');
-      over(grid, 15, 8, '#');
-      over(grid, 16, 8, '#');
-      over(grid, 17, 8, '#');
-      limb(grid, 12, 11, 16, 12, 1, 0, 'o');
-      limb(grid, 16, 12, 18, 11, 0, 0, '#');
-      fillEllipse(grid, 18, 11, 1, 1, '#');
-    } else if (step) {
-      over(grid, 16, 7, '#');
-      limb(grid, 12, 11, 15, 16, 1, 0, 'o');
-      limb(grid, 15, 16, 17, 18, 0, 0, '#');
-      fillEllipse(grid, 17, 18, 1, 1, '#');
-    } else {
-      over(grid, 15, 7, '#');
-      limb(grid, 12, 11, 14, 14, 1, 0, 'o');
-      limb(grid, 14, 14, 16, 13, 0, 0, '#');
-      fillEllipse(grid, 16, 13, 1, 1, '#');
-    }
-
-    grid.put(10, 0, '#');
-    grid.put(19, 6, 'o');
-    grid.put(19, 8, 'o');
-    grid.put(0, 27, 'o');
-    grid.put(4, 27, 'o');
-  });
-}
-
-function splitter(step, attack) {
-  return sprite(24, 22, (grid) => {
-    fillPoly(grid, [
-      [0, 12], [2, 9], [6, 8], [9, 9], [11, 7], [13, 7],
-      [15, 9], [18, 8], [22, 9], [23, 12], [23, 17],
-      [20, 19], [16, 18], [12, 20], [8, 18], [4, 19], [0, 17]
-    ], 'o');
-    glaze(grid, 6, 11, 3, 2, 'h');
-    glaze(grid, 17, 11, 3, 2, 'h');
-    over(grid, 5, 15, 's');
-    over(grid, 7, 16, 's');
-    over(grid, 16, 16, 's');
-    over(grid, 18, 15, 's');
-    over(grid, 5, 13, '#');
-    over(grid, 8, 14, '#');
-    over(grid, 18, 13, '#');
-    over(grid, 16, 12, '#');
-
-    fillPoly(grid, [[12, 0], [10, 6], [14, 6]], '#');
-    if (attack) {
-      limb(grid, 12, 3, 11, 10, 1, 0, '#');
-      limb(grid, 11, 10, 13, 16, 1, 0, '#');
-      limb(grid, 13, 16, 12, 19, 0, 0, '#');
-      over(grid, 12, 8, 'e');
-      over(grid, 12, 11, 'e');
-      over(grid, 12, 14, 'e');
-      over(grid, 11, 12, 'e');
-    } else {
-      limb(grid, 12, 2, 11, 8, 0, 0, '#');
-      limb(grid, 11, 8, 13, 13, 0, 0, '#');
-      limb(grid, 13, 13, 11, 19, 0, 0, '#');
-      if (step) {
-        over(grid, 10, 11, '#');
-        over(grid, 14, 15, '#');
-      } else {
-        over(grid, 14, 10, '#');
-        over(grid, 10, 16, '#');
-      }
-    }
-
-    const ly = attack ? 5 : (step ? 6 : 7);
-    const ry = attack ? 5 : (step ? 8 : 7);
-    const lx = attack ? 3 : 4;
-    const rx = attack ? 20 : 19;
-    fillEllipse(grid, lx, ly, 2, 2, 'o');
-    fillEllipse(grid, rx, ry, 2, 2, 'o');
-    glaze(grid, lx, ly - 1, 1, 1, 'h');
-    glaze(grid, rx, ry - 1, 1, 1, 'h');
-    over(grid, lx, ly, '#');
-    over(grid, rx, ry, '#');
-    limb(grid, lx, ly + 2, lx + 1, 11, 1, 0, 'o');
-    limb(grid, rx, ry + 2, rx - 1, 11, 1, 0, 'o');
-
-    eye(grid, 6, 13);
-    eye(grid, 16, 13);
-    if (attack) {
-      over(grid, 7, 14, '#');
-      over(grid, 17, 14, '#');
-    }
-
-    const shift = attack ? 0 : (step ? 2 : -1);
-    limb(grid, 7, 18, 7 + shift, 21, 1, 1, 'o');
-    limb(grid, 16, 18, 16 - shift, 21, 1, 1, 'o');
-
-    grid.put(12, 0, '#');
-    grid.put(0, 12, 'o');
-    grid.put(23, 12, 'o');
-    grid.put(8, 21, 'o');
-    grid.put(15, 21, 'o');
-  });
-}
-
-function mender(step, attack) {
-  return sprite(22, 28, (grid) => {
-    fillPoly(grid, [
-      [9, 10], [13, 10], [15, 18], [14, 25], [8, 25], [7, 18]
-    ], 'o');
-    glaze(grid, 10, 13, 2, 2, 'h');
-    for (let y = 12; y <= 23; y += 2) over(grid, 11, y, 'h');
-    over(grid, 13, 18, 's');
-    over(grid, 13, 20, 's');
-    over(grid, 12, 22, 's');
-    seam(grid, 8, 24, 6);
-
-    fillEllipse(grid, 11, 8, 3, 3, 'o');
-    fillPoly(grid, [[11, 0], [7, 6], [15, 6]], 'o');
-    glaze(grid, 10, 2, 1, 1, 'h');
-    eye(grid, 9, 8);
-    eye(grid, 12, 8);
-    if (attack) {
-      over(grid, 10, 10, '#');
-      over(grid, 11, 10, '#');
-      over(grid, 12, 10, '#');
-    } else {
-      over(grid, 11, 10, '#');
-    }
-
-    fillPoly(grid, [[0, 16], [5, 15], [5, 21], [0, 22]], 'h');
-    seam(grid, 1, 17, 4);
-    over(grid, 2, 19, '#');
-    over(grid, 1, 20, 's');
-    limb(grid, 5, 15, 10, 11, 0, 0, '#');
-
-    if (attack) {
-      limb(grid, 14, 16, 18, 14, 1, 0, '#');
-      limb(grid, 18, 14, 21, 12, 1, 0, '#');
-      limb(grid, 21, 12, 19, 10, 0, 0, 'h');
-      limb(grid, 19, 10, 18, 12, 0, 0, 'h');
-      over(grid, 20, 12, 'e');
-    } else if (step) {
-      limb(grid, 14, 17, 17, 16, 1, 1, '#');
-      limb(grid, 17, 16, 21, 15, 1, 0, '#');
-      limb(grid, 21, 15, 20, 13, 0, 0, 'h');
-      limb(grid, 20, 13, 18, 14, 0, 0, 'h');
-    } else {
-      limb(grid, 14, 16, 18, 13, 1, 1, '#');
-      limb(grid, 18, 13, 21, 11, 1, 0, '#');
-      limb(grid, 21, 11, 19, 9, 0, 0, 'h');
-      limb(grid, 19, 9, 17, 11, 0, 0, 'h');
-    }
-
-    const left = attack ? 8 : (step ? 6 : 8);
-    const right = attack ? 14 : (step ? 15 : 13);
-    limb(grid, 9, 24, left, 27, 1, 0, 'o');
-    limb(grid, 13, 24, right, 27, 1, 0, 'o');
-    fillEllipse(grid, left, 27, 1, 0, '#');
-    fillEllipse(grid, right, 27, 1, 0, '#');
-    eraseEllipse(grid, 11, 26, 0, 1);
-
-    grid.put(11, 0, 'o');
-    grid.put(0, 18, 'h');
-    grid.put(left, 27, '#');
-    grid.put(right, 27, '#');
-  });
-}
-
-function shade(step, attack) {
-  return sprite(16, 30, (grid) => {
-    const lean = attack ? 0 : (step ? 1 : -1);
-    fillPoly(grid, [
-      [7, 0], [8, 0], [8, 4],
-      [10, 6], [10, 11], [8, 13],
-      [8 + lean, 18], [7, 24],
-      [8, 29], [7, 29], [6, 24],
-      [5 + lean, 18], [5, 13],
-      [4, 11], [4, 6], [6, 4]
-    ], 'o');
-    glaze(grid, 7, 4, 1, 2, 'h');
-    over(grid, 7, 16, 's');
-    over(grid, 6, 20, 's');
-    const vein = 7 + (attack ? 0 : lean);
-    for (let y = 15; y <= 22; y += 2) over(grid, vein, y, 'e');
-
-    const eyeY = step && !attack ? 9 : 8;
-    over(grid, 6, eyeY - 1, 'e');
-    over(grid, 8, eyeY - 1, 'e');
-    over(grid, 6, eyeY, 's');
-    over(grid, 8, eyeY, 's');
-    over(grid, 6, eyeY + 1, 's');
-    over(grid, 8, eyeY + 1, 's');
-    if (attack) {
-      over(grid, 6, 10, '#');
-      over(grid, 7, 10, '#');
-      over(grid, 8, 10, '#');
-    }
-
-    if (attack) {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 1, 22, 0, 0, 'e');
-      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 13, 24, 0, 0, 'e');
-      limb(grid, 8, 14, 15, 13, 0, 0, 'e');
-    } else if (step) {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 3, 23, 0, 0, 'e');
-      limb(grid, 8, 13, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 11, 22, 0, 0, 'e');
-    } else {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 2, 21, 0, 0, 'e');
-      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 12, 23, 0, 0, 'e');
-    }
-
-    grid.put(7, 0, 'o');
-    grid.put(8, 0, 'o');
-    grid.put(0, 15, 'e');
-    grid.put(15, 16, 'e');
-    grid.put(7, 29, 'o');
-    grid.put(8, 29, 'o');
-  });
-}
-
-function banner(step, attack) {
-  return sprite(26, 32, (grid) => {
-    limb(grid, 9, 0, 9, 31, 1, 1, '#');
-    fillEllipse(grid, 9, 1, 1, 1, 'h');
-    over(grid, 9, 11, 'h');
-    over(grid, 9, 12, 'h');
-
-    fillPoly(grid, [[11, 3], [18, 3], [18, 8], [11, 8]], 'h');
-    const tuck = attack ? 1 : 0;
-    fillPoly(grid, [[18, 3], [25, 4], [25, 5], [18, 4 + tuck]], 'h');
-    fillPoly(grid, [[18, 7], [25, 8], [25, 9], [18, 8]], 'h');
-    if (step && !attack) eraseEllipse(grid, 15, 8, 1, 0);
-    const markX = attack ? 14 : (step ? 13 : 12);
-    for (let x = markX; x < markX + 3; x += 1) {
-      over(grid, x, 5, 'o');
-      over(grid, x, 6, 'o');
-    }
-    grid.put(25, 4, 'h');
-    grid.put(25, 5, 'h');
-    grid.put(25, 8, 'h');
-    grid.put(25, 9, 'h');
-
-    fillPoly(grid, [[0, 17], [4, 15], [5, 22], [0, 24]], 'o');
-    over(grid, 1, 19, '#');
-    over(grid, 1, 21, '#');
-    fillEllipse(grid, 6, 16, 3, 3, 'o');
-    glaze(grid, 5, 14, 2, 1, 'h');
-    eye(grid, 4, 16);
-    eye(grid, 7, 16);
-    if (attack) {
-      over(grid, 5, 18, '#');
-      over(grid, 6, 18, '#');
-      over(grid, 7, 18, '#');
-    } else {
-      over(grid, 6, 18, '#');
-    }
-    fillPoly(grid, [[4, 19], [10, 19], [11, 26], [3, 26]], 'o');
-    over(grid, 5, 20, 'h');
-    over(grid, 6, 20, 'h');
-    over(grid, 7, 20, 'h');
-    over(grid, 9, 23, 's');
-    over(grid, 9, 25, 's');
-    seam(grid, 4, 23, 5);
-
-    if (attack) limb(grid, 8, 20, 10, 14, 1, 0, 'o');
-    else if (step) limb(grid, 8, 21, 10, 17, 1, 0, 'o');
-    else limb(grid, 7, 20, 10, 15, 1, 0, 'o');
-
-    const reach = attack ? 16 : (step ? 14 : 11);
-    limb(grid, 8, 22, reach, 24, 1, 0, 'o');
-
-    const lift = attack ? 0 : (step ? 2 : 0);
-    const other = attack ? 0 : (step ? 0 : 2);
-    limb(grid, 5, 26, 4, 31 - lift, 1, 0, 'o');
-    limb(grid, 8, 26, 9, 31 - other, 1, 0, 'o');
-    fillEllipse(grid, 4, 31 - lift, 1, 0, '#');
-    fillEllipse(grid, 9, 31 - other, 1, 0, '#');
-
-    grid.put(0, 20, 'o');
-    grid.put(25, 4, 'h');
-    grid.put(25, 9, 'h');
-    grid.put(9, 0, '#');
-    grid.put(9, 31, '#');
-  });
-}
-
-function warden(step, attack) {
-  return sprite(22, 30, (grid) => {
-    const dy = attack ? -3 : (step ? 1 : 0);
-    const spread = attack ? 0 : (step ? 2 : -1);
-
-    // Thin ash tatters own the side edges. The shield stays the front silhouette.
-    fillPoly(grid, [
-      [8, 14],
-      [2, 16],
-      [0, 17],
-      [0, 19],
-      [3, 18],
-      [7, 16]
-    ], 's');
-    fillPoly(grid, [
-      [13, 14],
-      [19, 16],
-      [21, 17],
-      [21, 19],
-      [18, 18],
-      [14, 16]
-    ], 's');
-
-    fillPoly(grid, [
-      [9, 12],
-      [13, 12],
-      [13, 19],
-      [12, 21],
-      [10, 21],
-      [9, 19]
-    ], 'o');
-    fillPoly(grid, [
-      [8, 5],
-      [14, 5],
-      [15, 8],
-      [13, 11],
-      [9, 11],
-      [7, 8]
-    ], 'o');
-    fillPoly(grid, [
-      [10, 0],
-      [12, 0],
-      [12, 5],
-      [10, 5]
-    ], '#');
-    over(grid, 10, 5, 'h');
-    over(grid, 11, 5, 'h');
-    over(grid, 12, 5, 'h');
-    over(grid, 9, 7, 'e');
-    over(grid, 10, 7, 'e');
-    over(grid, 12, 7, 'e');
-    over(grid, 13, 7, 'e');
-    over(grid, 10, 8, '#');
-    over(grid, 11, 8, '#');
-    over(grid, 12, 8, '#');
-
-    const lx = 8 - spread;
-    const rx = 14 + spread;
-    limb(grid, 10, 21, lx, 29, 1, 0, 'o');
-    limb(grid, 12, 21, rx, 29, 1, 0, 'o');
-    fillEllipse(grid, lx, 29, 1, 0, '#');
-    fillEllipse(grid, rx, 29, 1, 0, '#');
-
-    // Small heater in front of the torso. Attack lifts it; the box does not grow.
-    fillPoly(grid, [
-      [5, 12 + dy],
-      [16, 12 + dy],
-      [16, 16 + dy],
-      [11, 23 + dy],
-      [10, 23 + dy],
-      [5, 16 + dy]
-    ], 'h');
-    over(grid, 7, 13 + dy, 'e');
-    over(grid, 8, 13 + dy, 'e');
-    over(grid, 7, 15 + dy, '#');
-    over(grid, 14, 15 + dy, '#');
-    for (let i = 0; i < 6; i += 1) over(grid, 11, 14 + dy + i, '#');
-    over(grid, 10, 16 + dy, 'e');
-    over(grid, 11, 16 + dy, 'e');
-    over(grid, 10, 17 + dy, 'e');
-    over(grid, 11, 17 + dy, 'e');
-
-    grid.put(10, 0, '#');
-    grid.put(11, 0, '#');
-    grid.put(12, 0, '#');
-    grid.put(0, 17, 's');
-    grid.put(0, 18, 's');
-    grid.put(0, 19, 's');
-    grid.put(21, 17, 's');
-    grid.put(21, 18, 's');
-    grid.put(21, 19, 's');
-    grid.put(lx, 29, '#');
-    grid.put(rx, 29, '#');
-  });
-}
-
-function cinder(step, attack) {
-  return sprite(18, 26, (grid) => {
-    const bob = attack ? -1 : (step ? 1 : 0);
-    fillEllipse(grid, 9, 14 + bob, 5, 6, 'o');
-    fillEllipse(grid, 9, 8 + bob, 3, 3, 'o');
-    eye(grid, 8, 7 + bob);
-    limb(grid, 9, 6 + bob, 9, 1, 0, 0, 'h');
-    fillEllipse(grid, 9, 1, 1, 1, 'e');
-    const left = attack ? 6 : (step ? 5 : 7);
-    const right = attack ? 12 : (step ? 13 : 11);
-    limb(grid, 7, 19, left, 25, 1, 0, '#');
-    limb(grid, 11, 19, right, 25, 1, 0, '#');
-    grid.put(0, 14, 'o');
-    grid.put(17, 14, 'o');
-    grid.put(9, 0, 'e');
-    grid.put(9, 25, '#');
-  });
-}
-
-function hush(step, attack) {
-  return sprite(20, 26, (grid) => {
-    const bob = attack ? 0 : (step ? 1 : -1);
-    fillEllipse(grid, 10, 12 + bob, 5, 6, 'o');
-    fillEllipse(grid, 10, 6, 4, 3, 'h');
-    over(grid, 8, 6, '#');
-    over(grid, 11, 6, '#');
-    eye(grid, 8, 11 + bob);
-    const left = attack ? 7 : (step ? 6 : 8);
-    const right = attack ? 13 : (step ? 14 : 12);
-    limb(grid, 8, 18, left, 25, 1, 0, '#');
-    limb(grid, 12, 18, right, 25, 1, 0, '#');
-    grid.put(0, 12, 'h');
-    grid.put(19, 12, 'h');
-    grid.put(10, 0, 'h');
-    grid.put(10, 25, '#');
-  });
-}
-
-const SPRITES = {
-  shambler: [shambler(0, false), shambler(1, false), shambler(0, true)],
-  runner: [runner(0, false), runner(1, false), runner(0, true)],
-  brute: [brute(0, false), brute(1, false), brute(0, true)],
-  armored: [armored(0, false), armored(1, false), armored(0, true)],
-  spitter: [spitter(0, false), spitter(1, false), spitter(0, true)],
-  swarm: [swarm(0, false), swarm(1, false), swarm(0, true)],
-  boss: [boss(0, false), boss(1, false), boss(0, true)],
-  leaper: [leaper(0, false), leaper(1, false), leaper(0, true)],
-  splitter: [splitter(0, false), splitter(1, false), splitter(0, true)],
-  mender: [mender(0, false), mender(1, false), mender(0, true)],
-  shade: [shade(0, false), shade(1, false), shade(0, true)],
-  banner: [banner(0, false), banner(1, false), banner(0, true)],
-  warden: [warden(0, false), warden(1, false), warden(0, true)],
-  charge: [cinder(0, false), cinder(1, false), cinder(0, true)],
-  hush: [hush(0, false), hush(1, false), hush(0, true)]
-};
-
-const BOSS_ENRAGED = [boss(0, false, true), boss(1, false, true), boss(0, true, true)];
-
-function rowsFor(enemy, time) {
-  const kind = SPRITES[enemy?.kind] ? enemy.kind : 'shambler';
-  const frames = kind === 'boss' && enemy?.enraged === true ? BOSS_ENRAGED : SPRITES[kind];
-  const last = frames.length - 1;
-  const attacking = enemy?.attacking === true;
-  const frame = attacking || last === 0
-    ? last
-    : Math.floor((time || 0) * 6) % last;
-  return {kind, rows: frames[frame] || frames[0]};
-}
+const SIZES = Object.freeze({
+  shambler: Object.freeze({width: 24, height: 30}),
+  runner: Object.freeze({width: 18, height: 24}),
+  brute: Object.freeze({width: 38, height: 44}),
+  armored: Object.freeze({width: 28, height: 34}),
+  spitter: Object.freeze({width: 26, height: 30}),
+  swarm: Object.freeze({width: 16, height: 18}),
+  boss: Object.freeze({width: 56, height: 62}),
+  leaper: Object.freeze({width: 24, height: 30}),
+  splitter: Object.freeze({width: 28, height: 28}),
+  mender: Object.freeze({width: 26, height: 32}),
+  shade: Object.freeze({width: 22, height: 32}),
+  banner: Object.freeze({width: 30, height: 38}),
+  warden: Object.freeze({width: 28, height: 34}),
+  charge: Object.freeze({width: 24, height: 30}),
+  hush: Object.freeze({width: 24, height: 32}),
+});
 
 function enemySize(enemy) {
-  const {rows} = rowsFor(enemy, 0);
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < rows.length; y += 1) {
-    const line = rows[y];
-    for (let x = 0; x < line.length; x += 1) {
-      const ink = line[x];
-      if (ink === '.' || ink === ' ') continue;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+  const kind = enemy && typeof enemy.kind === 'string' ? enemy.kind : 'shambler';
+  return SIZES[kind] || SIZES.shambler;
+}
+
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.ellipse === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+  );
+}
+
+function seedFrom(enemy) {
+  if (Number.isFinite(enemy?.driftPhase)) return enemy.driftPhase * 3.1;
+  const id = String(enemy?.id || '0');
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return (Math.abs(h) % 628) / 100;
+}
+
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+function drawShadow(ctx, rx, ry, lift = 0) {
+  ctx.fillStyle = 'rgba(8, 12, 16, 0.44)';
+  ctx.beginPath();
+  ctx.ellipse(0, -1.5, Math.max(3, rx - lift * 0.2), Math.max(1.5, ry - lift * 0.1), 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Expressive PvZ2 mismatched cartoon eyes + optional teeth jaw. */
+function drawZombieFace(ctx, hx, hy, r, opts = {}) {
+  const eyeColor = opts.eyeColor || '#fff7b8';
+  const pupilColor = opts.pupilColor || '#151218';
+  const bigLeft = opts.asymmetric !== false;
+  const angry = opts.angry === true;
+  const biting = opts.biting === true;
+  const eyeSpread = r * 0.42;
+  const ey = hy + r * 0.02;
+  const rL = r * (bigLeft ? 0.3 : 0.25);
+  const rR = r * 0.24;
+
+  // Left & Right eyes
+  for (const [ex, er] of [[hx - eyeSpread, rL], [hx + eyeSpread, rR]]) {
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    ctx.arc(ex, ey, er, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = Math.max(1.1, r * 0.14);
+    ctx.stroke();
+
+    // Pupil looking down toward the wall!
+    ctx.fillStyle = pupilColor;
+    ctx.beginPath();
+    ctx.arc(ex, ey + er * 0.22, Math.max(0.9, er * 0.42), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Heavy angry brows
+  if (angry || biting) {
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = Math.max(1.4, r * 0.2);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx - eyeSpread - rL, ey - rL * 0.9);
+    ctx.lineTo(hx - 1, ey - rL * 0.25);
+    ctx.moveTo(hx + eyeSpread + rR, ey - rR * 0.9);
+    ctx.lineTo(hx + 1, ey - rR * 0.25);
+    ctx.stroke();
+  }
+
+  // Mouth / Chomp jaw
+  const my = hy + r * 0.5;
+  const mw = r * (biting ? 0.72 : 0.56);
+  const mh = r * (biting ? 0.42 : 0.22);
+  ctx.fillStyle = '#3c141c';
+  ctx.beginPath();
+  ctx.ellipse(hx, my, mw, mh, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Jagged ivory PvZ2 teeth
+  ctx.fillStyle = '#fff5d6';
+  const teeth = biting ? 3 : 2;
+  for (let i = 0; i < teeth; i++) {
+    const tx = hx - mw * 0.55 + (mw * 1.1 * i) / Math.max(1, teeth - 1);
+    ctx.fillRect(tx - 1.1, my - mh * 0.8, 2.2, Math.max(1.6, mh * 0.85));
+  }
+}
+
+/** Shared articulated cartoon zombie body helper for humanoid species. */
+function drawHumanoidZombie(ctx, cfg) {
+  const {
+    stride, bob, lean, attacking,
+    skinLight, skinDark, coatLight, coatDark, pantsColor,
+    tieColor, headR = 7.5, torsoW = 12, torsoH = 11, armLen = 9, legH = 7.5,
+    eyeColor, angry, hatFn, propBackFn, propFrontFn, headOffsetY = 0
+  } = cfg;
+
+  const biteSwing = attacking ? Math.sin(stride * 2.1) * 3.5 : 0;
+  const footL = Math.sin(stride) * 3.2;
+  const footR = -Math.sin(stride) * 3.2;
+
+  drawShadow(ctx, torsoW * 0.72, 4.2);
+
+  if (propBackFn) propBackFn();
+
+  // Legs
+  for (const [side, fy] of [[-1, footL], [1, footR]]) {
+    const lx = side * (torsoW * 0.27);
+    ctx.fillStyle = pantsColor;
+    rRect(ctx, lx - 2.6, -legH - 1.5 + Math.min(0, fy * 0.5), 5.2, legH + 1, 2.2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Shoe
+    ctx.fillStyle = '#242220';
+    ctx.beginPath();
+    ctx.ellipse(lx + side * 0.6, -2.0 + Math.min(0, fy * 0.45), 3.3, 2.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Torso + Coat with bob & sway
+  ctx.save();
+  ctx.translate(lean, bob + (attacking ? Math.abs(biteSwing) * 0.45 : 0));
+
+  const ty = -legH - torsoH + 1;
+  const coatGrad = ctx.createLinearGradient(-torsoW / 2, ty, torsoW / 2, ty + torsoH);
+  coatGrad.addColorStop(0, coatLight);
+  coatGrad.addColorStop(1, coatDark);
+  rRect(ctx, -torsoW / 2, ty, torsoW, torsoH, 4.2);
+  ctx.fillStyle = coatGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Coat lapel highlight + tattered tie
+  if (tieColor) {
+    ctx.fillStyle = '#d9d4c4';
+    ctx.beginPath();
+    ctx.moveTo(-2.6, ty + 1);
+    ctx.lineTo(2.6, ty + 1);
+    ctx.lineTo(0, ty + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = tieColor;
+    ctx.beginPath();
+    ctx.moveTo(-1.3, ty + 2);
+    ctx.lineTo(1.3, ty + 2);
+    ctx.lineTo(1.7, ty + 8.5);
+    ctx.lineTo(0, ty + 10.5);
+    ctx.lineTo(-1.7, ty + 8.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Outstretched Reaching Arms (pointing forward/down toward wall!)
+  for (const side of [-1, 1]) {
+    const ax = side * (torsoW * 0.52);
+    const ay = ty + 3.2;
+    const armBob = attacking ? biteSwing * side : Math.sin(stride + side * 1.1) * 2.2;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(side * 0.28 + armBob * 0.08);
+    // Sleeve
+    rRect(ctx, -2.2, -1, 4.4, armLen * 0.62, 2);
+    ctx.fillStyle = coatLight;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Zombie green hand claw
+    ctx.fillStyle = skinLight;
+    ctx.beginPath();
+    ctx.arc(0, armLen * 0.68, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Oversized PvZ2 Cartoon Zombie Head
+  const hy = ty - headR * 0.78 + headOffsetY + (attacking ? Math.abs(biteSwing) * 0.35 : 0);
+  const headGrad = ctx.createRadialGradient(-headR * 0.3, hy - headR * 0.35, 1.5, 0, hy, headR * 1.15);
+  headGrad.addColorStop(0, skinLight);
+  headGrad.addColorStop(1, skinDark);
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, hy, headR * 0.96, headR * 1.04, lean * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.9;
+  ctx.stroke();
+
+  // Upper-left glossy rim highlight
+  ctx.fillStyle = 'rgba(240, 255, 224, 0.42)';
+  ctx.beginPath();
+  ctx.ellipse(-headR * 0.38, hy - headR * 0.45, headR * 0.32, headR * 0.16, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawZombieFace(ctx, 0, hy, headR, {eyeColor, angry, biting: attacking});
+
+  if (hatFn) hatFn(0, hy, headR);
+  if (propFrontFn) propFrontFn(ty, hy, headR);
+
+  ctx.restore();
+}
+
+// =========================================================================
+// INDIVIDUAL ZOMBIE PAINTERS (ALL 15 SPECIES)
+// =========================================================================
+function drawShambler(ctx, t, attacking) {
+  const stride = t * 5.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.8,
+    lean: Math.sin(stride) * 1.2,
+    attacking,
+    skinLight: '#9fd078',
+    skinDark: '#5b8a44',
+    coatLight: '#6b5748',
+    coatDark: '#3f322a',
+    pantsColor: '#364454',
+    tieColor: '#d93d3d',
+    headR: 7.4,
+    torsoW: 12.5,
+    torsoH: 10.5,
+    armLen: 9.5,
+    legH: 7.5,
+    hatFn: (hx, hy, r) => {
+      // Messy tufts of zombie hair
+      ctx.strokeStyle = '#2b2420';
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hx - 2, hy - r);
+      ctx.lineTo(hx - 4, hy - r - 3);
+      ctx.moveTo(hx + 1, hy - r);
+      ctx.lineTo(hx + 3, hy - r - 3.5);
+      ctx.stroke();
+    }
+  });
+}
+
+function drawRunner(ctx, t, attacking) {
+  const stride = t * 11.5;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -2.6,
+    lean: Math.sin(stride) * 1.8,
+    attacking,
+    skinLight: '#b4dc78',
+    skinDark: '#6c9240',
+    coatLight: '#f07c2e',
+    coatDark: '#a63e14',
+    pantsColor: '#2a2e38',
+    tieColor: null,
+    headR: 6.2,
+    torsoW: 10,
+    torsoH: 8.8,
+    armLen: 8.2,
+    legH: 6.8,
+    eyeColor: '#fff699',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Bright crimson runner headband with fluttering tails
+      ctx.fillStyle = '#e83838';
+      rRect(ctx, hx - r * 0.95, hy - r * 0.55, r * 1.9, 2.8, 1.2);
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      const tailW = Math.sin(t * 14) * 2.5;
+      ctx.strokeStyle = '#ff5448';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(hx + r * 0.8, hy - r * 0.45);
+      ctx.lineTo(hx + r + 4.5, hy - r * 0.85 + tailW);
+      ctx.stroke();
+    }
+  });
+}
+
+function drawSwarm(ctx, t, attacking) {
+  const hop = Math.abs(Math.sin(t * 10.5)) * 3.4;
+  drawShadow(ctx, 6.2, 2.8, hop);
+  ctx.save();
+  ctx.translate(0, -hop);
+  // Tiny energetic PvZ2 Imp body
+  const g = ctx.createRadialGradient(-2, -9, 1, 0, -8, 8.5);
+  g.addColorStop(0, '#c2e874');
+  g.addColorStop(1, '#689836');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, -8.5, 6.4, 6.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // Pointy imp ears
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#92c452';
+    ctx.beginPath();
+    ctx.moveTo(s * 5.2, -10);
+    ctx.lineTo(s * 8.6, -12.8);
+    ctx.lineTo(s * 5.8, -6.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Torn tunic diaper/wrap
+  ctx.fillStyle = '#8b5e3c';
+  rRect(ctx, -4.5, -5.2, 9, 4.2, 1.8);
+  ctx.fill();
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, -9.2, 5.4, {eyeColor: '#fff696', angry: true, biting: attacking});
+  ctx.restore();
+}
+
+function drawSpitter(ctx, t, attacking) {
+  const stride = t * 5.0;
+  const pulse = 1 + Math.sin(t * 6.5) * 0.08 + (attacking ? 0.14 : 0);
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.6,
+    lean: Math.sin(stride) * 1.0,
+    attacking,
+    skinLight: '#82cc64',
+    skinDark: '#3c7a36',
+    coatLight: '#36583e',
+    coatDark: '#1d3424',
+    pantsColor: '#243028',
+    headR: 7.4,
+    torsoW: 13.5,
+    torsoH: 10.5,
+    eyeColor: '#d8ff64',
+    angry: true,
+    propBackFn: () => {
+      // Glowing swollen toxic acid sacs bulging behind shoulders
+      ctx.save();
+      ctx.scale(pulse, pulse);
+      for (const s of [-1, 1]) {
+        const sg = ctx.createRadialGradient(s * 8, -16, 1, s * 8, -15, 6);
+        sg.addColorStop(0, '#e8ff82');
+        sg.addColorStop(0.55, '#86e034');
+        sg.addColorStop(1, '#367418');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(s * 7.8, -15.5, 5.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+    propFrontFn: (_ty, hy, r) => {
+      if (attacking) {
+        // Glowing acid orb charging in mouth!
+        ctx.fillStyle = '#d4ff56';
+        ctx.beginPath();
+        ctx.arc(0, hy + r * 0.55, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#3c8816';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+  });
+}
+
+function drawArmored(ctx, t, attacking) {
+  const stride = t * 4.4;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#8eb872',
+    skinDark: '#4f7442',
+    coatLight: '#7b8c9a',
+    coatDark: '#3f4c58',
+    pantsColor: '#36424c',
+    headR: 8.0,
+    torsoW: 15,
+    torsoH: 12,
+    armLen: 10,
+    legH: 8,
+    eyeColor: '#88e8ff',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Iconic PvZ2 Glossy Steel Bucket-Helm with visor slit & metallic sheen!
+      const bg = ctx.createLinearGradient(hx - r, hy - r, hx + r, hy + r * 0.3);
+      bg.addColorStop(0, '#eef6fc');
+      bg.addColorStop(0.45, '#9cb0be');
+      bg.addColorStop(1, '#4c5e6c');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.92, hy - r * 1.15);
+      ctx.lineTo(hx + r * 0.92, hy - r * 1.15);
+      ctx.lineTo(hx + r * 1.12, hy + r * 0.25);
+      ctx.lineTo(hx - r * 1.12, hy + r * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.0;
+      ctx.stroke();
+
+      // Bucket top rim
+      ctx.fillStyle = '#dce8f0';
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - r * 1.15, r * 0.92, 2.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing eye slit cut into bucket front
+      rRect(ctx, hx - 5.2, hy - 2.2, 10.4, 3.4, 1.4);
+      ctx.fillStyle = '#121a20';
+      ctx.fill();
+      ctx.fillStyle = attacking ? '#ffe878' : '#7ae8ff';
+      ctx.fillRect(hx - 3.6, hy - 1.1, 2.6, 1.4);
+      ctx.fillRect(hx + 1.0, hy - 1.1, 2.6, 1.4);
+    },
+    propFrontFn: (ty) => {
+      // Twin riveted steel shoulder pauldrons
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#b4c6d4';
+        ctx.beginPath();
+        ctx.ellipse(s * 8.6, ty + 3, 4.2, 4.8, s * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.7;
+        ctx.stroke();
+      }
+    }
+  });
+}
+
+function drawBrute(ctx, t, attacking) {
+  const stride = t * 3.6;
+  const stomp = Math.abs(Math.sin(stride)) * -2.2;
+  const slam = attacking ? Math.sin(t * 7.5) * 6 : 0;
+
+  drawShadow(ctx, 16.5, 6.2);
+
+  // Huge stumpy legs
+  for (const s of [-1, 1]) {
+    const stepY = s * Math.sin(stride) * 2.5;
+    ctx.fillStyle = '#382a34';
+    rRect(ctx, s * 6.8 - 4.4, -12 + Math.min(0, stepY), 8.8, 10.5, 3);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.1;
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(Math.sin(stride) * 1.3, stomp);
+
+  // Hulking Gargantuar-style upper torso
+  const tg = ctx.createRadialGradient(-5, -26, 3, 0, -22, 18);
+  tg.addColorStop(0, '#c86452');
+  tg.addColorStop(0.6, '#8c342e');
+  tg.addColorStop(1, '#4d1a1a');
+  ctx.fillStyle = tg;
+  ctx.beginPath();
+  ctx.ellipse(0, -22, 15.5, 13.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  // Ragged iron chain strap across chest
+  ctx.strokeStyle = '#9aa8b4';
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.moveTo(-11, -30);
+  ctx.lineTo(10, -13);
+  ctx.stroke();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  // Massive boulder fists slamming downward
+  for (const s of [-1, 1]) {
+    const fy = -18 + (s < 0 ? slam : -slam * 0.4);
+    ctx.fillStyle = '#a4483e';
+    ctx.beginPath();
+    ctx.ellipse(s * 16.5, fy, 5.4, 6.8, s * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.1;
+    ctx.stroke();
+    // Iron knuckle studs
+    ctx.fillStyle = '#d6e2ea';
+    ctx.beginPath();
+    ctx.arc(s * 16.5, fy + 3.2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Brutish small head sunk between shoulders
+  const hy = -34.5;
+  const hg = ctx.createRadialGradient(-2, hy - 2, 1, 0, hy, 8);
+  hg.addColorStop(0, '#d88672');
+  hg.addColorStop(1, '#843a32');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.arc(0, hy, 7.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, hy, 7.4, {eyeColor: '#ffea7a', angry: true, biting: attacking});
+  ctx.restore();
+}
+
+function drawLeaper(ctx, t, attacking, enemy) {
+  const windup = Number.isFinite(enemy?.leapTimer) && enemy.leapTimer > 0;
+  const crouch = windup ? 4.5 : 0;
+  const stride = t * 8.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: crouch + Math.abs(Math.sin(stride)) * -2.2,
+    lean: Math.sin(stride) * 1.4,
+    attacking: attacking || windup,
+    skinLight: '#b6d86e',
+    skinDark: '#6a8e38',
+    coatLight: '#e69832',
+    coatDark: '#924c14',
+    pantsColor: '#3a2c1e',
+    headR: 7.0,
+    torsoW: 11.5,
+    torsoH: 10,
+    eyeColor: '#fff588',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Pointed amber hunter hood
+      ctx.fillStyle = '#f2a838';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy - r - 6);
+      ctx.lineTo(hx + r * 0.95, hy - r * 0.25);
+      ctx.lineTo(hx - r * 0.95, hy - r * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.7;
+      ctx.stroke();
+    }
+  });
+}
+
+function drawSplitter(ctx, t, attacking) {
+  const wobble = Math.sin(t * 5.8) * 1.4;
+  const pulse = 1 + Math.sin(t * 7.2) * 0.06;
+  drawShadow(ctx, 12.5, 4.8);
+  ctx.save();
+  ctx.translate(wobble, -Math.abs(Math.sin(t * 5.8)) * 1.5);
+  ctx.scale(pulse, 2 - pulse);
+
+  // Wide bulbous purple brood sac
+  const g = ctx.createRadialGradient(-4, -15, 2, 0, -13, 14);
+  g.addColorStop(0, '#c88ce0');
+  g.addColorStop(0.55, '#7e4898');
+  g.addColorStop(1, '#3e1e52');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, -13, 12.8, 11.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  // Glowing jagged split-line crack down center!
+  ctx.strokeStyle = attacking ? '#ffe872' : '#ff98d4';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.moveTo(0, -23.5);
+  ctx.lineTo(-2.5, -16);
+  ctx.lineTo(2.4, -10.5);
+  ctx.lineTo(-1.0, -3.5);
+  ctx.stroke();
+
+  // Twin twin-imp eyes peeking out of each half
+  drawZombieFace(ctx, -5.2, -13, 4.0, {eyeColor: '#fff4a6', asymmetric: false, biting: attacking});
+  drawZombieFace(ctx, 5.2, -13, 4.0, {eyeColor: '#fff4a6', asymmetric: false, biting: attacking});
+  ctx.restore();
+}
+
+function drawMender(ctx, t, attacking) {
+  const stride = t * 4.5;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#9ed68c',
+    skinDark: '#4f8854',
+    coatLight: '#4fa876',
+    coatDark: '#245842',
+    pantsColor: '#253c34',
+    headR: 7.0,
+    torsoW: 12,
+    torsoH: 11.5,
+    eyeColor: '#e8ffbe',
+    hatFn: (hx, hy, r) => {
+      // Field-medic cap with bright mint cross
+      rRect(ctx, hx - r * 0.88, hy - r * 1.15, r * 1.76, r * 0.72, 2.8);
+      ctx.fillStyle = '#e8f4ea';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.fillStyle = '#2dc474';
+      ctx.fillRect(hx - 1.2, hy - r * 1.02, 2.4, 5.2);
+      ctx.fillRect(hx - 2.6, hy - r * 0.82, 5.2, 2.2);
+    },
+    propFrontFn: (ty) => {
+      // Glowing mint healing staff in right hand
+      const glow = 0.75 + 0.25 * Math.sin(t * 7);
+      ctx.strokeStyle = '#5c4228';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(9.5, ty + 14);
+      ctx.lineTo(10.5, ty - 9);
+      ctx.stroke();
+      ctx.save();
+      ctx.globalAlpha = glow;
+      ctx.fillStyle = '#7effc4';
+      ctx.beginPath();
+      ctx.arc(10.5, ty - 10, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#186844';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function drawShade(ctx, t, attacking) {
+  const floatY = Math.sin(t * 4.8) * 3.0;
+  const sway = Math.cos(t * 3.6) * 2.0;
+  drawShadow(ctx, 7.5, 3.0, 4 + floatY);
+
+  ctx.save();
+  ctx.translate(sway, -4 + floatY);
+  // Billowing translucent spectral ghost body
+  const g = ctx.createLinearGradient(0, -26, 0, 2);
+  g.addColorStop(0, '#96f2ff');
+  g.addColorStop(0.55, '#4688b4');
+  g.addColorStop(1, 'rgba(34, 58, 92, 0.25)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -26);
+  ctx.bezierCurveTo(10, -24, 11, -10, 9, -1);
+  ctx.lineTo(4, -4 + Math.sin(t * 8) * 2);
+  ctx.lineTo(0, 1);
+  ctx.lineTo(-4, -4 - Math.sin(t * 8) * 2);
+  ctx.lineTo(-9, -1);
+  ctx.bezierCurveTo(-11, -10, -10, -24, 0, -26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#142636';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Twin piercing neon-cyan ghost eyes
+  ctx.fillStyle = attacking ? '#ffffff' : '#c8ffff';
+  ctx.beginPath();
+  ctx.ellipse(-3.2, -16, 2.2, 2.8, -0.15, 0, Math.PI * 2);
+  ctx.ellipse(3.2, -16, 2.2, 2.8, 0.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBanner(ctx, t, attacking) {
+  const stride = t * 5.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.6,
+    lean: Math.sin(stride) * 1.0,
+    attacking,
+    skinLight: '#9ac874',
+    skinDark: '#527c3e',
+    coatLight: '#a62e36',
+    coatDark: '#5c141c',
+    pantsColor: '#2c2428',
+    tieColor: '#f4c854',
+    headR: 7.2,
+    torsoW: 12.5,
+    torsoH: 11,
+    angry: true,
+    propFrontFn: (ty) => {
+      // Tall flagpole + Smooth Sine-Wave Fluttering Crimson War Flag!
+      const px = -9.5;
+      ctx.strokeStyle = '#3c2a1c';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(px, ty + 14);
+      ctx.lineTo(px, ty - 18);
+      ctx.stroke();
+      ctx.fillStyle = '#f6cf64';
+      ctx.beginPath();
+      ctx.arc(px, ty - 19, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      const w1 = Math.sin(t * 9.5) * 2.2;
+      const w2 = Math.cos(t * 9.5) * 2.6;
+      const fg = ctx.createLinearGradient(px, ty - 17, px + 18, ty - 8);
+      fg.addColorStop(0, '#ff4c44');
+      fg.addColorStop(1, '#a81c24');
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.moveTo(px + 1, ty - 17);
+      ctx.quadraticCurveTo(px + 9, ty - 18 + w1, px + 18, ty - 15 + w2);
+      ctx.lineTo(px + 14.5, ty - 11.5 + w2 * 0.8);
+      ctx.lineTo(px + 18, ty - 8 + w2);
+      ctx.quadraticCurveTo(px + 9, ty - 9 + w1, px + 1, ty - 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      // Gold skull dot on flag
+      ctx.fillStyle = '#ffe278';
+      ctx.beginPath();
+      ctx.arc(px + 7.5, ty - 12.5 + w1 * 0.4, 2.0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+function drawWarden(ctx, t, attacking) {
+  const stride = t * 4.4;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.7,
+    attacking,
+    skinLight: '#8cb878',
+    skinDark: '#486c44',
+    coatLight: '#4c6684',
+    coatDark: '#26384c',
+    pantsColor: '#24303e',
+    headR: 7.4,
+    torsoW: 13.5,
+    torsoH: 11.5,
+    angry: true,
+    propFrontFn: (ty) => {
+      // Gleaming Kite Tower Shield with golden emblem in front!
+      const sx = -9;
+      const sy = ty + 2;
+      const sg = ctx.createLinearGradient(sx - 6, sy - 6, sx + 6, sy + 10);
+      sg.addColorStop(0, '#c8dce8');
+      sg.addColorStop(0.5, '#648096');
+      sg.addColorStop(1, '#2c3d4c');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - 6);
+      ctx.lineTo(sx + 7.5, sy - 2);
+      ctx.lineTo(sx + 6, sy + 7.5);
+      ctx.lineTo(sx, sy + 12.5);
+      ctx.lineTo(sx - 6, sy + 7.5);
+      ctx.lineTo(sx - 7.5, sy - 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.9;
+      ctx.stroke();
+
+      // Golden Aegis Cross on shield
+      ctx.fillStyle = '#f6cc5c';
+      ctx.fillRect(sx - 1.3, sy - 3, 2.6, 11);
+      ctx.fillRect(sx - 4.2, sy + 0.5, 8.4, 2.4);
+    }
+  });
+}
+
+function drawCharge(ctx, t, attacking, enemy) {
+  const lit = Number.isFinite(enemy?.chargeTimer) && enemy.chargeTimer > 0;
+  const stride = t * 8.6;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -2.0,
+    lean: Math.sin(stride) * 1.4,
+    attacking: attacking || lit,
+    skinLight: '#c48c68',
+    skinDark: '#74422c',
+    coatLight: '#583830',
+    coatDark: '#2c1a18',
+    pantsColor: '#262022',
+    headR: 6.8,
+    torsoW: 11.5,
+    torsoH: 10,
+    eyeColor: '#ffe868',
+    angry: true,
+    propFrontFn: (ty) => {
+      // Bright Red-and-Gold Striped TNT / Cinder Barrel hugged in front!
+      const blink = lit && Math.floor(t * 16) % 2 === 0;
+      rRect(ctx, -6.5, ty + 2, 13, 10.5, 3);
+      ctx.fillStyle = blink ? '#ffea68' : '#e63628';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.fillStyle = '#f8d24c';
+      ctx.fillRect(-5.6, ty + 5.8, 11.2, 2.8);
+
+      // Sputtering Glowing Fuse Spark!
+      ctx.strokeStyle = '#d4b888';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, ty + 2);
+      ctx.quadraticCurveTo(3, ty - 3, 5.5, ty - 5);
+      ctx.stroke();
+      const sr = (lit ? 4.4 : 2.8) + Math.sin(t * 28) * 1.1;
+      ctx.fillStyle = '#fff598';
+      ctx.beginPath();
+      ctx.arc(5.5, ty - 5, sr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff6a1a';
+      ctx.beginPath();
+      ctx.arc(5.5, ty - 5, sr * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+function drawHush(ctx, t, attacking) {
+  const stride = t * 5.8;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#8cc2c6',
+    skinDark: '#446c74',
+    coatLight: '#365c6c',
+    coatDark: '#1a323e',
+    pantsColor: '#1a2832',
+    headR: 7.0,
+    torsoW: 12,
+    torsoH: 11,
+    eyeColor: '#b8ffff',
+    hatFn: (hx, hy, r) => {
+      // Sleek curved teal hood
+      ctx.fillStyle = '#2d5866';
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, r * 1.06, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.lineTo(hx + r * 0.8, hy + 2);
+      ctx.lineTo(hx - r * 0.8, hy + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    },
+    propFrontFn: (ty) => {
+      // Pulsing cryo-jammer ring aura around staff
+      const pulse = 5.5 + Math.sin(t * 8) * 1.8;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(130, 240, 255, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, ty + 5, pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function drawBoss(ctx, t, attacking, enemy) {
+  const enraged = enemy?.enraged === true;
+  const stride = t * (enraged ? 4.8 : 3.2);
+  const stomp = Math.abs(Math.sin(stride)) * -3.0;
+  const slam = attacking ? Math.sin(t * 8.5) * 7.5 : 0;
+
+  // Dramatic ground shadow + blazing boss aura ring
+  drawShadow(ctx, 25, 9.5);
+  ctx.save();
+  const auraPulse = 0.25 + 0.14 * Math.sin(t * (enraged ? 9 : 4));
+  ctx.strokeStyle = enraged ? `rgba(255, 72, 34, ${auraPulse + 0.22})` : `rgba(218, 92, 168, ${auraPulse})`;
+  ctx.lineWidth = enraged ? 3.5 : 2.4;
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 27, 10.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Heavy armored legs
+  for (const s of [-1, 1]) {
+    const sy = s * Math.sin(stride) * 3.5;
+    ctx.fillStyle = enraged ? '#46161c' : '#2e1a2c';
+    rRect(ctx, s * 10 - 6, -16 + Math.min(0, sy), 12, 14, 4);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+    // Gold/molten knee guard
+    ctx.fillStyle = enraged ? '#ff7428' : '#e8bd58';
+    rRect(ctx, s * 10 - 4, -14 + Math.min(0, sy), 8, 4.5, 1.5);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(Math.sin(stride) * 1.5, stomp);
+
+  // Colossal Armored Boss Torso
+  const bodyGrad = ctx.createRadialGradient(-6, -34, 4, 0, -29, 25);
+  if (enraged) {
+    bodyGrad.addColorStop(0, '#c83438');
+    bodyGrad.addColorStop(0.6, '#7a1624');
+    bodyGrad.addColorStop(1, '#320810');
+  } else {
+    bodyGrad.addColorStop(0, '#964478');
+    bodyGrad.addColorStop(0.6, '#5c244c');
+    bodyGrad.addColorStop(1, '#260c22');
+  }
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(-20, -39);
+  ctx.quadraticCurveTo(0, -45, 20, -39);
+  ctx.lineTo(17, -14);
+  ctx.quadraticCurveTo(0, -10, -17, -14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Throbbing Molten Chest Core!
+  const corePulse = 1 + Math.sin(t * (enraged ? 12 : 5.5)) * 0.14;
+  ctx.save();
+  ctx.translate(0, -26);
+  ctx.scale(corePulse, corePulse);
+  const cg = ctx.createRadialGradient(0, 0, 1, 0, 0, 9.5);
+  cg.addColorStop(0, '#ffffff');
+  cg.addColorStop(0.45, enraged ? '#ffea48' : '#ff8642');
+  cg.addColorStop(1, enraged ? '#ff2414' : '#c42432');
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 7.6, 9.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+  ctx.restore();
+
+  // Giant Clawed Gauntlet Arms
+  for (const s of [-1, 1]) {
+    const cy = -24 + (s < 0 ? slam : -slam * 0.5);
+    ctx.fillStyle = enraged ? '#8a1e28' : '#6c2c56';
+    ctx.beginPath();
+    ctx.ellipse(s * 22, cy, 7.2, 9.2, s * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.3;
+    ctx.stroke();
+    // 3 razor claws
+    ctx.fillStyle = enraged ? '#ffe062' : '#f0e2c8';
+    for (const c of [-3.5, 0, 3.5]) {
+      ctx.beginPath();
+      ctx.moveTo(s * 22 + c - 1.5, cy + 7);
+      ctx.lineTo(s * 22 + c + 1.5, cy + 7);
+      ctx.lineTo(s * 22 + c, cy + 13.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
   }
-  if (maxX < 0) return {width: 0, height: 0};
-  return {width: maxX - minX + 1, height: maxY - minY + 1};
+
+  // Boss Head + Curved Sweeping Horns + Jagged Crown!
+  const hy = -44;
+  // Sweeping Obsidian/Blazing Horns
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = enraged ? '#ff4a18' : '#2a1828';
+    ctx.beginPath();
+    ctx.moveTo(s * 9, hy - 3);
+    ctx.quadraticCurveTo(s * 22, hy - 8, s * 20, hy - 20);
+    ctx.quadraticCurveTo(s * 14, hy - 12, s * 6, hy - 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+  }
+
+  // Head
+  const hg = ctx.createRadialGradient(-3, hy - 3, 2, 0, hy, 12.5);
+  hg.addColorStop(0, enraged ? '#d64848' : '#a85686');
+  hg.addColorStop(1, enraged ? '#5e121a' : '#421636');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.ellipse(0, hy, 11.5, 10.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.3;
+  ctx.stroke();
+
+  // Jagged Golden Crown
+  ctx.fillStyle = enraged ? '#ffdc32' : '#f4c85a';
+  ctx.beginPath();
+  ctx.moveTo(-9, hy - 7);
+  ctx.lineTo(-10, hy - 16);
+  ctx.lineTo(-4, hy - 11);
+  ctx.lineTo(0, hy - 19);
+  ctx.lineTo(4, hy - 11);
+  ctx.lineTo(10, hy - 16);
+  ctx.lineTo(9, hy - 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, hy + 1, 10.2, {
+    eyeColor: enraged ? '#ffffff' : '#ffe668',
+    pupilColor: enraged ? '#ff1e00' : '#180812',
+    angry: true,
+    biting: attacking || enraged
+  });
+
+  ctx.restore();
+}
+
+const PAINTERS = {
+  shambler: drawShambler,
+  runner: drawRunner,
+  brute: drawBrute,
+  armored: drawArmored,
+  spitter: drawSpitter,
+  swarm: drawSwarm,
+  boss: drawBoss,
+  leaper: drawLeaper,
+  splitter: drawSplitter,
+  mender: drawMender,
+  shade: drawShade,
+  banner: drawBanner,
+  warden: drawWarden,
+  charge: drawCharge,
+  hush: drawHush,
+};
+
+/** Bounded fallback for minimal Node mock contexts that only expose fillRect. */
+function drawMinimalFallback(ctx, enemy, x, y, time, scale) {
+  const sz = enemySize(enemy);
+  const w = Math.max(4, Math.round(sz.width * scale));
+  const h = Math.max(4, Math.round(sz.height * scale));
+  const left = Math.round(x - w / 2);
+  const top = Math.round(y - h);
+  const step = Math.floor((Number.isFinite(time) ? time : 0) * 6) % 2;
+  const atk = enemy?.attacking === true;
+  ctx.save?.();
+  ctx.fillStyle = enemy?.enraged ? '#ff4422' : '#86b86a';
+  ctx.fillRect(left + 1, top + 1, Math.max(2, w - 2), Math.max(2, h - 5));
+  const legOff = atk ? 2 : (step ? 1 : 3);
+  ctx.fillRect(left + legOff, top + h - 4, 3, 4);
+  ctx.fillRect(left + Math.max(legOff, w - legOff - 3), top + h - 4, 3, 4);
+  if (atk) ctx.fillRect(left + Math.floor(w / 2) - 1, top, 2, 2);
+  ctx.restore?.();
 }
 
 function drawEnemy(ctx, enemy, x, y, {time = 0, scale = 1, flash = 0} = {}) {
-  if (!ctx) return;
-  const {kind, rows} = rowsFor(enemy, time);
-  const palette = PALETTES[kind] || PALETTES.shambler;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -1;
-  let maxY = -1;
-  for (let row = 0; row < rows.length; row += 1) {
-    const line = rows[row];
-    for (let col = 0; col < line.length; col += 1) {
-      const ink = line[col];
-      if (ink === '.' || ink === ' ') continue;
-      if (col < minX) minX = col;
-      if (row < minY) minY = row;
-      if (col > maxX) maxX = col;
-      if (row > maxY) maxY = row;
-    }
+  if (!ctx || !enemy || typeof enemy !== 'object') return;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const sc = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const fl = Number.isFinite(flash) && flash > 0 ? Math.min(1, flash) : 0;
+
+  if (!isRichCtx(ctx)) {
+    drawMinimalFallback(ctx, enemy, x, y, time, sc);
+    return;
   }
-  if (maxX < 0) return;
-  const width = maxX - minX + 1;
-  const height = maxY - minY + 1;
-  const pixel = Math.max(1, Math.round(scale) || 1);
-  const left = Math.round(x - (width * pixel) / 2);
-  const top = Math.round(y - height * pixel);
+
+  const kind = typeof enemy.kind === 'string' && PAINTERS[enemy.kind] ? enemy.kind : 'shambler';
+  const t = (Number.isFinite(time) ? time : 0) + seedFrom(enemy);
+  const attacking = enemy.attacking === true;
+
+  // Impact squash-and-stretch on hit!
+  const sx = sc * (1 + fl * 0.14);
+  const sy = sc * (1 - fl * 0.12);
+
   ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  for (let row = minY; row <= maxY; row += 1) {
-    const line = rows[row];
-    for (let col = minX; col <= maxX; col += 1) {
-      const ink = line[col];
-      if (ink === '.' || ink === ' ') continue;
-      ctx.fillStyle = flash > 0.4 ? '#fff6d8' : (palette[ink] || palette['.']);
-      ctx.fillRect(left + (col - minX) * pixel, top + (row - minY) * pixel, pixel, pixel);
+  try {
+    ctx.translate(x, y);
+    ctx.scale(sx, sy);
+    PAINTERS[kind](ctx, t, attacking, enemy);
+
+    // Soft radial impact flash gleam (keeps cel-shaded face crisp on hit)
+    if (fl > 0.05) {
+      const sz = enemySize(enemy);
+      const rad = Math.max(sz.width, sz.height) * 0.56;
+      const gleam = ctx.createRadialGradient(0, -sz.height * 0.52, 1, 0, -sz.height * 0.52, rad);
+      gleam.addColorStop(0, `rgba(255, 255, 255, ${(fl * 0.48).toFixed(3)})`);
+      gleam.addColorStop(0.65, `rgba(255, 246, 214, ${(fl * 0.16).toFixed(3)})`);
+      gleam.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = gleam;
+      ctx.beginPath();
+      ctx.arc(0, -sz.height * 0.52, rad, 0, Math.PI * 2);
+      ctx.fill();
     }
+  } finally {
+    ctx.restore();
   }
-  ctx.restore();
 }
 
 };
@@ -7991,29 +7554,14 @@ const clamp = __ff_m5["clamp"];
 const hitSlotAt = __ff_m5["hitSlot"];
 const slotGeometry = __ff_m5["slotGeometry"];
 /**
- * Fencefall battlefield renderer.
+ * Fencefall v5 — PvZ2-Style Native Retina HD Vector Battlefield Renderer.
  *
- * Draws in ARENA logical pixels (360×640) into an offscreen buffer, then
- * nearest-neighbor blits that buffer into the canvas backing store. Hit
- * testing inverts the same rectangle, so touch and mouse match the picture.
+ * Draws directly onto the high-DPI display canvas (2×/3× Retina) in ARENA logical
+ * space (360×640) with full anti-aliasing, smooth fractional scaling, gradients,
+ * bold cel-shaded silhouettes, 360° Hero aim tracking & recoil, and ZERO 2×5 grid.
  *
- * Simulation state and gameplay RNG are read-only. Presentation events come
- * from ingestEvents; this module never reads or drains state.events.
- * Changing runId clears leftover VFX, then replays events ingested since the
- * previous draw so a restart frame does not drop its own feedback.
- * A live stun, burn, poison, or slow tints that sprite. Stun wins, then burn, then poison, then slow.
- * A plate walker keeps two steel shoulders, still visible when a tint covers the body.
- * A bilingual director or wave hint is drawn in the top margin.
- * The selected defender shows its rank just above the sprite.
- * A phased enemy sprite is drawn at 42% opacity, then alpha is restored.
- * While leapTimer is above zero, an amber bar sits just above that sprite. A pale bar marks a warded ally.
- * A pale line joins an ash warden to the ally it is shielding.
- * An amber dash points from a hurried enemy back toward its banner.
- * A green line joins an ash mender to the most wounded ally in reach.
- * A gold corner marks a tower that has a legal merge.
- * While an ash hush is biting, each defender shows a short teal bar.
- * While chargeTimer is above zero, a shrinking red bar shows the fuse.
- * Inside chargeGap, and before the fuse lights, a short amber bar marks the approach.
+ * Simulation state and gameplay RNG are read-only. Presentation events arrive via
+ * ingestEvents; this module never reads or drains state.events.
  */
 
 
@@ -8023,21 +7571,21 @@ const slotGeometry = __ff_m5["slotGeometry"];
 
 
 
-const LETTERBOX = '#0e171c';
-const FIELD = '#122128';
+const LETTERBOX = '#0b1218';
+const FIELD = '#101d24';
+const INK = '#10161c';
 const MAX_CUES = 48;
 const MAX_BATCH = 200;
 const MAX_PROJECTILES = 300;
 const MAX_ENEMIES = 400;
 const MAX_CLOUDS = 32;
 const CUE_MS = 240;
-const MERGE_CUE_MS = 900;
 const FLASH_MS = 150;
 const RANGE_LIMIT = 900;
-const HP_FILL = 3;
-const SPRITE_GAP = 3;
-const STATUS_CELL = 7;
-const STATUS_GAP = 2;
+const HP_FILL = 4;
+const SPRITE_GAP = 4;
+const STATUS_CELL = 10;
+const STATUS_GAP = 3;
 
 const PALETTE = {
   bolt: {main: '#f2d56a', core: '#fff6cf', edge: '#6e5424'},
@@ -8060,20 +7608,6 @@ const ELEMENT_ALIAS = {
 };
 
 const STATUS_RANK = {stun: 0, burn: 1, poison: 2, slow: 3, brittle: 4};
-const STATUS_TINT = {stun: '#f0d35a', burn: '#e25a2a', poison: '#6aaa3a', slow: '#9ed8ea'};
-const TINT_ALPHA = 0.55;
-const HINT_BAND = 42;
-const HINT_MAX_LINES = 3;
-const HINT_CHAR_LIMIT = 220;
-// 3×5 rank digits, painted at 2× in the band above the selected sprite.
-const RANK_DIGIT = [
-  null,
-  ['.#.', '##.', '.#.', '.#.', '###'],
-  ['###', '..#', '###', '#..', '###'],
-  ['###', '..#', '###', '..#', '###'],
-  ['#.#', '#.#', '###', '..#', '..#'],
-];
-let tintSurface = null;
 
 function finite(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -8096,10 +7630,36 @@ function hashInt(n) {
   return (x ^ (x >>> 16)) >>> 0;
 }
 
-function sharpen(ctx) {
-  ctx.imageSmoothingEnabled = false;
-  if ('mozImageSmoothingEnabled' in ctx) ctx.mozImageSmoothingEnabled = false;
-  if ('webkitImageSmoothingEnabled' in ctx) ctx.webkitImageSmoothingEnabled = false;
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+    && typeof ctx.createRadialGradient === 'function'
+  );
+}
+
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+function enableSmooth(ctx) {
+  ctx.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+  if ('lineJoin' in ctx) ctx.lineJoin = 'round';
+  if ('lineCap' in ctx) ctx.lineCap = 'round';
 }
 
 function isolate(ctx, fn) {
@@ -8111,48 +7671,16 @@ function isolate(ctx, fn) {
   }
 }
 
-function plot(ctx, x, y, color) {
-  ctx.fillStyle = color;
-  ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
-}
-
 function context2d(target, opaque) {
   if (opaque) {
     try {
       const ctx = target.getContext('2d', {alpha: false});
       if (ctx) return ctx;
     } catch {
-      /* The options bag is optional. */
+      /* options bag is optional */
     }
   }
   return target.getContext('2d');
-}
-
-function createScene() {
-  const make = (scene) => {
-    const ctx = scene ? context2d(scene, true) : null;
-    return ctx ? {scene, ctx} : null;
-  };
-  try {
-    if (typeof OffscreenCanvas === 'function') {
-      const created = make(new OffscreenCanvas(ARENA.width, ARENA.height));
-      if (created) return created;
-    }
-  } catch {
-    /* OffscreenCanvas can exist but refuse a 2d context. */
-  }
-  try {
-    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
-      const canvas = document.createElement('canvas');
-      canvas.width = ARENA.width;
-      canvas.height = ARENA.height;
-      const created = make(canvas);
-      if (created) return created;
-    }
-  } catch {
-    /* Headless hosts draw directly to the display canvas. */
-  }
-  return {scene: null, ctx: null};
 }
 
 function normalizeSlot(value) {
@@ -8228,7 +7756,7 @@ function projectileColors(projectile) {
 }
 
 function measureEnemy(enemy) {
-  let width = Math.max(16, Math.round((finite(enemy.radius) ?? 12) * 2));
+  let width = Math.max(18, Math.round((finite(enemy.radius) ?? 12) * 2));
   let height = width;
   const sized = enemySize(enemy);
   if (sized && Number.isFinite(sized.width) && sized.width > 0) width = sized.width;
@@ -8237,25 +7765,12 @@ function measureEnemy(enemy) {
 }
 
 function measureDefender(unit) {
-  let width = 32;
-  let height = 36;
+  let width = 50;
+  let height = 54;
   const sized = defenderSize(unit);
   if (sized && Number.isFinite(sized.width) && sized.width > 0) width = sized.width;
   if (sized && Number.isFinite(sized.height) && sized.height > 0) height = sized.height;
   return {width, height};
-}
-
-function slotBox(slot, index) {
-  if (
-    slot &&
-    Number.isFinite(slot.left) &&
-    Number.isFinite(slot.top) &&
-    Number.isFinite(slot.width) &&
-    Number.isFinite(slot.height)
-  ) {
-    return slot;
-  }
-  return slotGeometry(index);
 }
 
 function slotCenter(slot, index) {
@@ -8277,45 +7792,6 @@ function readStats(unit, state, warned) {
   }
 }
 
-function auraRecipients(state, slots, warned) {
-  const live = [];
-  for (let index = 0; index < slots.length; index++) {
-    const unit = slots[index]?.unit;
-    if (!unit || unit.id == null) continue;
-    const stats = readStats(unit, state, warned);
-    const origin = slotCenter(slots[index], index);
-    live.push({
-      id: unit.id,
-      x: origin.x,
-      y: origin.y,
-      range: Number(stats?.aura?.range),
-      damage: Number(stats?.aura?.damage) || 0,
-      haste: Number(stats?.aura?.haste) || 0,
-    });
-  }
-  const hit = new Set();
-  for (let s = 0; s < live.length; s++) {
-    const source = live[s];
-    if (!(source.range > 0) || (source.damage <= 0 && source.haste <= 0)) continue;
-    const reach = source.range * source.range;
-    for (let t = 0; t < live.length; t++) {
-      const target = live[t];
-      const dx = source.x - target.x;
-      const dy = source.y - target.y;
-      if (dx * dx + dy * dy <= reach) hit.add(target.id);
-    }
-  }
-  return hit;
-}
-
-function drawAuraMark(ctx, anchorX, spriteTop) {
-  const x = Math.round(anchorX);
-  const y = spriteTop - 4;
-  ctx.fillStyle = '#c8fff4';
-  ctx.fillRect(x, y - 2, 1, 5);
-  ctx.fillRect(x - 2, y, 5, 1);
-}
-
 function orderedEnemies(state) {
   const source = Array.isArray(state.enemies) ? state.enemies : [];
   const list = [];
@@ -8329,126 +7805,169 @@ function orderedEnemies(state) {
   return list;
 }
 
-function plotRing(ctx, cx, cy, x, y) {
-  ctx.fillRect(cx + x, cy + y, 1, 1);
-  ctx.fillRect(cx + y, cy + x, 1, 1);
-  ctx.fillRect(cx - x, cy + y, 1, 1);
-  ctx.fillRect(cx - y, cy + x, 1, 1);
-  ctx.fillRect(cx + x, cy - y, 1, 1);
-  ctx.fillRect(cx + y, cy - x, 1, 1);
-  ctx.fillRect(cx - x, cy - y, 1, 1);
-  ctx.fillRect(cx - y, cy - x, 1, 1);
-}
-
-function drawPixelCircle(ctx, cx, cy, radius, color) {
-  const r = Math.round(radius);
-  if (r <= 0) return;
-  let x = r;
-  let y = 0;
-  let decision = 1 - r;
-  ctx.fillStyle = color;
-  while (x >= y) {
-    plotRing(ctx, cx, cy, x, y);
-    if (r > 2) plotRing(ctx, cx, cy, x - 1, y);
-    y += 1;
-    if (decision <= 0) decision += 2 * y + 1;
-    else {
-      x -= 1;
-      decision += 2 * (y - x) + 1;
-    }
-  }
-}
-
-function drawHpBar(ctx, x, y, width, hp, maxHp, emphasize) {
+// =========================================================================
+// HD VECTOR HP BARS, TARGET LOCK & STATUS BADGES
+// =========================================================================
+function drawHpBar(ctx, x, y, width, hp, maxHp, emphasize, isBoss = false) {
   if (!Number.isFinite(hp)) return;
   const max = Number.isFinite(maxHp) && maxHp > 0 ? maxHp : Math.max(hp, 1);
   const ratio = clamp(hp / max, 0, 1);
-  const fillW = Math.max(0, Math.min(width, Math.round(width * ratio)));
-  const plateY = y - 1;
-  const plateH = HP_FILL + 2;
-  ctx.fillStyle = '#101418';
-  ctx.fillRect(x - 1, plateY, width + 2, plateH);
-  ctx.fillStyle = '#efe6d2';
-  ctx.fillRect(x - 1, plateY, width + 2, 1);
-  ctx.fillRect(x - 1, plateY + plateH - 1, width + 2, 1);
-  ctx.fillRect(x - 1, plateY, 1, plateH);
-  ctx.fillRect(x + width, plateY, 1, plateH);
-  let fill = ratio > 0.55 ? '#8fbf62' : ratio > 0.28 ? '#f0c15a' : '#e15a42';
-  if (emphasize) fill = ratio > 0.55 ? '#d7f5a4' : ratio > 0.28 ? '#ffe3a0' : '#ffc2b4';
-  if (fillW > 0) {
-    ctx.fillStyle = fill;
-    ctx.fillRect(x, y, fillW, HP_FILL);
-    ctx.fillStyle = 'rgba(255, 248, 230, 0.5)';
-    ctx.fillRect(x, y, fillW, 1);
-  }
-}
+  const barH = isBoss ? 6.5 : HP_FILL;
+  const fillW = Math.max(0, Math.min(width, width * ratio));
 
-function drawTargetMark(ctx, x, y, width) {
-  const top = y - 1;
-  const bottom = y + HP_FILL;
-  ctx.fillStyle = '#fff6c8';
-  ctx.fillRect(x - 4, top, 2, 1);
-  ctx.fillRect(x - 4, top, 1, 2);
-  ctx.fillRect(x + width + 2, top, 2, 1);
-  ctx.fillRect(x + width + 3, top, 1, 2);
-  ctx.fillRect(x - 4, bottom, 2, 1);
-  ctx.fillRect(x - 4, bottom - 1, 1, 2);
-  ctx.fillRect(x + width + 2, bottom, 2, 1);
-  ctx.fillRect(x + width + 3, bottom - 1, 1, 2);
-}
-
-function drawStatusIcon(ctx, status, x, y) {
-  const type = String(status.type || '');
-  if (type === 'burn') {
-    ctx.fillStyle = '#5c220f';
-    ctx.fillRect(x + 1, y, 3, 5);
-    ctx.fillStyle = '#e25a2a';
-    ctx.fillRect(x + 1, y + 1, 3, 3);
-    ctx.fillStyle = '#ffd36a';
-    ctx.fillRect(x + 2, y + 2, 1, 2);
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(Math.round(x - 1), Math.round(y - 1), Math.round(width + 2), Math.round(barH + 2));
+    ctx.fillStyle = ratio > 0.55 ? '#6cd458' : ratio > 0.28 ? '#f4c046' : '#ef5244';
+    if (fillW > 0) ctx.fillRect(Math.round(x), Math.round(y), Math.round(fillW), Math.round(barH));
     return;
   }
-  if (type === 'poison') {
-    ctx.fillStyle = '#243814';
-    ctx.fillRect(x + 1, y + 1, 3, 3);
-    ctx.fillStyle = '#6aaa3a';
-    ctx.fillRect(x + 1, y + 1, 3, 2);
-    ctx.fillStyle = '#d8f0a0';
-    ctx.fillRect(x + 2, y + 1, 1, 1);
-    const stacks = clamp(Math.round(finite(status.stacks) ?? 1), 1, 4);
-    if (stacks > 1) {
-      ctx.fillStyle = '#d8f0a0';
-      for (let i = 0; i < stacks; i++) ctx.fillRect(x + i, y + 5, 1, 1);
+
+  ctx.save();
+  rRect(ctx, x - 1.2, y - 1.2, width + 2.4, barH + 2.4, (barH + 2.4) / 2);
+  ctx.fillStyle = 'rgba(10, 15, 20, 0.88)';
+  ctx.fill();
+  ctx.strokeStyle = isBoss ? '#ff8b78' : 'rgba(235, 242, 246, 0.65)';
+  ctx.lineWidth = isBoss ? 1.4 : 0.9;
+  ctx.stroke();
+
+  if (fillW > 0.5) {
+    const grad = ctx.createLinearGradient(x, y, x, y + barH);
+    if (isBoss) {
+      grad.addColorStop(0, emphasize ? '#ffd0c6' : '#ff6b5a');
+      grad.addColorStop(1, emphasize ? '#ff7c68' : '#b41e28');
+    } else if (ratio > 0.55) {
+      grad.addColorStop(0, emphasize ? '#d6ff9e' : '#8ef068');
+      grad.addColorStop(1, emphasize ? '#8ed856' : '#409c32');
+    } else if (ratio > 0.28) {
+      grad.addColorStop(0, emphasize ? '#ffef9c' : '#ffd258');
+      grad.addColorStop(1, emphasize ? '#f2b838' : '#c87e1c');
+    } else {
+      grad.addColorStop(0, emphasize ? '#ffd0c4' : '#ff6852');
+      grad.addColorStop(1, emphasize ? '#f0624c' : '#b82420');
     }
-    return;
+    rRect(ctx, x, y, fillW, barH, barH / 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Specular highlight strip
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
+    rRect(ctx, x + 0.6, y + 0.5, Math.max(0, fillW - 1.2), barH * 0.42, barH / 4);
+    ctx.fill();
   }
-  if (type === 'slow') {
-    ctx.fillStyle = '#24566c';
-    ctx.fillRect(x, y + 2, 5, 1);
-    ctx.fillRect(x + 2, y, 1, 5);
-    ctx.fillStyle = '#f4fdff';
-    ctx.fillRect(x + 2, y + 2, 1, 1);
-    return;
-  }
-  if (type === 'stun') {
-    ctx.fillStyle = '#f0d35a';
-    ctx.fillRect(x + 2, y, 1, 5);
-    ctx.fillRect(x, y + 2, 5, 1);
+  ctx.restore();
+}
+
+function drawTargetMark(ctx, x, y, width, isBoss = false) {
+  const h = isBoss ? 6.5 : HP_FILL;
+  if (!isRichCtx(ctx)) {
     ctx.fillStyle = '#fff6c8';
-    ctx.fillRect(x + 2, y + 2, 1, 1);
+    ctx.fillRect(Math.round(x - 4), Math.round(y - 1), 2, 2);
+    ctx.fillRect(Math.round(x + width + 2), Math.round(y - 1), 2, 2);
     return;
   }
-  if (type === 'brittle') {
-    ctx.fillStyle = '#d7c4a4';
-    ctx.fillRect(x, y, 2, 1);
-    ctx.fillRect(x + 3, y + 1, 2, 1);
-    ctx.fillRect(x + 1, y + 2, 2, 1);
-    ctx.fillRect(x, y + 4, 2, 1);
-    ctx.fillRect(x + 3, y + 3, 2, 1);
+  ctx.save();
+  ctx.strokeStyle = '#fff2a6';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  // Left bracket
+  ctx.moveTo(x - 2, y - 2.2);
+  ctx.lineTo(x - 4.5, y - 2.2);
+  ctx.lineTo(x - 4.5, y + h + 2.2);
+  ctx.lineTo(x - 2, y + h + 2.2);
+  // Right bracket
+  ctx.moveTo(x + width + 2, y - 2.2);
+  ctx.lineTo(x + width + 4.5, y - 2.2);
+  ctx.lineTo(x + width + 4.5, y + h + 2.2);
+  ctx.lineTo(x + width + 2, y + h + 2.2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawStatusIcon(ctx, status, cx, cy, r) {
+  const type = String(status.type || '');
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = type === 'burn' ? '#ff6a28' : type === 'poison' ? '#70d448' : type === 'slow' ? '#78e6ff' : '#ffe25a';
+    ctx.fillRect(Math.round(cx - 2), Math.round(cy - 2), 4, 4);
     return;
   }
-  ctx.fillStyle = '#f4efe2';
-  ctx.fillRect(x + 2, y + 2, 1, 1);
+  ctx.save();
+  // Crisp circular badge plate
+  ctx.fillStyle = 'rgba(10, 16, 22, 0.88)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(225, 236, 240, 0.72)';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+
+  if (type === 'burn') {
+    ctx.fillStyle = '#ff6824';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 0.65);
+    ctx.quadraticCurveTo(cx + r * 0.6, cy, cx, cy + r * 0.62);
+    ctx.quadraticCurveTo(cx - r * 0.6, cy, cx, cy - r * 0.65);
+    ctx.fill();
+    ctx.fillStyle = '#fff08a';
+    ctx.beginPath();
+    ctx.arc(cx, cy + r * 0.16, r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type === 'poison') {
+    ctx.fillStyle = '#74d644';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r * 0.62);
+    ctx.quadraticCurveTo(cx + r * 0.58, cy + r * 0.12, cx, cy + r * 0.58);
+    ctx.quadraticCurveTo(cx - r * 0.58, cy + r * 0.12, cx, cy - r * 0.62);
+    ctx.fill();
+    ctx.fillStyle = '#e8ffc0';
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.14, cy + r * 0.08, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type === 'slow') {
+    ctx.strokeStyle = '#90f0ff';
+    ctx.lineWidth = 1.25;
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI) / 3;
+      const dx = Math.cos(a) * r * 0.6;
+      const dy = Math.sin(a) * r * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(cx - dx, cy - dy);
+      ctx.lineTo(cx + dx, cy + dy);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type === 'stun') {
+    ctx.fillStyle = '#ffe252';
+    ctx.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const rr = k % 2 === 0 ? r * 0.66 : r * 0.28;
+      const a = (k * Math.PI) / 4;
+      const px = cx + Math.cos(a) * rr;
+      const py = cy + Math.sin(a) * rr;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (type === 'brittle') {
+    ctx.strokeStyle = '#e0a8ff';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.45, cy - r * 0.45);
+    ctx.lineTo(cx + r * 0.15, cy - r * 0.05);
+    ctx.lineTo(cx - r * 0.15, cy + r * 0.12);
+    ctx.lineTo(cx + r * 0.45, cy + r * 0.5);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = '#f4efe2';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawStatuses(ctx, enemy, anchorX, y) {
@@ -8463,51 +7982,168 @@ function drawStatuses(ctx, enemy, anchorX, y) {
   if (!shown.length) return;
   shown.sort((a, b) => (STATUS_RANK[a.type] ?? 9) - (STATUS_RANK[b.type] ?? 9));
   if (shown.length > 5) shown.length = 5;
-  const stride = STATUS_CELL + 1;
-  const rowWidth = shown.length * stride - 1;
-  let x = Math.round(anchorX - rowWidth / 2);
-  const top = Math.round(y);
+  const r = STATUS_CELL * 0.5;
+  const stride = STATUS_CELL + 2;
+  const totalW = shown.length * stride - 2;
+  let cx = anchorX - totalW / 2 + r;
+  const cy = y + r;
   for (let i = 0; i < shown.length; i++) {
-    ctx.fillStyle = '#101418';
-    ctx.fillRect(x, top, STATUS_CELL, STATUS_CELL);
-    ctx.fillStyle = '#d5e0d4';
-    ctx.fillRect(x, top, STATUS_CELL, 1);
-    ctx.fillRect(x, top, 1, STATUS_CELL);
-    ctx.fillRect(x + STATUS_CELL - 1, top, 1, STATUS_CELL);
-    drawStatusIcon(ctx, shown[i], x + 1, top + 1);
-    x += stride;
+    drawStatusIcon(ctx, shown[i], cx, cy, r);
+    cx += stride;
   }
 }
 
-function drawProjectile(ctx, projectile, target, reduced) {
-  const x = Math.round(projectile.x);
-  const y = Math.round(projectile.y);
-  if (projectile.team === 'enemy') {
-    // Glowing spitter acid glob with trailing droplets
-    ctx.save();
-    ctx.fillStyle = 'rgba(134, 224, 68, 0.28)';
-    ctx.fillRect(x - 4, y - 6, 9, 12);
-    ctx.fillStyle = '#3d7420';
-    ctx.fillRect(x - 3, y - 4, 7, 8);
-    ctx.fillStyle = '#baee6a';
-    ctx.fillRect(x - 2, y - 3, 5, 6);
-    ctx.fillStyle = '#f5ffd0';
-    ctx.fillRect(x - 1, y - 1, 2, 2);
-    if (!reduced) {
-      ctx.fillStyle = '#88cc44';
-      ctx.fillRect(x - 1, y - 7, 2, 2);
-      ctx.fillRect(x + 1, y - 10, 1, 2);
+function statusLive(enemy, type) {
+  const source = Array.isArray(enemy?.statuses) ? enemy.statuses : [];
+  for (let i = 0; i < source.length; i++) {
+    const status = source[i];
+    if (!status || status.type !== type) continue;
+    if (Number.isFinite(status.remaining) && status.remaining <= 0) continue;
+    return true;
+  }
+  return false;
+}
+
+// Smooth cel-shaded status auras around affected zombies (zero blocky pixel tint wash)
+function drawStatusAura(ctx, enemy, anchor, time, reduced) {
+  if (!isRichCtx(ctx)) return;
+  const isStun = statusLive(enemy, 'stun');
+  const isBurn = statusLive(enemy, 'burn');
+  const isSlow = statusLive(enemy, 'slow');
+  const isPoison = statusLive(enemy, 'poison');
+  if (!isStun && !isBurn && !isSlow && !isPoison) return;
+
+  const cx = anchor.x;
+  const cy = anchor.y - anchor.size.height * 0.45;
+  const rx = anchor.size.width * 0.56;
+  const ry = anchor.size.height * 0.48;
+
+  ctx.save();
+  if (isSlow) {
+    // Frost crystalline ring at feet
+    ctx.fillStyle = 'rgba(116, 232, 255, 0.24)';
+    ctx.beginPath();
+    ctx.ellipse(cx, anchor.y - 2, rx * 0.95, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(184, 248, 255, 0.78)';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+  }
+  if (isBurn) {
+    // Rising flickering fire motes
+    const pulse = reduced ? 0.8 : 0.72 + 0.28 * Math.sin(time * 16 + cx);
+    ctx.fillStyle = `rgba(255, 114, 38, ${(0.22 * pulse).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 0.82, ry * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let k = 0; k < 2; k++) {
+      const fx = cx + (k === 0 ? -rx * 0.45 : rx * 0.42);
+      const rise = reduced ? 3 : ((time * 24 + k * 7 + cx) % 10);
+      ctx.fillStyle = '#ff7426';
+      ctx.beginPath();
+      ctx.arc(fx, cy + 4 - rise, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff08a';
+      ctx.beginPath();
+      ctx.arc(fx, cy + 4 - rise, 1.1, 0, Math.PI * 2);
+      ctx.fill();
     }
+  }
+  if (isPoison) {
+    // Bubbling green toxin droplets
+    for (let k = 0; k < 2; k++) {
+      const px = cx + (k === 0 ? -rx * 0.35 : rx * 0.38);
+      const rise = reduced ? 2 : ((time * 18 + k * 5 + cy) % 9);
+      ctx.fillStyle = '#84e84c';
+      ctx.beginPath();
+      ctx.arc(px, cy + 3 - rise, 2.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (isStun) {
+    // Classic PvZ2 cartoon orbiting gold stun stars above the zombie's head!
+    const headY = anchor.y - anchor.size.height - 2;
+    const orbitRx = Math.max(8, anchor.size.width * 0.36);
+    const orbitRy = 3.2;
+    ctx.strokeStyle = 'rgba(255, 224, 96, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, headY, orbitRx, orbitRy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let k = 0; k < 3; k++) {
+      const ang = (reduced ? 0 : time * 5.2) + (k * Math.PI * 2) / 3;
+      const sx = cx + Math.cos(ang) * orbitRx;
+      const sy = headY + Math.sin(ang) * orbitRy;
+      ctx.fillStyle = '#ffe658';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let p = 0; p < 8; p++) {
+        const rr = p % 2 === 0 ? 3.2 : 1.3;
+        const a = (p * Math.PI) / 4;
+        const vx = sx + Math.cos(a) * rr;
+        const vy = sy + Math.sin(a) * rr;
+        if (p === 0) ctx.moveTo(vx, vy);
+        else ctx.lineTo(vx, vy);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// =========================================================================
+// HD VECTOR PROJECTILES
+// =========================================================================
+function drawProjectile(ctx, projectile, target, reduced) {
+  const x = projectile.x;
+  const y = projectile.y;
+  const rich = isRichCtx(ctx);
+
+  if (projectile.team === 'enemy') {
+    if (!rich) {
+      ctx.fillStyle = '#8ce84c';
+      ctx.fillRect(Math.round(x - 3), Math.round(y - 3), 6, 6);
+      return;
+    }
+    ctx.save();
+    // Luminous acid glow
+    const glow = ctx.createRadialGradient(x, y, 1, x, y, 9);
+    glow.addColorStop(0, 'rgba(170, 255, 86, 0.55)');
+    glow.addColorStop(1, 'rgba(130, 224, 52, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    // Acid droplet body
+    ctx.fillStyle = '#9cf04e';
+    ctx.strokeStyle = '#244a12';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 6.5);
+    ctx.quadraticCurveTo(x + 5, y, x, y + 5.2);
+    ctx.quadraticCurveTo(x - 5, y, x, y - 6.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f2ffd0';
+    ctx.beginPath();
+    ctx.arc(x - 1.2, y + 0.5, 1.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     return;
   }
+
   const ink = projectileInk(projectile);
   const kind = ink.kind;
   const color = ink.color;
-  const accent = ink.accent;
   const tags = Array.isArray(projectile.tags) ? projectile.tags : [];
   const isSplit = tags.includes('split');
   const isCryoBarrage = tags.includes('cryo_barrage');
+  const crit = !!projectile.crit || tags.includes('crit');
+
   let dx = finite(projectile.vx) ?? 0;
   let dy = finite(projectile.vy) ?? 0;
   if (dx === 0 && dy === 0 && finite(projectile.dirx) != null && finite(projectile.diry) != null) {
@@ -8515,193 +8151,220 @@ function drawProjectile(ctx, projectile, target, reduced) {
     dy = projectile.diry;
   }
   if (dx === 0 && dy === 0 && target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
-    dx = target.x - projectile.x;
-    dy = target.y - projectile.y;
+    dx = target.x - x;
+    dy = target.y - y;
   }
   if (dx === 0 && dy === 0) dy = -1;
-  const mag = Math.hypot(dx, dy) || 1;
-  const ux = dx / mag;
-  const uy = dy / mag;
-  const px = -uy;
-  const py = ux;
-  const crit = !!projectile.crit || tags.includes('crit');
-  const length = reduced ? 4 : isCryoBarrage ? 13 : isSplit ? 8 : kind === 'lightning' ? 11 : kind === 'fire' ? 9 : kind === 'hero' ? 9 : 7;
+  const angle = Math.atan2(dy, dx);
   const life = finite(projectile.life);
-  const faded = life != null && life < 0.35;
-  const at = (along, across) => [x + ux * along + px * across, y + uy * along + py * across];
+  const alpha = life != null && life < 0.35 ? Math.max(0.3, life / 0.35) : 1;
+
+  if (!rich) {
+    ctx.fillStyle = color.main;
+    ctx.fillRect(Math.round(x - 2), Math.round(y - 2), 4, 4);
+    return;
+  }
+
   ctx.save();
-  if (faded) ctx.globalAlpha = Math.max(0.3, life / 0.35);
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(angle);
 
   if (isCryoBarrage) {
-    // Piercing Glacial Barrage ice lance (bold 3px crystalline shaft)
-    const baseAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = baseAlpha * 0.34;
-    ctx.fillStyle = '#5ee0ff';
-    ctx.fillRect(x - 4, y - 4, 9, 9);
-    ctx.globalAlpha = baseAlpha;
-    for (let i = length; i >= 1; i--) {
-      const [tx, ty] = at(-i, 0);
-      plot(ctx, tx, ty, i <= 5 ? '#f4fdff' : i <= 9 ? '#82e6ff' : '#2a7aa0');
-      if (i <= 7) {
-        const [s1x, s1y] = at(-i, 1);
-        const [s2x, s2y] = at(-i, -1);
-        plot(ctx, s1x, s1y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
-        plot(ctx, s2x, s2y, i <= 3 ? '#b8f4ff' : '#4cc6ea');
-      }
-    }
-    const [tipX, tipY] = at(3, 0);
-    const [midX, midY] = at(1, 0);
-    plot(ctx, tipX, tipY, '#ffffff');
-    plot(ctx, midX, midY, '#ffffff');
-    plot(ctx, x, y, '#ffffff');
-    for (const across of [-2, 2]) {
-      const [wx, wy] = at(-1, across);
-      plot(ctx, wx, wy, '#9beeff');
-    }
+    // Sleek faceted translucent Cryo Ice Lance
+    const tailLen = reduced ? 10 : 20;
+    const tailGrad = ctx.createLinearGradient(-tailLen, 0, 5, 0);
+    tailGrad.addColorStop(0, 'rgba(72, 206, 245, 0)');
+    tailGrad.addColorStop(0.5, 'rgba(130, 236, 255, 0.72)');
+    tailGrad.addColorStop(1, '#ffffff');
+    ctx.fillStyle = tailGrad;
+    ctx.beginPath();
+    ctx.moveTo(-tailLen, 0);
+    ctx.lineTo(-2, -3.6);
+    ctx.lineTo(9, 0);
+    ctx.lineTo(-2, 3.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Faceted crystal spearhead
+    ctx.fillStyle = '#92eeff';
+    ctx.strokeStyle = '#185470';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(9.5, 0);
+    ctx.lineTo(0, -4.2);
+    ctx.lineTo(-5.5, 0);
+    ctx.lineTo(0, 4.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(7.5, 0);
+    ctx.lineTo(0, -1.8);
+    ctx.lineTo(-2.5, 0);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
     return;
   }
 
   if (isSplit) {
-    // Blazing gold-crimson shrapnel sub-bolt
-    const baseAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = baseAlpha * 0.3;
-    ctx.fillStyle = '#ff9838';
-    ctx.fillRect(x - 3, y - 3, 7, 7);
-    ctx.globalAlpha = baseAlpha;
-    for (let i = length; i >= 1; i--) {
-      const [tx, ty] = at(-i, 0);
-      plot(ctx, tx, ty, i <= 3 ? '#fff5be' : i <= 6 ? '#ffb43a' : '#c84826');
-    }
-    const [tipX, tipY] = at(2, 0);
-    plot(ctx, tipX, tipY, '#ffffff');
-    plot(ctx, x, y, '#ffe56a');
-    for (const across of [-1, 1]) {
-      const [sx, sy] = at(0, across);
-      plot(ctx, sx, sy, '#ff7832');
-    }
+    // Blazing gold-crimson shrapnel dart
+    const tailLen = reduced ? 7 : 13;
+    const tailGrad = ctx.createLinearGradient(-tailLen, 0, 4, 0);
+    tailGrad.addColorStop(0, 'rgba(255, 118, 38, 0)');
+    tailGrad.addColorStop(1, '#ffe478');
+    ctx.fillStyle = tailGrad;
+    ctx.beginPath();
+    ctx.moveTo(-tailLen, 0);
+    ctx.lineTo(0, -2.5);
+    ctx.lineTo(5, 0);
+    ctx.lineTo(0, 2.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffb838';
+    ctx.strokeStyle = '#681c0e';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(6, 0);
+    ctx.lineTo(-1, -2.8);
+    ctx.lineTo(-3.5, 0);
+    ctx.lineTo(-1, 2.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
     return;
   }
 
-  // Subtle luminous elemental halo so projectiles read crisply over dense hordes
-  const baseAlpha = ctx.globalAlpha;
-  ctx.globalAlpha = baseAlpha * (crit ? 0.34 : 0.22);
-  ctx.fillStyle = crit ? '#ffe56a' : color.main;
-  ctx.fillRect(x - 3, y - 3, 7, 7);
-  ctx.globalAlpha = baseAlpha;
+  // Luminous soft halo so projectiles pop cleanly over hordes
+  const haloR = crit ? 10 : 7;
+  const halo = ctx.createRadialGradient(0, 0, 1, 0, 0, haloR);
+  halo.addColorStop(0, crit ? 'rgba(255, 238, 126, 0.6)' : 'rgba(255, 212, 118, 0.36)');
+  halo.addColorStop(1, 'rgba(255, 212, 118, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+  ctx.fill();
 
-  // Tapered elemental energy trail
-  for (let i = length; i >= 1; i--) {
-    let across = 0;
-    if (kind === 'lightning' && i % 2 === 1) {
-      const side = (hashInt(x * 13 + y * 29 + i * 7 + (reduced ? 0 : Math.round(projectile.x))) & 1) ? 1 : -1;
-      across = side;
-    }
-    const [tx, ty] = at(-i, across);
-    const trailInk = i <= 3 ? color.core : i <= 5 ? color.main : color.edge;
-    plot(ctx, tx, ty, trailInk);
-    if (i <= 3) {
-      const [s1x, s1y] = at(-i, 1);
-      const [s2x, s2y] = at(-i, -1);
-      if (kind === 'fire' || kind === 'hero' || crit) {
-        plot(ctx, s1x, s1y, color.main);
-        if (i <= 2) plot(ctx, s2x, s2y, color.main);
-      } else if (kind === 'frost' && i <= 2) {
-        plot(ctx, s1x, s1y, color.main);
-      }
-    }
-  }
+  // Smooth tapered energy wake
+  const tailLen = reduced ? 7 : kind === 'hero' ? 16 : kind === 'lightning' ? 17 : 13;
+  const tailGrad = ctx.createLinearGradient(-tailLen, 0, 3, 0);
+  tailGrad.addColorStop(0, 'rgba(255, 240, 190, 0)');
+  tailGrad.addColorStop(0.55, color.main);
+  tailGrad.addColorStop(1, color.core);
+  ctx.fillStyle = tailGrad;
+  ctx.beginPath();
+  ctx.moveTo(-tailLen, 0);
+  ctx.lineTo(-1, crit ? -3.4 : -2.6);
+  ctx.lineTo(4, 0);
+  ctx.lineTo(-1, crit ? 3.4 : 2.6);
+  ctx.closePath();
+  ctx.fill();
 
-  // Distinct high-contrast elemental projectile heads
-  if (kind === 'frost') {
-    for (const [dxp, dyp] of [[0, -2], [0, 2], [-2, 0], [2, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      plot(ctx, x + dxp, y + dyp, Math.abs(dxp) + Math.abs(dyp) > 1 ? color.main : color.core);
-    }
-    ctx.fillStyle = color.core;
-    ctx.fillRect(x - 1, y - 1, 3, 3);
-  } else if (kind === 'poison') {
-    ctx.fillStyle = color.edge;
-    ctx.fillRect(x - 2, y - 2, 5, 5);
-    ctx.fillStyle = color.main;
-    ctx.fillRect(x - 1, y - 1, 3, 3);
-    plot(ctx, x, y, color.core);
-    plot(ctx, x - 1, y - 1, '#f4ffd8');
-    plot(ctx, x + 1, y + 2, accent.core);
-  } else if (kind === 'support') {
-    plot(ctx, x - 2, y, color.main);
-    plot(ctx, x + 2, y, color.main);
-    plot(ctx, x, y - 2, color.main);
-    plot(ctx, x, y + 2, color.main);
-    ctx.fillStyle = color.core;
-    ctx.fillRect(x - 1, y - 1, 3, 3);
-  } else if (kind === 'lightning') {
-    ctx.fillStyle = color.main;
-    ctx.fillRect(x - 1, y - 1, 3, 3);
-    const [tipX, tipY] = at(2, 0);
-    plot(ctx, tipX, tipY, color.core);
-    plot(ctx, x, y, '#ffffff');
-    for (const across of [-2, 2]) {
-      const [sx, sy] = at(0, across);
-      plot(ctx, sx, sy, color.main);
-    }
+  // Sharp PvZ2-style projectile head
+  if (kind === 'hero') {
+    const grad = ctx.createLinearGradient(-4, -3.5, 7, 3.5);
+    grad.addColorStop(0, '#fff4b8');
+    grad.addColorStop(0.5, crit ? '#ffd648' : '#ff8c38');
+    grad.addColorStop(1, color.main);
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = color.edge;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.quadraticCurveTo(3, -4.0, -3.8, -2.4);
+    ctx.lineTo(-2.2, 0);
+    ctx.lineTo(-3.8, 2.4);
+    ctx.quadraticCurveTo(3, 4.0, 8, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Hot white specular core
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(2.2, 0, 3.1, 1.3, 0, 0, Math.PI * 2);
+    ctx.fill();
   } else if (kind === 'fire') {
-    ctx.fillStyle = color.edge;
-    ctx.fillRect(x - 2, y - 2, 5, 5);
     ctx.fillStyle = color.main;
-    ctx.fillRect(x - 1, y - 1, 3, 3);
-    plot(ctx, x, y, color.core);
-    const [tipX, tipY] = at(2, 0);
-    plot(ctx, tipX, tipY, color.main);
-  } else if (kind === 'hero') {
-    // Bold crimson-gold hero lance head
-    const [tipX, tipY] = at(2, 0);
-    const [midX, midY] = at(1, 0);
-    plot(ctx, tipX, tipY, color.core);
-    plot(ctx, midX, midY, color.core);
-    plot(ctx, x, y, '#ffffff');
-    for (const across of [-2, -1, 1, 2]) {
-      const [sx, sy] = at(0, across);
-      plot(ctx, sx, sy, Math.abs(across) === 2 ? color.edge : color.main);
-    }
+    ctx.strokeStyle = color.edge;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color.core;
+    ctx.beginPath();
+    ctx.arc(1, 0, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === 'frost') {
+    ctx.fillStyle = color.main;
+    ctx.strokeStyle = color.edge;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(6.5, 0);
+    ctx.lineTo(0, -3.6);
+    ctx.lineTo(-4.5, 0);
+    ctx.lineTo(0, 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color.core;
+    ctx.beginPath();
+    ctx.arc(0.5, 0, 1.6, 0, Math.PI * 2);
+    ctx.fill();
   } else {
-    // Rivet crossbow bolt with gleaming steel head
-    const [tipX, tipY] = at(2, 0);
-    plot(ctx, tipX, tipY, '#ffffff');
-    plot(ctx, x, y, color.core);
-    for (const across of [-2, -1, 1, 2]) {
-      const [sx, sy] = at(0, across);
-      plot(ctx, sx, sy, Math.abs(across) === 2 ? color.edge : color.main);
-    }
+    ctx.fillStyle = color.main;
+    ctx.strokeStyle = color.edge;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(6.5, 0);
+    ctx.lineTo(-3, -2.8);
+    ctx.lineTo(-1.5, 0);
+    ctx.lineTo(-3, 2.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color.core;
+    ctx.beginPath();
+    ctx.arc(1.2, 0, 1.4, 0, Math.PI * 2);
+    ctx.fill();
   }
+
+  // Crisp gold 4-point star glint for critical shots
   if (crit) {
-    plot(ctx, x, y - 4, '#f0d35a');
-    plot(ctx, x, y + 4, '#f0d35a');
-    plot(ctx, x - 4, y, '#f0d35a');
-    plot(ctx, x + 4, y, '#f0d35a');
-    plot(ctx, x - 2, y - 2, '#fff6c8');
-    plot(ctx, x + 2, y - 2, '#fff6c8');
-    plot(ctx, x - 2, y + 2, '#fff6c8');
-    plot(ctx, x + 2, y + 2, '#fff6c8');
-    plot(ctx, x, y - 3, '#ffffff');
-    plot(ctx, x, y + 3, '#ffffff');
-    plot(ctx, x - 3, y, '#ffffff');
-    plot(ctx, x + 3, y, '#ffffff');
+    ctx.fillStyle = '#fff5a6';
+    ctx.strokeStyle = '#d98a14';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const r = i % 2 === 0 ? 6.2 : 1.8;
+      const a = (i * Math.PI) / 4;
+      const px = 1 + Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
-  if (finite(projectile.splash) > 0 && kind !== 'fire') {
-    plot(ctx, x - 2, y - 2, accent.core);
-    plot(ctx, x + 2, y - 2, accent.core);
-    plot(ctx, x - 2, y + 2, accent.core);
-    plot(ctx, x + 2, y + 2, accent.core);
-  }
+
   ctx.restore();
 }
 
+// =========================================================================
+// HD VECTOR GROUND HAZARDS (NAPALM FIRE SEA / FROST / POISON CLOUDS)
+// =========================================================================
 function cloudColor(cloud) {
   const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
   if (kind.includes('napalm') || kind.includes('shrapnel') || kind.includes('fire') || kind.includes('burn')) return '#ff5a20';
   if (kind.includes('poison') || kind.includes('toxin') || kind.includes('miasma')) return '#6aaa3a';
-  if (kind.includes('frost') || kind.includes('ice') || kind.includes('slow')) return '#8fd0e0';
+  if (kind.includes('frost') || kind.includes('ice') || kind.includes('slow')) return '#7ee4ff';
   if (kind.includes('light')) return '#ffe14a';
   return '#74c47a';
 }
@@ -8711,216 +8374,346 @@ function drawCloud(ctx, cloud, index, time = 0, reduced = false) {
   const y = finite(cloud.y);
   const radius = finite(cloud.radius) ?? finite(cloud.range);
   if (x == null || y == null || radius == null || radius <= 0) return;
-  const r = clamp(radius, 2, 120);
+  const r = clamp(radius, 4, 120);
   const kind = String(cloud.type || cloud.kind || cloud.element || '').toLowerCase();
-  const isFireSea = kind.includes('napalm') || kind.includes('shrapnel');
+  const isFireSea = kind.includes('napalm') || kind.includes('shrapnel') || kind.includes('fire');
   const color = cloudColor(cloud);
   const seed = hashInt(index * 97 + Math.round(x) * 13 + Math.round(y) * 29);
   let fade = 1;
   const remaining = finite(cloud.remaining);
   const duration = finite(cloud.duration);
   if (remaining != null && duration != null && duration > 0) fade = clamp(remaining / duration, 0, 1);
+
+  if (!isRichCtx(ctx)) {
+    ctx.save();
+    ctx.globalAlpha = 0.25 * fade;
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x - r), Math.round(y - r), Math.round(r * 2), Math.round(r * 2));
+    ctx.restore();
+    return;
+  }
+
   ctx.save();
   if (isFireSea) {
-    // Roaring Napalm / Thermobaric Fire Sea
-    const cx = Math.round(x);
-    const cy = Math.round(y);
-    const flicker = reduced ? 0.85 : (0.76 + 0.24 * Math.sin(time * 14 + index));
-    ctx.globalAlpha = 0.24 * fade * flicker;
-    ctx.fillStyle = '#d82e12';
+    const flicker = reduced ? 0.9 : (0.82 + 0.18 * Math.sin(time * 13 + index));
+    // Glowing layered magma fire pool
+    const pool = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+    pool.addColorStop(0, `rgba(255, 224, 96, ${(0.44 * fade * flicker).toFixed(3)})`);
+    pool.addColorStop(0.5, `rgba(255, 98, 24, ${(0.34 * fade * flicker).toFixed(3)})`);
+    pool.addColorStop(0.86, `rgba(196, 36, 14, ${(0.22 * fade).toFixed(3)})`);
+    pool.addColorStop(1, 'rgba(180, 24, 10, 0)');
+    ctx.fillStyle = pool;
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.ellipse(x, y, r, r * 0.84, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 0.28 * fade * flicker;
-    ctx.fillStyle = '#ff7b24';
+
+    // Glowing dashed scorched ring
+    ctx.strokeStyle = `rgba(255, 166, 62, ${(0.62 * fade).toFixed(3)})`;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash?.([6, 4]);
     ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(4, r * 0.68), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.56 * fade;
-    ctx.strokeStyle = '#ff9d3b';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash?.([4, 3]);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.ellipse(x, y, r * 0.96, r * 0.8, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash?.([]);
-    // Flickering pixel flame tongues + golden hot embers
-    const step = r > 44 ? 9 : 7;
-    const frame = reduced ? 0 : Math.floor(time * 11);
-    for (let py = -r + 4; py <= r - 4; py += step) {
-      for (let px = -r + 4; px <= r - 4; px += step) {
-        if (px * px + py * py > (r - 4) * (r - 4)) continue;
-        const h = hashInt(seed + px * 7 + py * 19);
-        if ((h & 3) !== 0) continue;
-        const bob = reduced ? 2 : ((frame + (h & 7)) % 5);
-        const fx = Math.round(x + px);
-        const fy = Math.round(y + py);
-        ctx.globalAlpha = 0.72 * fade;
-        ctx.fillStyle = '#ff541a';
-        ctx.fillRect(fx - 1, fy - 2 - bob, 3, 4 + (bob & 1));
-        ctx.globalAlpha = 0.9 * fade;
-        ctx.fillStyle = (h & 8) ? '#ffe878' : '#ffb842';
-        ctx.fillRect(fx, fy - 1 - bob, 1, 2);
-      }
+
+    // Stylized cel-shaded cartoon flame tongues dancing across the fire sea
+    const flames = Math.min(11, Math.max(5, Math.round(r / 6)));
+    for (let k = 0; k < flames; k++) {
+      const h = hashInt(seed + k * 37);
+      const ang = ((h & 255) / 255) * Math.PI * 2;
+      const dist = (((h >>> 8) & 255) / 255) * (r * 0.72);
+      const fx = x + Math.cos(ang) * dist;
+      const fy = y + Math.sin(ang) * dist * 0.78;
+      const sway = reduced ? 0 : Math.sin(time * 12 + k * 1.7) * 2.2;
+      const fh = (8 + (h % 6)) * (reduced ? 0.9 : 0.8 + 0.28 * Math.sin(time * 15 + k * 2.3));
+      const fw = 4.2 + (h % 3);
+
+      ctx.globalAlpha = 0.84 * fade;
+      ctx.fillStyle = '#ff5418';
+      ctx.beginPath();
+      ctx.moveTo(fx - fw, fy);
+      ctx.quadraticCurveTo(fx - fw * 0.8, fy - fh * 0.65, fx + sway, fy - fh);
+      ctx.quadraticCurveTo(fx + fw * 0.8, fy - fh * 0.65, fx + fw, fy);
+      ctx.quadraticCurveTo(fx, fy + 2.5, fx - fw, fy);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffe568';
+      ctx.beginPath();
+      ctx.moveTo(fx - fw * 0.45, fy - 0.5);
+      ctx.quadraticCurveTo(fx - fw * 0.3, fy - fh * 0.42, fx + sway * 0.6, fy - fh * 0.62);
+      ctx.quadraticCurveTo(fx + fw * 0.3, fy - fh * 0.42, fx + fw * 0.45, fy - 0.5);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
     return;
   }
-  // Soft translucent ground hazard zone
-  ctx.globalAlpha = 0.16 * fade;
-  ctx.fillStyle = color;
+
+  // Soft translucent frost / poison hazard pool
+  const pool = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+  pool.addColorStop(0, color);
+  pool.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.globalAlpha = 0.24 * fade;
+  ctx.fillStyle = pool;
   ctx.beginPath();
-  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
+  ctx.ellipse(x, y, r, r * 0.86, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Subtle dashed perimeter ring
-  ctx.globalAlpha = 0.38 * fade;
+
+  ctx.globalAlpha = 0.44 * fade;
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.setLineDash?.([3, 3]);
+  ctx.lineWidth = 1.4;
+  ctx.setLineDash?.([5, 4]);
   ctx.beginPath();
-  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
+  ctx.ellipse(x, y, r * 0.95, r * 0.82, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash?.([]);
-  // Drifting pixel vapor bubbles inside the cloud
-  ctx.globalAlpha = 0.48 * fade;
+
+  // Drifting bubbles / frost motes
+  ctx.globalAlpha = 0.65 * fade;
   ctx.fillStyle = color;
-  const drift = reduced ? 0 : Math.floor(time * 8);
-  const step = r > 40 ? 7 : 6;
-  for (let py = -r; py <= r; py += step) {
-    for (let px = -r; px <= r; px += step) {
-      if (px * px + py * py > (r - 2) * (r - 2)) continue;
-      const h = hashInt(seed + px * 3 + py * 17);
-      if ((h & 3) !== 0) continue;
-      const rise = reduced ? 0 : ((drift + (h & 7)) % 5);
-      ctx.fillRect(Math.round(x + px), Math.round(y + py - rise), 2, 2);
-    }
+  const count = Math.min(9, Math.max(4, Math.round(r / 7)));
+  for (let k = 0; k < count; k++) {
+    const h = hashInt(seed + k * 23);
+    const ang = ((h & 255) / 255) * Math.PI * 2;
+    const dist = (((h >>> 8) & 255) / 255) * (r * 0.72);
+    const rise = reduced ? 0 : ((time * 16 + k * 5) % 9);
+    const px = x + Math.cos(ang) * dist;
+    const py = y + Math.sin(ang) * dist * 0.78 - rise;
+    ctx.beginPath();
+    ctx.arc(px, py, 2.2 + (h % 2), 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
 
+// =========================================================================
+// HD VECTOR ARMORED SWEEPER WAR-RIG (AUTO SKILL)
+// =========================================================================
 function drawSweepers(ctx, state, time, reduced) {
   const list = state.arsenal?.sweepers;
   if (!Array.isArray(list) || !list.length) return;
-  const treadTick = reduced ? 0 : (Math.floor(time * 24) & 3);
+  const rich = isRichCtx(ctx);
+  const treadShift = reduced ? 0 : (time * 48) % 6;
+
   ctx.save();
   for (let i = 0; i < list.length; i++) {
     const sw = list[i];
     if (!sw || !Number.isFinite(sw.x) || !Number.isFinite(sw.y)) continue;
-    const cx = Math.round(sw.x);
-    const cy = Math.round(sw.y);
-    const hw = Math.min(24, Math.max(18, Math.round((sw.halfWidth || 34) * 0.62)));
-    // Twin golden headlight cones sweeping ahead of the plow
-    ctx.globalAlpha = 0.2;
-    ctx.fillStyle = '#ffe98a';
-    ctx.fillRect(cx - hw + 2, cy - 36, 7, 16);
-    ctx.fillRect(cx + hw - 9, cy - 36, 7, 16);
-    ctx.globalAlpha = 0.1;
-    ctx.fillRect(cx - hw, cy - 48, 11, 14);
-    ctx.fillRect(cx + hw - 11, cy - 48, 11, 14);
-    ctx.globalAlpha = 1;
-    // Heavy contact drop shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
-    ctx.fillRect(cx - hw - 1, cy - 16, hw * 2 + 2, 38);
-    // Left & right armored rubber treads with animated cleats
-    ctx.fillStyle = '#141a1e';
-    ctx.fillRect(cx - hw, cy - 12, 5, 30);
-    ctx.fillRect(cx + hw - 5, cy - 12, 5, 30);
-    ctx.fillStyle = '#48565e';
-    for (let ty = -10 + treadTick; ty < 16; ty += 5) {
-      ctx.fillRect(cx - hw + 1, cy + ty, 3, 2);
-      ctx.fillRect(cx + hw - 4, cy + ty, 3, 2);
+    const cx = sw.x;
+    const cy = sw.y;
+    const hw = Math.min(26, Math.max(20, (sw.halfWidth || 34) * 0.64));
+
+    if (!rich) {
+      ctx.fillStyle = '#4e6472';
+      ctx.fillRect(Math.round(cx - hw), Math.round(cy - 20), Math.round(hw * 2), 40);
+      continue;
     }
-    // Main armored steel truck chassis
-    const bw = (hw - 4) * 2;
-    ctx.fillStyle = '#1b242a';
-    ctx.fillRect(cx - hw + 4, cy - 15, bw, 33);
-    ctx.fillStyle = '#3a4c58';
-    ctx.fillRect(cx - hw + 5, cy - 14, bw - 2, 31);
-    // Steel hood & rear cargo armor deck
-    ctx.fillStyle = '#5a707e';
-    ctx.fillRect(cx - hw + 6, cy - 13, bw - 4, 10);
-    ctx.fillRect(cx - hw + 6, cy + 5, bw - 4, 10);
-    // Armored cyan slit windshield
-    ctx.fillStyle = '#142028';
-    ctx.fillRect(cx - hw + 7, cy - 5, bw - 6, 5);
-    ctx.fillStyle = '#7ce6ff';
-    ctx.fillRect(cx - hw + 8, cy - 4, bw - 8, 3);
-    ctx.fillStyle = '#e8fbff';
-    ctx.fillRect(cx - hw + 9, cy - 4, 4, 1);
-    // Roof turret hatch & amber beacon
-    ctx.fillStyle = '#243038';
-    ctx.fillRect(cx - 5, cy + 2, 10, 8);
-    ctx.fillStyle = '#8aa0ac';
-    ctx.fillRect(cx - 4, cy + 3, 8, 6);
-    ctx.fillStyle = (treadTick & 1) ? '#ff5a3c' : '#ffe56a';
-    ctx.fillRect(cx - 1, cy + 5, 2, 2);
-    // Heavy V-shaped front steel ram-plow with hazard stripes
-    ctx.fillStyle = '#222c32';
-    ctx.fillRect(cx - hw - 3, cy - 21, hw * 2 + 6, 7);
-    ctx.fillStyle = '#cedbe2';
-    ctx.fillRect(cx - hw - 2, cy - 20, hw * 2 + 4, 3);
-    ctx.fillStyle = '#f0cb72';
-    for (let sx = -hw; sx <= hw - 4; sx += 8) {
-      ctx.fillRect(cx + sx, cy - 17, 4, 2);
+
+    // 1. Twin sweeping golden headlight cones
+    for (const side of [-1, 1]) {
+      const lx = cx + side * (hw - 7);
+      const cone = ctx.createLinearGradient(lx, cy - 20, lx, cy - 66);
+      cone.addColorStop(0, 'rgba(255, 242, 162, 0.36)');
+      cone.addColorStop(1, 'rgba(255, 242, 162, 0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(lx - 3, cy - 20);
+      ctx.lineTo(lx - 13, cy - 66);
+      ctx.lineTo(lx + 13, cy - 66);
+      ctx.lineTo(lx + 3, cy - 20);
+      ctx.closePath();
+      ctx.fill();
     }
-    // Headlights on bumper
+
+    // 2. Soft dark ground contact shadow
+    ctx.fillStyle = 'rgba(6, 10, 14, 0.48)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 4, hw + 4, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Heavy armored treads with animated cleats
+    for (const side of [-1, 1]) {
+      const tx = side < 0 ? cx - hw : cx + hw - 6.5;
+      rRect(ctx, tx, cy - 14, 6.5, 32, 2.6);
+      ctx.fillStyle = '#182026';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.7;
+      ctx.stroke();
+
+      ctx.fillStyle = '#5a6b75';
+      for (let ty = -12 + treadShift; ty < 16; ty += 6) {
+        ctx.fillRect(tx + 1.2, cy + ty, 4.1, 2.2);
+      }
+    }
+
+    // 4. Main beveled cel-shaded steel truck chassis
+    const bw = (hw - 4.5) * 2;
+    const bx = cx - bw / 2;
+    const bodyGrad = ctx.createLinearGradient(bx, cy - 16, bx + bw, cy + 16);
+    bodyGrad.addColorStop(0, '#627c8e');
+    bodyGrad.addColorStop(0.5, '#3b505e');
+    bodyGrad.addColorStop(1, '#22313b');
+    rRect(ctx, bx, cy - 16, bw, 35, 6);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.1;
+    ctx.stroke();
+
+    // Hood & rear armor deck plates
+    ctx.fillStyle = '#7b97a8';
+    rRect(ctx, bx + 3, cy - 13.5, bw - 6, 8, 2.5);
+    ctx.fill();
+    ctx.fillStyle = '#4c6372';
+    rRect(ctx, bx + 3, cy + 6, bw - 6, 10, 2.5);
+    ctx.fill();
+
+    // 5. Glossy angled cyan armor windshield
+    const winGrad = ctx.createLinearGradient(bx + 4, cy - 5, bx + bw - 4, cy + 1);
+    winGrad.addColorStop(0, '#a6f8ff');
+    winGrad.addColorStop(0.55, '#3cc6ea');
+    winGrad.addColorStop(1, '#186684');
+    rRect(ctx, bx + 3.5, cy - 5.5, bw - 7, 6.5, 2.4);
+    ctx.fillStyle = winGrad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Windshield specular glint
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.beginPath();
+    ctx.moveTo(bx + 6, cy - 4.5);
+    ctx.lineTo(bx + 12, cy - 4.5);
+    ctx.lineTo(bx + 9.5, cy - 0.5);
+    ctx.lineTo(bx + 5.5, cy - 0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // 6. Roof turret hatch & flashing tactical siren beacon
+    ctx.fillStyle = '#2b3944';
+    ctx.beginPath();
+    ctx.arc(cx, cy + 7.5, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    const sirenRed = Math.floor(time * 12) % 2 === 0;
+    ctx.fillStyle = sirenRed ? '#ff543c' : '#ffe65e';
+    ctx.beginPath();
+    ctx.arc(cx, cy + 7.5, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 7. Heavy angled V-shaped steel ram-plow with hazard stripes
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 27);
+    ctx.lineTo(cx + hw + 4, cy - 19);
+    ctx.lineTo(cx + hw + 2, cy - 13);
+    ctx.lineTo(cx, cy - 18.5);
+    ctx.lineTo(cx - hw - 2, cy - 13);
+    ctx.lineTo(cx - hw - 4, cy - 19);
+    ctx.closePath();
+    const plowGrad = ctx.createLinearGradient(cx, cy - 27, cx, cy - 13);
+    plowGrad.addColorStop(0, '#eef5f8');
+    plowGrad.addColorStop(0.5, '#a8bcc8');
+    plowGrad.addColorStop(1, '#5a6e7a');
+    ctx.fillStyle = plowGrad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.0;
+    ctx.stroke();
+
+    // Hazard gold accent chevrons on plow
+    ctx.fillStyle = '#f8ca46';
+    for (const sx of [-12, -4, 4, 12]) {
+      ctx.fillRect(cx + sx - 2, cy - 19 + Math.abs(sx) * 0.22, 4, 2.4);
+    }
+
+    // Bright bumper headlights
     ctx.fillStyle = '#fff9d6';
-    ctx.fillRect(cx - hw + 4, cy - 16, 3, 2);
-    ctx.fillRect(cx + hw - 7, cy - 16, 3, 2);
-    // Exhaust puffs behind rear wheels
+    ctx.beginPath();
+    ctx.arc(cx - hw + 7, cy - 16, 2.1, 0, Math.PI * 2);
+    ctx.arc(cx + hw - 7, cy - 16, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 8. Curling exhaust puffs trailing behind rear deck
     if (!reduced) {
-      const puff = (Math.floor(time * 16) + i * 3) % 8;
-      ctx.globalAlpha = 0.45;
-      ctx.fillStyle = '#a8b8c0';
-      ctx.fillRect(cx - hw + 6, cy + 19 + puff, 3, 3);
-      ctx.fillRect(cx + hw - 9, cy + 21 + (7 - puff), 3, 3);
-      ctx.globalAlpha = 1;
+      for (let p = 0; p < 2; p++) {
+        const phase = ((time * 3.4 + i * 0.4 + p * 0.5) % 1);
+        const ex = cx + (p === 0 ? -hw + 8 : hw - 8);
+        const ey = cy + 20 + phase * 18;
+        ctx.fillStyle = `rgba(186, 200, 210, ${(0.48 * (1 - phase)).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 3 + phase * 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
   ctx.restore();
 }
 
+// =========================================================================
+// HD VECTOR ORBITAL PLASMA LASER (AUTO SKILL)
+// =========================================================================
 function drawBeams(ctx, state, time, reduced) {
   const list = state.arsenal?.beams;
   if (!Array.isArray(list) || !list.length) return;
+  const rich = isRichCtx(ctx);
   ctx.save();
   for (let i = 0; i < list.length; i++) {
     const beam = list[i];
     if (!beam || !Number.isFinite(beam.x) || !(beam.life > 0)) continue;
     const maxLife = beam.maxLife > 0 ? beam.maxLife : 0.65;
     const ratio = clamp(beam.life / maxLife, 0, 1);
-    const pulse = reduced ? 1 : (0.85 + 0.15 * Math.sin(time * 42 + i));
-    const width = Math.max(12, Math.round((beam.width || 36) * (0.45 + 0.55 * ratio)));
-    const cx = Math.round(beam.x);
+    const pulse = reduced ? 1 : (0.86 + 0.14 * Math.sin(time * 42 + i));
+    const width = Math.max(14, (beam.width || 36) * (0.45 + 0.55 * ratio));
+    const cx = beam.x;
     const bottom = ARENA.fenceY - 6;
-    // Outer electric cyan plasma halo
-    ctx.globalAlpha = 0.26 * ratio * pulse;
-    ctx.fillStyle = '#38d8ff';
-    ctx.fillRect(cx - Math.round(width * 0.72), 0, Math.round(width * 1.44), bottom);
-    // Main high-energy laser column
-    ctx.globalAlpha = 0.64 * ratio * pulse;
-    ctx.fillStyle = '#8ef0ff';
-    ctx.fillRect(cx - Math.round(width * 0.42), 0, Math.round(width * 0.84), bottom);
-    // Blinding white-hot beam core
-    const coreW = Math.max(4, Math.round(width * 0.22));
-    ctx.globalAlpha = 0.94 * ratio;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cx - Math.round(coreW / 2), 0, coreW, bottom);
-    // Animated descending energy scan bars
+
+    if (!rich) {
+      ctx.globalAlpha = 0.7 * ratio;
+      ctx.fillStyle = '#6cf0ff';
+      ctx.fillRect(Math.round(cx - width / 2), 0, Math.round(width), bottom);
+      continue;
+    }
+
+    // Smooth horizontal gradient plasma column
+    const outerHalf = width * 0.85 * pulse;
+    const colGrad = ctx.createLinearGradient(cx - outerHalf, 0, cx + outerHalf, 0);
+    colGrad.addColorStop(0, 'rgba(34, 198, 255, 0)');
+    colGrad.addColorStop(0.24, `rgba(62, 224, 255, ${(0.42 * ratio).toFixed(3)})`);
+    colGrad.addColorStop(0.42, `rgba(168, 248, 255, ${(0.82 * ratio).toFixed(3)})`);
+    colGrad.addColorStop(0.5, `rgba(255, 255, 255, ${(0.96 * ratio).toFixed(3)})`);
+    colGrad.addColorStop(0.58, `rgba(168, 248, 255, ${(0.82 * ratio).toFixed(3)})`);
+    colGrad.addColorStop(0.76, `rgba(62, 224, 255, ${(0.42 * ratio).toFixed(3)})`);
+    colGrad.addColorStop(1, 'rgba(34, 198, 255, 0)');
+    ctx.fillStyle = colGrad;
+    ctx.fillRect(cx - outerHalf, 0, outerHalf * 2, bottom);
+
+    // Animated descending orbital plasma rings
     if (!reduced) {
-      const scan = Math.floor((time * 460 + i * 73) % 72);
-      ctx.globalAlpha = 0.75 * ratio;
-      ctx.fillStyle = '#e0fbff';
-      for (let sy = scan; sy < bottom; sy += 72) {
-        ctx.fillRect(cx - Math.round(width * 0.55), sy, Math.round(width * 1.1), 3);
+      const scan = (time * 480 + i * 73) % 76;
+      ctx.strokeStyle = `rgba(232, 252, 255, ${(0.78 * ratio).toFixed(3)})`;
+      ctx.lineWidth = 2.2;
+      for (let sy = scan; sy < bottom; sy += 76) {
+        ctx.beginPath();
+        ctx.ellipse(cx, sy, width * 0.52, 4.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
-    // Ground scorch flare at the base of the beam
-    ctx.globalAlpha = 0.78 * ratio;
-    ctx.fillStyle = '#c8f8ff';
-    ctx.fillRect(cx - Math.round(width * 0.65), bottom - 4, Math.round(width * 1.3), 5);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cx - Math.round(width * 0.35), bottom - 3, Math.round(width * 0.7), 3);
+
+    // Ground impact plasma flare at base
+    const flare = ctx.createRadialGradient(cx, bottom - 2, 2, cx, bottom - 2, width * 0.95);
+    flare.addColorStop(0, `rgba(255, 255, 255, ${(0.95 * ratio).toFixed(3)})`);
+    flare.addColorStop(0.45, `rgba(126, 244, 255, ${(0.65 * ratio).toFixed(3)})`);
+    flare.addColorStop(1, 'rgba(56, 216, 255, 0)');
+    ctx.fillStyle = flare;
+    ctx.beginPath();
+    ctx.ellipse(cx, bottom - 2, width * 0.95, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -8929,6 +8722,7 @@ function ringRadius(value) {
   return Number.isFinite(value) && value > 0 ? clamp(value, 1, RANGE_LIMIT) : 0;
 }
 
+// Keep drawRange immediately before drawFence (tested by tests/range-ring.test.mjs).
 function drawRange(ctx, state, slotIndex, strokeOnly, warned, cache) {
   if (slotIndex < 0) return;
   const slots = Array.isArray(state.slots) ? state.slots : [];
@@ -8948,26 +8742,60 @@ function drawRange(ctx, state, slotIndex, strokeOnly, warned, cache) {
   const attack = ringRadius(stats.range);
   const aura = ringRadius(stats.aura?.range);
   const origin = slotCenter(slot, slotIndex);
-  const cx = Math.round(origin.x);
-  const cy = Math.round(origin.y);
+  const cx = origin.x;
+  const cy = origin.y;
   const primary = attack || aura;
   if (!primary) return;
+
+  if (!isRichCtx(ctx)) {
+    if (!strokeOnly) {
+      ctx.fillStyle = 'rgba(240, 203, 114, 0.12)';
+      ctx.fillRect(Math.round(cx - 8), Math.round(cy - 8), 16, 16);
+    }
+    return;
+  }
+
+  ctx.save();
   if (!strokeOnly) {
-    ctx.save();
-    ctx.globalAlpha = 1;
+    // Soft translucent golden range wash + glowing selection ring under Hero's platform
+    const wash = ctx.createRadialGradient(cx, cy, 18, cx, cy, primary);
+    wash.addColorStop(0, attack ? 'rgba(248, 206, 98, 0.14)' : 'rgba(125, 206, 192, 0.14)');
+    wash.addColorStop(0.85, attack ? 'rgba(248, 206, 98, 0.05)' : 'rgba(125, 206, 192, 0.05)');
+    wash.addColorStop(1, 'rgba(248, 206, 98, 0.16)');
+    ctx.fillStyle = wash;
     ctx.beginPath();
     ctx.arc(cx, cy, primary, 0, Math.PI * 2);
-    ctx.fillStyle = attack ? 'rgba(240, 203, 114, 0.10)' : 'rgba(125, 206, 192, 0.10)';
     ctx.fill();
+
+    // Subtle pulsing selection ring framing the Gunnery Platform
+    ctx.strokeStyle = 'rgba(255, 232, 134, 0.9)';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 4, 48, 24, 0, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
     return;
   }
-  if (attack) drawPixelCircle(ctx, cx, cy, attack, '#f0cb72');
-  // Splash is measured around the enemy that was hit, not around this slot.
-  if (aura && Math.abs(aura - attack) > 6) drawPixelCircle(ctx, cx, cy, aura, '#7dcec0');
-  ctx.fillStyle = attack ? '#f0cb72' : '#7dcec0';
-  ctx.fillRect(cx - 2, cy, 5, 1);
-  ctx.fillRect(cx, cy - 2, 1, 5);
+
+  if (attack) {
+    ctx.strokeStyle = 'rgba(248, 208, 102, 0.85)';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash?.([8, 5]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, attack, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash?.([]);
+  }
+  if (aura && Math.abs(aura - attack) > 6) {
+    ctx.strokeStyle = 'rgba(125, 206, 192, 0.82)';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash?.([5, 4]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, aura, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash?.([]);
+  }
+  ctx.restore();
 }
 
 function drawFence(ctx, state, time, flash, reduced) {
@@ -8975,92 +8803,112 @@ function drawFence(ctx, state, time, flash, reduced) {
   if (!fence || !Number.isFinite(fence.maxHp) || fence.maxHp <= 0 || !Number.isFinite(fence.hp)) return;
   const ratio = clamp(fence.hp / fence.maxHp, 0, 1);
   const x = 24;
-  const y = ARENA.fenceY - 7;
+  const y = ARENA.fenceY - 8;
   const width = ARENA.width - 48;
+  const barH = 5.5;
   const emphasize = !reduced && ratio <= 0.28 && Math.floor(time * 6) % 2 === 0;
+
   if (flash > 0) {
     ctx.save();
-    ctx.globalAlpha = 0.4 * flash;
-    ctx.fillStyle = '#ff5a3c';
-    ctx.fillRect(0, ARENA.fenceY - 6, ARENA.width, 12);
+    ctx.globalAlpha = 0.44 * flash;
+    ctx.fillStyle = '#ff4c36';
+    ctx.fillRect(0, ARENA.fenceY - 12, ARENA.width, 20);
     ctx.restore();
   }
-  ctx.fillStyle = '#1c1410';
-  ctx.fillRect(x - 1, y - 1, width + 2, 6);
-  ctx.fillStyle = ratio > 0.6 ? '#8eae6a' : ratio > 0.3 ? '#e0b15a' : emphasize ? '#ffb2a6' : '#c4543c';
-  const fillW = Math.round(width * ratio);
-  if (fillW > 0) ctx.fillRect(x, y, fillW, 4);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  for (let i = 1; i < 4; i++) ctx.fillRect(x + Math.round(width * i / 4), y, 1, 4);
+
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = '#141a20';
+    ctx.fillRect(x - 1, y - 1, width + 2, 7);
+    ctx.fillStyle = ratio > 0.6 ? '#74d658' : ratio > 0.3 ? '#f4c046' : '#e04c3c';
+    ctx.fillRect(x, y, Math.round(width * ratio), 5);
+    return;
+  }
+
+  ctx.save();
+  // Recessed metallic wall HP track
+  rRect(ctx, x - 1.5, y - 1.5, width + 3, barH + 3, 4);
+  ctx.fillStyle = 'rgba(12, 18, 24, 0.9)';
+  ctx.fill();
+  ctx.strokeStyle = emphasize ? '#ff9688' : 'rgba(196, 216, 228, 0.5)';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  const fillW = width * ratio;
+  if (fillW > 1) {
+    const grad = ctx.createLinearGradient(x, y, x, y + barH);
+    if (ratio > 0.6) {
+      grad.addColorStop(0, '#96f26e');
+      grad.addColorStop(1, '#3ea636');
+    } else if (ratio > 0.3) {
+      grad.addColorStop(0, '#ffdc64');
+      grad.addColorStop(1, '#cf8418');
+    } else if (emphasize) {
+      grad.addColorStop(0, '#ffd4c8');
+      grad.addColorStop(1, '#ff6a56');
+    } else {
+      grad.addColorStop(0, '#ff6d54');
+      grad.addColorStop(1, '#b8221e');
+    }
+    rRect(ctx, x, y, fillW, barH, 3);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Gloss sheen
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+    rRect(ctx, x + 1, y + 0.6, Math.max(0, fillW - 2), barH * 0.4, 2);
+    ctx.fill();
+  }
+
+  // Subtle quarter-segment ticks
+  ctx.fillStyle = 'rgba(10, 16, 20, 0.45)';
+  for (let i = 1; i < 4; i++) {
+    ctx.fillRect(x + (width * i) / 4 - 0.5, y, 1, barH);
+  }
+  ctx.restore();
 }
 
-function fillSlot(ctx, box, color) {
-  ctx.fillStyle = color;
-  ctx.fillRect(box.left, box.top, box.width, box.height);
-}
-
-function strokeSlot(ctx, box, color, thickness) {
-  const x = box.left;
-  const y = box.top;
-  const w = box.width;
-  const h = box.height;
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, w, thickness);
-  ctx.fillRect(x, y + h - thickness, w, thickness);
-  ctx.fillRect(x, y, thickness, h);
-  ctx.fillRect(x + w - thickness, y, thickness, h);
-}
-
+// =========================================================================
+// ENEMY TELEGRAPH MARKS & SYNERGY TETHERS
+// =========================================================================
 function enemyAnchor(enemy) {
   const size = measureEnemy(enemy);
   return {
     size,
-    x: Math.round(enemy.x),
-    y: Math.round(enemy.y + size.height / 2),
+    x: enemy.x,
+    y: enemy.y + size.height / 2,
   };
 }
 
-// Cues sit in the clear rows above the sprite. The plate never reaches spriteTop.
-function enemyCueLayout(anchor) {
+function enemyCueLayout(enemy, anchor) {
+  const isBoss = enemy?.kind === 'boss' || enemy?.type === 'boss';
   const spriteTop = anchor.y - anchor.size.height;
-  const barW = clamp(Math.round(anchor.size.width * 0.85), 12, 48);
-  const plateBottom = spriteTop - 1 - SPRITE_GAP;
-  const barY = plateBottom - HP_FILL;
+  const barW = isBoss ? Math.min(72, Math.max(54, Math.round(anchor.size.width * 1.15))) : clamp(Math.round(anchor.size.width * 0.85), 16, 48);
+  const barH = isBoss ? 6.5 : HP_FILL;
+  const plateBottom = spriteTop - 2 - SPRITE_GAP;
+  const barY = plateBottom - barH;
   return {
-    barX: Math.round(anchor.x - barW / 2),
+    isBoss,
+    barX: anchor.x - barW / 2,
     barY,
     barW,
-    statusY: (barY - 1) - STATUS_GAP - STATUS_CELL,
+    statusY: (barY - 2) - STATUS_GAP - STATUS_CELL,
   };
 }
 
-function statusLive(enemy, type) {
-  const source = Array.isArray(enemy?.statuses) ? enemy.statuses : [];
-  for (let i = 0; i < source.length; i++) {
-    const status = source[i];
-    if (!status || status.type !== type) continue;
-    if (Number.isFinite(status.remaining) && status.remaining <= 0) continue;
-    return true;
-  }
-  return false;
-}
-
-// One hue on the body. Stun wins, then burn, then poison, then slow. Pips still list the rest.
-function statusTintColor(enemy) {
-  if (statusLive(enemy, 'stun')) return STATUS_TINT.stun;
-  if (statusLive(enemy, 'burn')) return STATUS_TINT.burn;
-  if (statusLive(enemy, 'poison')) return STATUS_TINT.poison;
-  if (statusLive(enemy, 'slow')) return STATUS_TINT.slow;
-  return null;
-}
-
-// 8×3 amber bar, centered on the sprite and sitting in the gap just above it.
 function drawLeapMark(ctx, enemy, anchor) {
-  const sized = enemySize(enemy);
-  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
-  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
-  ctx.fillStyle = '#e2a23a';
-  ctx.fillRect(Math.round(anchor.x) - 4, markY, 8, 3);
+  const topY = anchor.y - anchor.size.height - 5;
+  ctx.save();
+  ctx.fillStyle = '#f8b83a';
+  if (isRichCtx(ctx)) {
+    rRect(ctx, anchor.x - 6, topY, 12, 3.5, 1.8);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else {
+    ctx.fillRect(Math.round(anchor.x - 5), Math.round(topY), 10, 3);
+  }
+  ctx.restore();
 }
 
 function drawChargeMark(ctx, enemy, anchor) {
@@ -9071,18 +8919,29 @@ function drawChargeMark(ctx, enemy, anchor) {
   const approaching = !fusing && enemy.chargeLit !== true && enemy.chargeGap > 0
     && enemy.y >= stopY - enemy.chargeGap && enemy.y < stopY - 0.75;
   if (!fusing && !approaching) return;
-  const sized = enemySize(enemy);
-  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
-  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
+  const markY = anchor.y - anchor.size.height - 13;
+  ctx.save();
   if (approaching) {
-    ctx.fillStyle = '#f0b429';
-    ctx.fillRect(Math.round(anchor.x) - 4, markY - 8, 8, 3);
+    ctx.fillStyle = '#ffbe32';
+    if (isRichCtx(ctx)) {
+      rRect(ctx, anchor.x - 6, markY, 12, 3.6, 1.8);
+      ctx.fill();
+    } else {
+      ctx.fillRect(Math.round(anchor.x - 5), Math.round(markY), 10, 3);
+    }
+    ctx.restore();
     return;
   }
-  const ratio = Math.max(0, Math.min(1, enemy.chargeTimer / enemy.chargeWindup));
-  const width = Math.max(2, Math.round(12 * ratio));
-  ctx.fillStyle = '#e24a3a';
-  ctx.fillRect(Math.round(anchor.x) - Math.floor(width / 2), markY - 8, width, 2);
+  const ratio = clamp(enemy.chargeTimer / enemy.chargeWindup, 0, 1);
+  const w = Math.max(3, 18 * ratio);
+  ctx.fillStyle = '#ff3e30';
+  if (isRichCtx(ctx)) {
+    rRect(ctx, anchor.x - w / 2, markY, w, 3.6, 1.8);
+    ctx.fill();
+  } else {
+    ctx.fillRect(Math.round(anchor.x - w / 2), Math.round(markY), Math.round(w), 3);
+  }
+  ctx.restore();
 }
 
 function boardHushed(enemies) {
@@ -9097,31 +8956,12 @@ function boardHushed(enemies) {
   return false;
 }
 
-function drawMergeCorner(ctx, slot, index, anchorX, spriteTop) {
-  const box = slotBox(slot, index);
-  const left = Number.isFinite(box.left) ? box.left : box.x;
-  const top = Number.isFinite(box.top) ? box.top : box.y;
-  ctx.fillStyle = '#f0c56a';
-  if (Number.isFinite(left) && Number.isFinite(top)) {
-    const x = Math.round(left) + 1;
-    const y = Math.round(top) + 1;
-    ctx.fillRect(x, y, 8, 2);
-    ctx.fillRect(x, y, 2, 8);
-  }
-  if (Number.isFinite(anchorX) && Number.isFinite(spriteTop)) {
-    ctx.fillRect(Math.round(anchorX) - 4, Math.round(spriteTop) - 7, 8, 3);
-  }
-}
-
-function drawHushBoardMark(ctx, x, top) {
-  ctx.fillStyle = '#9fd0c8';
-  ctx.fillRect(x - 4, top - 8, 8, 2);
-}
-
 function drawWardLinks(ctx, enemies, anchors) {
+  if (!isRichCtx(ctx)) return;
   ctx.save();
-  ctx.strokeStyle = '#d5e4f2';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(182, 232, 255, 0.78)';
+  ctx.lineWidth = 2.0;
+  ctx.setLineDash?.([4, 3]);
   for (let i = 0; i < enemies.length; i++) {
     const source = enemies[i];
     const from = anchors[i];
@@ -9141,17 +8981,19 @@ function drawWardLinks(ctx, enemies, anchors) {
     const to = best >= 0 ? anchors[best] : null;
     if (!to) continue;
     ctx.beginPath();
-    ctx.moveTo(from.x, from.y - from.size.height / 2);
-    ctx.lineTo(to.x, to.y - to.size.height / 2);
+    ctx.moveTo(from.x, from.y - from.size.height * 0.5);
+    ctx.lineTo(to.x, to.y - to.size.height * 0.5);
     ctx.stroke();
   }
+  ctx.setLineDash?.([]);
   ctx.restore();
 }
 
 function drawBannerHaste(ctx, enemies, anchors) {
+  if (!isRichCtx(ctx)) return;
   ctx.save();
-  ctx.strokeStyle = '#e2a23a';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255, 190, 68, 0.72)';
+  ctx.lineWidth = 1.6;
   for (let j = 0; j < enemies.length; j++) {
     const ally = enemies[j];
     const to = anchors[j];
@@ -9172,11 +9014,11 @@ function drawBannerHaste(ctx, enemies, anchors) {
     }
     if (!from) continue;
     const x1 = to.x;
-    const y1 = to.y - to.size.height / 2;
+    const y1 = to.y - to.size.height * 0.5;
     const bx = from.x;
-    const by = from.y - from.size.height / 2;
+    const by = from.y - from.size.height * 0.5;
     const len = Math.hypot(bx - x1, by - y1) || 1;
-    const dash = Math.min(10, len);
+    const dash = Math.min(12, len);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x1 + ((bx - x1) / len) * dash, y1 + ((by - y1) / len) * dash);
@@ -9186,9 +9028,10 @@ function drawBannerHaste(ctx, enemies, anchors) {
 }
 
 function drawMendLinks(ctx, enemies, anchors) {
+  if (!isRichCtx(ctx)) return;
   ctx.save();
-  ctx.strokeStyle = '#9dce6a';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(130, 236, 126, 0.8)';
+  ctx.lineWidth = 2.0;
   for (let i = 0; i < enemies.length; i++) {
     const source = enemies[i];
     const from = anchors[i];
@@ -9212,194 +9055,64 @@ function drawMendLinks(ctx, enemies, anchors) {
     if (best < 0) continue;
     const to = anchors[best];
     ctx.beginPath();
-    ctx.moveTo(from.x, from.y - from.size.height / 2);
-    ctx.lineTo(to.x, to.y - to.size.height / 2);
+    ctx.moveTo(from.x, from.y - from.size.height * 0.5);
+    ctx.lineTo(to.x, to.y - to.size.height * 0.5);
     ctx.stroke();
   }
   ctx.restore();
 }
 
-function drawHushMark(ctx, enemy, anchor) {
-  if (!enemy || enemy.dead) return;
-  const sized = enemySize(enemy);
-  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
-  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
-  ctx.fillStyle = '#9fd0c8';
-  ctx.fillRect(Math.round(anchor.x) - 4, markY - 8, 8, 2);
-}
-
-function drawPriorityMark(ctx, enemy, anchor) {
-  if (!enemy || enemy.dead) return;
-  if (!(enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0)) return;
-  const sized = enemySize(enemy);
-  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
-  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
-  const x = Math.round(anchor.x);
-  ctx.fillStyle = '#f0c56a';
-  ctx.fillRect(x - 1, markY - 7, 3, 3);
-}
-function drawWardMark(ctx, enemy, anchor) {
-  if (enemy.dead) return;
-  const sized = enemySize(enemy);
-  const height = sized && Number.isFinite(sized.height) && sized.height > 0 ? sized.height : 0;
-  const markY = height > 0 ? Math.round(anchor.y - height) - 3 : Math.round(anchor.y) - 8;
-  ctx.fillStyle = '#d5e4f2';
-  ctx.fillRect(Math.round(anchor.x) - 5, markY - 5, 10, 2);
-}
-
-function drawPlateShoulders(ctx, anchor) {
-  const width = anchor.size.width;
-  const height = anchor.size.height;
-  if (!(width > 4) || !(height > 6)) return;
-  const left = Math.round(anchor.x - width / 2);
-  const top = Math.round(anchor.y - height);
-  const y = top + 3;
-  ctx.fillStyle = '#e7f1ff';
-  ctx.fillRect(left + 1, y, 3, 1);
-  ctx.fillRect(left + 1, y, 1, 3);
-  ctx.fillRect(left + width - 4, y, 3, 1);
-  ctx.fillRect(left + width - 2, y, 1, 3);
-}
-
-function drawStunFrame(ctx, anchor) {
-  const width = anchor.size.width;
-  const height = anchor.size.height;
-  if (!(width > 0) || !(height > 0)) return;
-  const left = Math.round(anchor.x - width / 2);
-  const top = Math.round(anchor.y - height);
-  ctx.fillStyle = '#f0d35a';
-  ctx.fillRect(left - 1, top - 1, width + 2, 1);
-  ctx.fillRect(left - 1, top + height, width + 2, 1);
-  ctx.fillRect(left - 1, top, 1, height);
-  ctx.fillRect(left + width, top, 1, height);
-  ctx.fillStyle = '#fff6c8';
-  const cx = Math.round(anchor.x);
-  ctx.fillRect(cx - 4, top - 3, 1, 1);
-  ctx.fillRect(cx + 3, top - 3, 1, 1);
-}
-
-function alphaCanvas(width, height) {
-  const w = Math.max(1, Math.round(width));
-  const h = Math.max(1, Math.round(height));
-  try {
-    if (typeof OffscreenCanvas === 'function') {
-      const canvas = new OffscreenCanvas(w, h);
-      const ctx = canvas.getContext('2d');
-      if (ctx) return {canvas, ctx};
-    }
-  } catch {
-    /* OffscreenCanvas can exist but refuse a 2d context. */
-  }
-  try {
-    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) return {canvas, ctx};
-    }
-  } catch {
-    /* Headless hosts fall back to a flat wash. */
-  }
-  return null;
-}
-
-function scratchFor(width, height) {
-  if (tintSurface && tintSurface.canvas.width >= width && tintSurface.canvas.height >= height) return tintSurface;
-  const next = alphaCanvas(Math.max(64, width), Math.max(80, height));
-  if (!next) return null;
-  tintSurface = next;
-  return tintSurface;
-}
-
-function washStatus(ctx, left, top, width, height, color) {
+function drawWardBubble(ctx, enemy, anchor) {
+  if (enemy.dead || !isRichCtx(ctx)) return;
+  const cx = anchor.x;
+  const cy = anchor.y - anchor.size.height * 0.48;
+  const rx = anchor.size.width * 0.58;
+  const ry = anchor.size.height * 0.56;
   ctx.save();
-  ctx.globalAlpha = 0.34;
-  ctx.fillStyle = color;
-  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = 'rgba(182, 236, 255, 0.85)';
+  ctx.fillStyle = 'rgba(150, 224, 255, 0.14)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
-// Recolor sprite pixels only, then blend them back so the drawing stays visible.
-function drawStatusTint(ctx, enemy, anchor, color, time) {
-  const width = anchor.size.width;
-  const height = anchor.size.height;
-  if (!(width > 0) || !(height > 0)) return;
-  const left = Math.round(anchor.x - width / 2);
-  const top = Math.round(anchor.y - height);
-  const surface = scratchFor(width, height);
-  if (!surface || typeof ctx.drawImage !== 'function') {
-    washStatus(ctx, left, top, width, height, color);
+function drawPriorityCrown(ctx, enemy, anchor) {
+  if (!enemy || enemy.dead || !isRichCtx(ctx)) return;
+  if (!(enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0)) return;
+  const cx = anchor.x;
+  const y = anchor.y - anchor.size.height - 13;
+  ctx.save();
+  ctx.fillStyle = '#ffe066';
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(cx, y - 3.6);
+  ctx.lineTo(cx + 3.2, y);
+  ctx.lineTo(cx, y + 3.6);
+  ctx.lineTo(cx - 3.2, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawHushHeroCue(ctx, anchorX, topY) {
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = '#8ce4d8';
+    ctx.fillRect(Math.round(anchorX - 5), Math.round(topY - 6), 10, 3);
     return;
   }
-  const scratch = surface.ctx;
-  try {
-    scratch.setTransform(1, 0, 0, 1, 0, 0);
-    scratch.globalAlpha = 1;
-    scratch.globalCompositeOperation = 'source-over';
-    scratch.clearRect(0, 0, width, height);
-    drawEnemy(scratch, enemy, width / 2, height, {time, scale: 1, flash: 0});
-    scratch.globalCompositeOperation = 'source-atop';
-    scratch.fillStyle = color;
-    scratch.fillRect(0, 0, width, height);
-    scratch.globalCompositeOperation = 'source-over';
-    ctx.save();
-    ctx.globalAlpha = TINT_ALPHA;
-    ctx.drawImage(surface.canvas, 0, 0, width, height, left, top, width, height);
-    ctx.restore();
-  } catch {
-    washStatus(ctx, left, top, width, height, color);
-  }
-}
-
-function languageTag(value) {
-  if (typeof value !== 'string' || !value) return null;
-  const tag = value.toLowerCase();
-  if (tag.startsWith('zh')) return 'zh';
-  if (tag.startsWith('en')) return 'en';
-  return null;
-}
-
-function activeLanguage(state, ui) {
-  const doc = globalThis.document?.documentElement?.lang;
-  return languageTag(ui?.language)
-    || languageTag(ui?.settings?.language)
-    || languageTag(doc)
-    || languageTag(state?.profileSnapshot?.settings?.language)
-    || 'en';
-}
-
-function drawSelectedRank(ctx, unit, anchorX, anchorY, size) {
-  const rank = clamp(Math.round(finite(unit?.rank) ?? 1), 1, 4);
-  const glyph = RANK_DIGIT[rank];
-  const scale = 2;
-  const cols = glyph[0].length;
-  const rows = glyph.length;
-  const plateW = cols * scale + 2;
-  const plateH = rows * scale + 2;
-  const spriteTop = Math.round(anchorY - size.height);
-  let x = Math.round(anchorX - plateW / 2);
-  let y = spriteTop - plateH - 1;
-  if (y < 1) y = Math.min(ARENA.height - plateH - 1, spriteTop + 1);
-  x = clamp(x, 1, ARENA.width - plateW - 1);
-  y = clamp(y, 1, ARENA.height - plateH - 1);
-  ctx.fillStyle = '#101418';
-  ctx.fillRect(x, y, plateW, plateH);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x, y, plateW, 1);
-  ctx.fillRect(x, y + plateH - 1, plateW, 1);
-  ctx.fillRect(x, y, 1, plateH);
-  ctx.fillRect(x + plateW - 1, y, 1, plateH);
-  ctx.fillStyle = '#fff6c8';
-  const ox = x + 1;
-  const oy = y + 1;
-  for (let row = 0; row < rows; row++) {
-    const line = glyph[row];
-    for (let col = 0; col < cols; col++) {
-      if (line[col] !== '#') continue;
-      ctx.fillRect(ox + col * scale, oy + row * scale, scale, scale);
-    }
-  }
+  ctx.save();
+  rRect(ctx, anchorX - 8, topY - 8, 16, 4.5, 2.2);
+  ctx.fillStyle = '#7ce8da';
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function enemyFlash(enemy, hits, now, duration) {
@@ -9434,21 +9147,15 @@ function unitFlash(unitId, shots, now, duration) {
   return best;
 }
 
-function slotPulse(index, slots, now) {
-  let best = 0;
-  let role = '';
-  for (let i = slots.length - 1; i >= 0; i--) {
-    if (slots[i].index !== index) continue;
-    const duration = slots[i].duration || CUE_MS;
-    const strength = cueStrength(slots[i].at, now, duration);
-    if (strength > best) {
-      best = strength;
-      role = slots[i].role || '';
-    }
-  }
-  return {strength: best, role};
+function lerpAngle(current, target, factor) {
+  let diff = ((target - current + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  if (Math.abs(diff) < 0.004) return target;
+  return current + diff * factor;
 }
 
+// =========================================================================
+// MAIN RENDERER INSTANCE
+// =========================================================================
 function createRenderer(canvas) {
   if (!canvas || typeof canvas.getContext !== 'function') {
     throw new TypeError('createRenderer requires a canvas');
@@ -9456,20 +9163,16 @@ function createRenderer(canvas) {
   const display = context2d(canvas, false);
   if (!display) throw new TypeError('createRenderer could not get a 2d context');
 
-  const sceneBundle = createScene();
-  let scene = sceneBundle.scene;
-  let sceneCtx = sceneBundle.ctx;
   const effects = createEffects();
   const warned = {stats: false};
   const rangeCache = {valid: false, state: null, slot: -1, stats: null};
   const hits = [];
   const shots = [];
-  const slotCues = [];
   let fenceAt = null;
   let wallImmuneAt = null;
   let heroShotAt = null;
-  let heroShotX = ARENA.width / 2;
-  let heroShotY = ARENA.frontY - 12;
+  let heroAimAngle = -Math.PI / 2;
+  let heroAimTarget = -Math.PI / 2;
   let shakeAt = null;
   let shakeAmp = 0;
   let hordeAt = null;
@@ -9477,6 +9180,7 @@ function createRenderer(canvas) {
   let runId;
   let seenRun = false;
   let lastSim = null;
+  let lastFrameMs = null;
   let destroyed = false;
   let view = {
     dpr: 1,
@@ -9489,10 +9193,11 @@ function createRenderer(canvas) {
   function resetCues() {
     hits.length = 0;
     shots.length = 0;
-    slotCues.length = 0;
     fenceAt = null;
     wallImmuneAt = null;
     heroShotAt = null;
+    heroAimAngle = -Math.PI / 2;
+    heroAimTarget = -Math.PI / 2;
     shakeAt = null;
     shakeAmp = 0;
     hordeAt = null;
@@ -9531,38 +9236,37 @@ function createRenderer(canvas) {
         });
         if (event.towerType === 'hero' || (Array.isArray(event.tags) && event.tags.includes('hero'))) {
           heroShotAt = at;
-          if (sx != null && sy != null) {
-            heroShotX = sx;
-            heroShotY = sy - 14;
+          const tx = finite(event.targetX) ?? finite(event.tx);
+          const ty = finite(event.targetY) ?? finite(event.ty);
+          if (tx != null && ty != null) {
+            const ox = sx ?? ARENA.width / 2;
+            const oy = sy ?? ARENA.frontY;
+            const raw = Math.atan2(ty - oy, tx - ox);
+            heroAimTarget = clamp(raw, -Math.PI * 0.94, -Math.PI * 0.06);
           }
         }
       } else if (type === 'fence_hit') {
         fenceAt = at;
-        triggerShake(at, 1.5);
+        triggerShake(at, 1.8);
       } else if (type === 'wall_immune') {
         wallImmuneAt = at;
-        triggerShake(at, 1.6);
+        triggerShake(at, 1.8);
       } else if (type === 'fence_surge') {
-        triggerShake(at, 4);
+        triggerShake(at, 4.2);
       } else if (type === 'napalm_blast') {
-        triggerShake(at, 3.2);
+        triggerShake(at, 3.4);
       } else if (type === 'orbital_beam') {
-        triggerShake(at, 3.0);
+        triggerShake(at, 3.2);
       } else if (type === 'armored_car') {
-        triggerShake(at, 2.2);
+        triggerShake(at, 2.4);
       } else if (type === 'em_strike') {
         triggerShake(at, 1.8);
       } else if (type === 'boss_enrage') {
-        triggerShake(at, 2.5);
+        triggerShake(at, 2.8);
       } else if (type === 'corpse_explode') {
-        triggerShake(at, 1.5);
+        triggerShake(at, 1.6);
       } else if (type === 'wave_horde') {
         hordeAt = at;
-      } else if (type === 'upgrade_tower') {
-        const slotIndex = Number.isInteger(event.slot) ? event.slot : -1;
-        if (slotIndex >= 0 && slotIndex < 10) {
-          pushCapped(slotCues, {at, index: slotIndex, role: 'kept', duration: MERGE_CUE_MS});
-        }
       }
     }
   }
@@ -9602,9 +9306,7 @@ function createRenderer(canvas) {
     const deviceW = canvas.width;
     const deviceH = canvas.height;
     const fit = Math.min(deviceW / ARENA.width, deviceH / ARENA.height);
-    const integer = Math.floor(fit + 1e-4);
-    let scale = fit > 0 ? fit : 1;
-    if (integer >= 1 && ((fit - integer) <= 0.02 || integer / fit >= 0.92)) scale = integer;
+    const scale = fit > 0 ? fit : 1;
     const destW = Math.max(1, Math.round(ARENA.width * scale));
     const destH = Math.max(1, Math.round(ARENA.height * scale));
     view = {
@@ -9676,68 +9378,78 @@ function createRenderer(canvas) {
     return dt > 0.1 ? 0.1 : dt;
   }
 
-  function drawTargetingPip(ctx, box, unit) {
-    if (!unit) return;
-    const mode = unit.targeting;
-    if (!mode || mode === 'foremost') return;
-    const color = mode === 'priority' ? '#f0cb72' : mode === 'strongest' ? '#e86858' : '#7ad4f0';
-    const px = Math.round(box.left + box.width - 7);
-    const py = Math.round(box.top + 3);
-    ctx.fillStyle = '#0c1216';
-    ctx.fillRect(px - 1, py - 1, 6, 6);
-    ctx.fillStyle = color;
-    ctx.fillRect(px, py, 4, 4);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(px + 1, py + 1, 1, 1);
-  }
-
   function drawSurgeOverlay(ctx, state, time, reduced) {
     const timer = state.surge?.shieldTimer || 0;
     if (!(timer > 0)) return;
     const ratio = clamp(timer / 3, 0, 1);
     const elapsed = Math.max(0, 3 - timer);
-    const shimmer = reduced ? 0.8 : (0.72 + 0.28 * Math.sin(time * 16));
-    ctx.save();
-    // Luminous crystalline aegis barrier shielding the fence
-    ctx.fillStyle = `rgba(120, 224, 255, ${(0.22 * shimmer).toFixed(3)})`;
-    ctx.fillRect(0, ARENA.fenceY - 14, ARENA.width, 14);
-    ctx.fillStyle = `rgba(155, 240, 255, ${(0.88 * shimmer).toFixed(3)})`;
-    ctx.fillRect(0, ARENA.fenceY - 9, ARENA.width, 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, ARENA.fenceY - 10, ARENA.width, 1);
-    // Shield duration bar nestled directly above the fence
-    const bw = Math.round((ARENA.width - 48) * ratio);
-    if (bw > 0) {
-      ctx.fillStyle = '#f0cb72';
-      ctx.fillRect(24, ARENA.fenceY - 13, bw, 2);
+    const shimmer = reduced ? 0.85 : (0.76 + 0.24 * Math.sin(time * 16));
+
+    if (!isRichCtx(ctx)) {
+      ctx.fillStyle = '#78e4ff';
+      ctx.fillRect(0, ARENA.fenceY - 10, ARENA.width, 6);
+      return;
     }
-    // Sweeping upward shockwave wave crest during the initial 0.55s blast
-    if (elapsed < 0.55) {
-      const progress = elapsed / 0.55;
-      const waveY = Math.round(ARENA.fenceY - progress * 250);
+
+    ctx.save();
+    // Luminous curved energy dome protecting the fortified wall
+    const domeGrad = ctx.createLinearGradient(0, ARENA.fenceY - 22, 0, ARENA.fenceY);
+    domeGrad.addColorStop(0, 'rgba(104, 232, 255, 0)');
+    domeGrad.addColorStop(1, `rgba(104, 232, 255, ${(0.34 * shimmer).toFixed(3)})`);
+    ctx.fillStyle = domeGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, ARENA.fenceY);
+    ctx.quadraticCurveTo(ARENA.width / 2, ARENA.fenceY - 24, ARENA.width, ARENA.fenceY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(176, 248, 255, ${(0.92 * shimmer).toFixed(3)})`;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(8, ARENA.fenceY - 6);
+    ctx.quadraticCurveTo(ARENA.width / 2, ARENA.fenceY - 19, ARENA.width - 8, ARENA.fenceY - 6);
+    ctx.stroke();
+
+    // Golden shield duration meter
+    const bw = (ARENA.width - 52) * ratio;
+    if (bw > 1) {
+      rRect(ctx, 26, ARENA.fenceY - 15, bw, 3, 1.5);
+      ctx.fillStyle = '#ffd862';
+      ctx.fill();
+    }
+
+    // Sweeping curved shockwave arc during initial 0.58s blast
+    if (elapsed < 0.58) {
+      const progress = elapsed / 0.58;
+      const waveY = ARENA.fenceY - progress * 265;
       const fade = 1 - progress;
-      ctx.fillStyle = `rgba(120, 224, 255, ${(0.24 * fade).toFixed(3)})`;
-      ctx.fillRect(0, waveY, ARENA.width, 18);
-      ctx.fillStyle = `rgba(240, 203, 114, ${(0.65 * fade).toFixed(3)})`;
-      ctx.fillRect(0, waveY, ARENA.width, 4);
-      ctx.fillStyle = `rgba(255, 252, 232, ${(0.92 * fade).toFixed(3)})`;
-      ctx.fillRect(0, waveY - 1, ARENA.width, 2);
+      ctx.strokeStyle = `rgba(120, 236, 255, ${(0.45 * fade).toFixed(3)})`;
+      ctx.lineWidth = 14 * fade + 4;
+      ctx.beginPath();
+      ctx.moveTo(0, waveY + 18);
+      ctx.quadraticCurveTo(ARENA.width / 2, waveY - 22, ARENA.width, waveY + 18);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255, 242, 182, ${(0.92 * fade).toFixed(3)})`;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(0, waveY + 14);
+      ctx.quadraticCurveTo(ARENA.width / 2, waveY - 24, ARENA.width, waveY + 14);
+      ctx.stroke();
     }
     ctx.restore();
   }
 
-  function paint(ctx, state, ui, now, logicalBuffer) {
+  function paint(ctx, state, ui, now, frameDt) {
     const reduced = !!(ui.settings && ui.settings.reducedMotion) || !!ui.reducedMotion;
     const selected = normalizeSlot(ui.selectedSlot);
-    const hover = normalizeSlot(ui.hoverSlot);
     const showRange = ui.range !== false;
     const time = finite(state?.time) ?? 0;
-    const visualTime = reduced ? Math.round(time * 6) / 6 : time;
+    const visualTime = reduced ? Math.round(time * 8) / 8 : time;
     const flashSpan = reduced ? 80 : FLASH_MS;
     rangeCache.valid = false;
 
-    sharpen(ctx);
-    if (logicalBuffer) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    enableSmooth(ctx);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
     ctx.shadowBlur = 0;
@@ -9748,18 +9460,20 @@ function createRenderer(canvas) {
       return;
     }
 
-    // Subtle pixel-snapped screen shake on heavy combat impacts (respects reducedMotion)
+    // Smooth camera shake on heavy combat impacts
     const shakeStr = !reduced && shakeAt != null ? cueStrength(shakeAt, now, 260) : 0;
-    const shakeX = shakeStr > 0 ? Math.round(Math.sin(now * 0.085) * shakeAmp * shakeStr) : 0;
-    const shakeY = shakeStr > 0 ? Math.round(Math.cos(now * 0.11) * shakeAmp * 0.7 * shakeStr) : 0;
+    const shakeX = shakeStr > 0 ? Math.sin(now * 0.085) * shakeAmp * shakeStr : 0;
+    const shakeY = shakeStr > 0 ? Math.cos(now * 0.11) * shakeAmp * 0.7 * shakeStr : 0;
     if (shakeX || shakeY) {
       ctx.save();
       ctx.translate(shakeX, shakeY);
     }
 
     try {
+      // 1. HD Vector Wasteland Highway, Fortified Wall & Central Commander Platform (ZERO 2×5 grid!)
       isolate(ctx, () => drawWorld(ctx, state, {time: visualTime, reducedMotion: reduced}));
 
+      // 2. Ground Hazard Zones (Napalm Fire Sea, Frost, Poison)
       const clouds = Array.isArray(state.clouds) ? state.clouds : [];
       const cloudCount = Math.min(clouds.length, MAX_CLOUDS);
       const cloudStart = clouds.length - cloudCount;
@@ -9767,20 +9481,20 @@ function createRenderer(canvas) {
         if (clouds[i]) drawCloud(ctx, clouds[i], i, visualTime, reduced);
       }
 
+      // 3. Soft Range Wash + Platform Selection Ring when Gunner is tapped
       if (showRange) drawRange(ctx, state, selected, false, warned, rangeCache);
 
-      const slots = Array.isArray(state.slots) ? state.slots : [];
-      if (hover >= 0 && hover !== selected) fillSlot(ctx, slotBox(slots[hover], hover), 'rgba(241, 238, 226, 0.08)');
-      if (selected >= 0) fillSlot(ctx, slotBox(slots[selected], selected), 'rgba(240, 203, 114, 0.14)');
-
-      const buffed = auraRecipients(state, slots, warned);
-
+      // 4. Enemies (Sorted back-to-front for crisp 2.5D depth)
       const enemies = orderedEnemies(state);
       const anchors = new Array(enemies.length);
       const enemiesById = Object.create(null);
+      let leadEnemy = null;
       for (let i = 0; i < enemies.length; i++) {
         const enemy = enemies[i];
         if (enemy.id != null) enemiesById[enemy.id] = enemy;
+        if (!enemy.dead && enemy.hp > 0 && (!leadEnemy || enemy.y > leadEnemy.y)) {
+          leadEnemy = enemy;
+        }
         const anchor = enemyAnchor(enemy);
         anchors[i] = anchor;
         const flash = enemyFlash(enemy, hits, now, flashSpan);
@@ -9789,63 +9503,62 @@ function createRenderer(canvas) {
           drawEnemy(ctx, enemy, anchor.x, anchor.y, {time: visualTime, scale: 1, flash});
           if (enemy.phased === true) ctx.globalAlpha = 1;
         });
-        if (enemy.leapTimer > 0) drawLeapMark(ctx, enemy, anchor);
-        if (enemy.wardShield > 0) drawWardMark(ctx, enemy, anchor);
-        if (enemy.chargeGap > 0 || enemy.chargeTimer > 0) drawChargeMark(ctx, enemy, anchor);
-        if (enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0) drawPriorityMark(ctx, enemy, anchor);
-        if (enemy.hushFactor > 0) drawHushMark(ctx, enemy, anchor);
-        if (!enemy.dead && flash <= 0.4) {
-          const tint = statusTintColor(enemy);
-          if (tint) isolate(ctx, () => drawStatusTint(ctx, enemy, anchor, tint, visualTime));
-          if (statusLive(enemy, 'stun')) isolate(ctx, () => drawStunFrame(ctx, anchor));
+        if (!enemy.dead) {
+          drawStatusAura(ctx, enemy, anchor, visualTime, reduced);
+          if (enemy.wardShield > 0) drawWardBubble(ctx, enemy, anchor);
+          if (enemy.leapTimer > 0) drawLeapMark(ctx, enemy, anchor);
+          if (enemy.chargeGap > 0 || enemy.chargeTimer > 0) drawChargeMark(ctx, enemy, anchor);
+          if (enemy.bannerRange > 0 || enemy.wardRange > 0 || enemy.mendEvery > 0) drawPriorityCrown(ctx, enemy, anchor);
         }
-        if (!enemy.dead && Number(enemy.armor) >= 0.5) isolate(ctx, () => drawPlateShoulders(ctx, anchor));
       }
 
+      // 5. Zombie Synergy Tethers (Warden / Banner / Mender)
       isolate(ctx, () => {
         drawWardLinks(ctx, enemies, anchors);
         drawBannerHaste(ctx, enemies, anchors);
         drawMendLinks(ctx, enemies, anchors);
       });
 
-      // Armored Sweeper Trucks barreling through the zombie lines
+      // 6. Armored Sweeper War-Rigs
       drawSweepers(ctx, state, visualTime, reduced);
 
-      const hushed = boardHushed(enemies);
+      // 7. Smooth Hero Aim Tracking (track live lead zombie when idle between shots)
+      const slots = Array.isArray(state.slots) ? state.slots : [];
+      const recentlyShot = heroShotAt != null && (now - heroShotAt) < 420;
+      if (!recentlyShot && leadEnemy) {
+        const raw = Math.atan2(leadEnemy.y - ARENA.frontY, leadEnemy.x - ARENA.width / 2);
+        heroAimTarget = clamp(raw, -Math.PI * 0.94, -Math.PI * 0.06);
+      } else if (!recentlyShot && !leadEnemy) {
+        heroAimTarget = -Math.PI / 2;
+      }
+      const aimFactor = reduced ? 1 : clamp(frameDt * 16, 0.18, 0.55);
+      heroAimAngle = lerpAngle(heroAimAngle, heroAimTarget, aimFactor);
+      const heroRecoil = heroShotAt != null ? cueStrength(heroShotAt, now, reduced ? 65 : 125) : 0;
 
-      for (let index = 0; index < 10; index++) {
+      // 8. Wall Gunner (Hero anchored solidly on the Central Commander Platform)
+      const hushed = boardHushed(enemies);
+      for (let index = 0; index < slots.length; index++) {
         const slot = slots[index];
         const unit = slot?.unit;
         if (!unit) continue;
+        const isHero = unit.kind === 'hero' || unit.type === 'hero';
         const size = measureDefender(unit);
         const origin = slotCenter(slot, index);
-        const anchorX = Math.round(origin.x);
-        const anchorY = Math.round(origin.y + size.height / 2);
+        const anchorX = origin.x;
+        const anchorY = isHero ? origin.y + 18 : origin.y + size.height / 2;
         const flash = unitFlash(unit.id, shots, now, flashSpan);
-        isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
-        if (hushed) drawHushBoardMark(ctx, anchorX, anchorY - size.height);
-        if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
-        drawTargetingPip(ctx, slotBox(slot, index), unit);
+        isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {
+          time: visualTime,
+          scale: 1,
+          flash,
+          aimAngle: isHero ? heroAimAngle : -Math.PI / 2,
+          recoil: isHero ? heroRecoil : 0,
+          upgrades: unit.upgrades,
+        }));
+        if (hushed) drawHushHeroCue(ctx, anchorX, anchorY - size.height);
       }
 
-      // Punchy Hero rifle muzzle flash star on every burst
-      const muzzleStr = heroShotAt != null ? cueStrength(heroShotAt, now, reduced ? 55 : 95) : 0;
-      if (muzzleStr > 0) {
-        const mx = Math.round(heroShotX);
-        const my = Math.round(heroShotY);
-        ctx.save();
-        ctx.globalAlpha = 0.88 * muzzleStr;
-        ctx.fillStyle = '#ff9838';
-        ctx.fillRect(mx - 6, my - 1, 13, 3);
-        ctx.fillRect(mx - 1, my - 6, 3, 13);
-        ctx.fillStyle = '#fff5be';
-        ctx.fillRect(mx - 4, my, 9, 1);
-        ctx.fillRect(mx, my - 4, 1, 9);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(mx - 1, my - 1, 3, 3);
-        ctx.restore();
-      }
-
+      // 9. HD Vector Projectiles
       const projectiles = Array.isArray(state.projectiles) ? state.projectiles : [];
       const visibleShots = [];
       const shotStart = Math.max(0, projectiles.length - MAX_PROJECTILES);
@@ -9863,108 +9576,59 @@ function createRenderer(canvas) {
         drawProjectile(ctx, projectile, projectile.targetId != null ? enemiesById[projectile.targetId] : null, reduced);
       }
 
-      // Orbital Laser Beams slicing vertically across the horde
+      // 10. Orbital Plasma Laser Columns
       drawBeams(ctx, state, visualTime, reduced);
 
+      // 11. Dashed Range Ring Stroke Overlay (when Hero is selected)
       if (showRange) drawRange(ctx, state, selected, true, warned, rangeCache);
 
+      // 12. Crisp Enemy HP Bars, Target Reticles & Status Badges
       for (let i = 0; i < enemies.length; i++) {
         const enemy = enemies[i];
         if (enemy.dead) continue;
         const anchor = anchors[i];
-        const cue = enemyCueLayout(anchor);
+        const cue = enemyCueLayout(enemy, anchor);
         const fresh = enemyFlash(enemy, hits, now, flashSpan) > 0.4;
         const maxHp = Number.isFinite(enemy.maxHp) && enemy.maxHp > 0 ? enemy.maxHp : null;
         const low = maxHp != null && Number.isFinite(enemy.hp) && enemy.hp / maxHp <= 0.28;
         const emphasize = fresh || (!reduced && low && Math.floor(visualTime * 6) % 2 === 0);
-        drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize);
+        drawHpBar(ctx, cue.barX, cue.barY, cue.barW, enemy.hp, enemy.maxHp, emphasize, cue.isBoss);
         if (Number.isFinite(enemy.hp) && (fresh || targeted[enemy.id] === true)) {
-          drawTargetMark(ctx, cue.barX, cue.barY, cue.barW);
+          drawTargetMark(ctx, cue.barX, cue.barY, cue.barW, cue.isBoss);
         }
         drawStatuses(ctx, enemy, anchor.x, cue.statusY);
       }
 
+      // 13. Wall Surge Shockwave, Aegis Block Flash & Wall HP Bar
       drawSurgeOverlay(ctx, state, visualTime, reduced);
       const aegisFlash = wallImmuneAt != null ? cueStrength(wallImmuneAt, now, reduced ? 120 : 240) : 0;
-      if (aegisFlash > 0) {
+      if (aegisFlash > 0 && isRichCtx(ctx)) {
         ctx.save();
-        ctx.globalAlpha = 0.52 * aegisFlash;
-        ctx.fillStyle = '#5ee8ff';
-        ctx.fillRect(0, ARENA.fenceY - 12, ARENA.width, 12);
-        ctx.globalAlpha = 0.92 * aegisFlash;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, ARENA.fenceY - 7, ARENA.width, 2);
+        ctx.strokeStyle = `rgba(140, 244, 255, ${(0.9 * aegisFlash).toFixed(3)})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(8, ARENA.fenceY - 6);
+        ctx.quadraticCurveTo(ARENA.width / 2, ARENA.fenceY - 18, ARENA.width - 8, ARENA.fenceY - 6);
+        ctx.stroke();
         ctx.restore();
       }
       drawFence(ctx, state, visualTime, cueStrength(fenceAt, now, reduced ? 100 : 200), reduced);
 
-      // Brief crimson edge horizon pulse when a horde wave surges in
+      // 14. Crimson Horizon Pulse on Horde Warning
       const hordeStr = hordeAt != null ? cueStrength(hordeAt, now, reduced ? 500 : 1500) : 0;
-      if (hordeStr > 0) {
+      if (hordeStr > 0 && isRichCtx(ctx)) {
         const beat = reduced ? 0.65 : (0.55 + 0.45 * Math.sin(now * 0.018));
         ctx.save();
-        ctx.globalAlpha = 0.24 * hordeStr * beat;
-        ctx.fillStyle = '#e5453c';
-        ctx.fillRect(0, 0, ARENA.width, 54);
-        ctx.globalAlpha = 0.55 * hordeStr * beat;
-        ctx.fillRect(0, 44, ARENA.width, 3);
+        const grad = ctx.createLinearGradient(0, 0, 0, 68);
+        grad.addColorStop(0, `rgba(236, 56, 48, ${(0.42 * hordeStr * beat).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(236, 56, 48, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, ARENA.width, 68);
         ctx.restore();
       }
 
-      for (let index = 0; index < 10; index++) {
-        const box = slotBox(slots[index], index);
-        const pulse = slotPulse(index, slotCues, now);
-        if (pulse.strength <= 0) continue;
-        if (pulse.role === 'empty') {
-          ctx.fillStyle = `rgba(20, 14, 12, ${0.35 + 0.45 * pulse.strength})`;
-          ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
-          strokeSlot(ctx, box, `rgba(231, 160, 138, ${0.55 + 0.45 * pulse.strength})`, 3);
-        } else if (pulse.role === 'kept') {
-          ctx.fillStyle = `rgba(240, 203, 114, ${0.18 + 0.28 * pulse.strength})`;
-          ctx.fillRect(box.left + 3, box.top + 3, box.width - 6, box.height - 6);
-          strokeSlot(ctx, box, '#f0cb72', 3);
-        } else if (index !== selected) {
-          strokeSlot(ctx, box, `rgba(255, 244, 214, ${0.45 + 0.55 * pulse.strength})`, 2);
-        }
-      }
-      if (hover >= 0 && hover !== selected) {
-        const intent = ui.hoverIntent;
-        const box = slotBox(slots[hover], hover);
-        const dropColor = intent === 'empty'
-          ? '#7ecea0'
-          : intent === 'swap'
-            ? '#f0cb72'
-            : intent === 'illegal'
-              ? '#e7a08a'
-              : 'rgba(198, 214, 210, 0.9)';
-        if (intent === 'empty' || intent === 'swap' || intent === 'illegal') {
-          ctx.fillStyle = intent === 'empty'
-            ? 'rgba(126, 206, 160, 0.34)'
-            : intent === 'swap'
-              ? 'rgba(240, 203, 114, 0.34)'
-              : 'rgba(231, 160, 138, 0.34)';
-          ctx.fillRect(box.left, box.top, box.width, box.height);
-        }
-        strokeSlot(ctx, box, dropColor, intent ? 4 : 1);
-      }
-      if (selected >= 0) {
-        strokeSlot(ctx, slotBox(slots[selected], selected), '#f0cb72', 2);
-        const selectedUnit = slots[selected]?.unit;
-        if (selectedUnit) {
-          const selectedSize = measureDefender(selectedUnit);
-          const selectedOrigin = slotCenter(slots[selected], selected);
-          isolate(ctx, () => drawSelectedRank(
-            ctx,
-            selectedUnit,
-            Math.round(selectedOrigin.x),
-            Math.round(selectedOrigin.y + selectedSize.height / 2),
-            selectedSize,
-          ));
-        }
-      }
-
+      // 15. Combat VFX Particles, Lightning Arcs & Floating Damage Numbers
       isolate(ctx, () => effects.draw(ctx, {reducedMotion: reduced}));
-      // The HUD shows playerHint. Drawing it here covered enemies entering from the top.
     } finally {
       if (shakeX || shakeY) ctx.restore();
     }
@@ -9975,12 +9639,14 @@ function createRenderer(canvas) {
     const viewUi = ui && typeof ui === 'object' ? ui : {};
     resize();
     const now = nowMs();
+    const frameDt = lastFrameMs == null ? 1 / 60 : clamp((now - lastFrameMs) / 1000, 0.001, 0.1);
+    lastFrameMs = now;
+
     pruneList(hits, now);
     pruneList(shots, now);
-    pruneList(slotCues, now);
     if (fenceAt != null && now - fenceAt > CUE_MS) fenceAt = null;
     if (wallImmuneAt != null && now - wallImmuneAt > 260) wallImmuneAt = null;
-    if (heroShotAt != null && now - heroShotAt > 110) heroShotAt = null;
+    if (heroShotAt != null && now - heroShotAt > 460) heroShotAt = null;
     if (shakeAt != null && now - shakeAt > 260) { shakeAt = null; shakeAmp = 0; }
     if (hordeAt != null && now - hordeAt > 1500) hordeAt = null;
 
@@ -10001,30 +9667,23 @@ function createRenderer(canvas) {
     pending = [];
     effects.update(presentationDt(state));
 
-    if (sceneCtx) {
-      paint(sceneCtx, state, viewUi, now, true);
-      sharpen(display);
-      display.setTransform(1, 0, 0, 1, 0, 0);
-      display.globalAlpha = 1;
-      display.fillStyle = LETTERBOX;
-      display.fillRect(0, 0, canvas.width, canvas.height);
-      display.imageSmoothingEnabled = false;
-      display.drawImage(scene, view.offsetX, view.offsetY, view.destW, view.destH);
-    } else {
-      sharpen(display);
-      display.setTransform(1, 0, 0, 1, 0, 0);
-      display.globalAlpha = 1;
-      display.fillStyle = LETTERBOX;
-      display.fillRect(0, 0, canvas.width, canvas.height);
-      display.setTransform(view.destW / ARENA.width, 0, 0, view.destH / ARENA.height, view.offsetX, view.offsetY);
-      sharpen(display);
-      display.save();
+    // Direct Native High-DPI Vector Rendering (NO 360×640 offscreen pixel stretch!)
+    enableSmooth(display);
+    display.setTransform(1, 0, 0, 1, 0, 0);
+    display.globalAlpha = 1;
+    display.fillStyle = LETTERBOX;
+    display.fillRect(0, 0, canvas.width, canvas.height);
+
+    display.setTransform(view.destW / ARENA.width, 0, 0, view.destH / ARENA.height, view.offsetX, view.offsetY);
+    enableSmooth(display);
+    display.save();
+    if (typeof display.beginPath === 'function' && typeof display.rect === 'function' && typeof display.clip === 'function') {
       display.beginPath();
       display.rect(0, 0, ARENA.width, ARENA.height);
       display.clip();
-      paint(display, state, viewUi, now, false);
-      display.restore();
     }
+    paint(display, state, viewUi, now, frameDt);
+    display.restore();
   }
 
   function ingestEvents(events) {
@@ -10043,8 +9702,6 @@ function createRenderer(canvas) {
     effects.clear();
     resetCues();
     pending = [];
-    scene = null;
-    sceneCtx = null;
   }
 
   return {draw, ingestEvents, resize, destroy, pointFromClient, hitSlot};
@@ -10057,173 +9714,80 @@ __ff_exports["drawWorld"] = drawWorld;
 __ff_exports["drawIcon"] = drawIcon;
 const __ff_m0 = __ff_load("src/shared.js");
 const ARENA = __ff_m0["ARENA"];
-const slotGeometry = __ff_m0["slotGeometry"];
 /**
- * Battlefield backdrop, logical 360×640.
- * Portrait bands: sky, the top edge enemies cross, open ground, one shared fence,
- * then the ground both defender rows stand on, with exactly two rows of five slots.
- * The deck beside that block stays open. A thin sill continues the fence to the
- * edge, and the side rooms are left clear for a later element.
- * Fence art follows hp/maxHp: intact above about 60%, cracked below that, failing below about 30%.
- * No lanes and no column paths. drawWorld does not draw units, enemies, projectiles,
- * or gameplay clouds, and it does not mutate run state or advance the gameplay RNG.
- * Animation uses the `time` argument.
- * When state.director.hasBoss is true, the sky, the top edge, and the open field
- * take a boss-wave tint. The wash stays translucent so the night sky still reads,
- * and every boss band stays dimmer than the fence rail, which remains the brightest
- * full-width band. The cached night backdrop stays unchanged for other waves.
- * drawIcon(ctx, id, x, y, size) paints a size×size icon from its top-left corner.
+ * Fencefall v5 — PvZ2-Style Sharp HD Vector Battlefield Backdrop (360×640 logical space).
+ *
+ * Rendered directly at native device pixel ratio (2×/3× Retina) with smooth gradients,
+ * bold dark ink outlines, warm spotlight cones, progressive steel wall damage, glowing
+ * energy wall shield, and a dramatic Central Commander Gunnery Platform framing the
+ * permanently anchored solo Wall Gunner. ZERO 2×5 grid drawn.
  */
 
 
 const W = ARENA.width;
 const H = ARENA.height;
-const PICKETS = 30;
-// Shared fence stages, as fractions of maxHp. Cracks open through the first line.
-// Boards, posts, and the rail give way through the second. Ruin is the last sliver.
-const FENCE_CRACKED = 0.6;
-const FENCE_FAILING = 0.3;
-const FENCE_RUIN = 0.12;
-const BREAK_SEQUENCE = Object.freeze([
-  0, 29, 2, 27, 5, 24, 8, 21, 1, 28, 4, 25, 11, 18, 7, 22,
-  10, 19, 3, 26, 6, 23, 9, 20, 12, 17, 13, 16, 14, 15
-]);
-const BREAK_RANK = (() => {
-  const rank = new Array(PICKETS).fill(-1);
-  BREAK_SEQUENCE.forEach((index, order) => { rank[index] = order; });
-  if (BREAK_SEQUENCE.length !== PICKETS || rank.includes(-1)) {
-    throw new Error('Fencefall world: fence damage order is not a permutation');
-  }
-  return rank;
-})();
+const FENCE_Y = ARENA.fenceY; // 512
 
-const FENCE_ART_Y = 450;
-const FENCE_DY = ARENA.fenceY - FENCE_ART_Y;
-const SLEEPER_ART_Y = 466;
-const SLEEPER_Y = SLEEPER_ART_Y + FENCE_DY;
-const APPROACH_TOP = 418 + FENCE_DY;
-const TUFTS = Object.freeze([
-  [5, 120], [10, 188], [4, 252], [13, 318], [8, 378],
-  [354, 142], [348, 214], [353, 286], [344, 348], [350, 396],
-  [22, APPROACH_TOP - 48], [338, APPROACH_TOP - 28]
-]);
-const TREES = Object.freeze([
-  [8, 22], [28, 14], [50, 18], [96, 9], [154, 7], [214, 8], [270, 10], [318, 15], [340, 22], [354, 12]
-]);
 const STARS = Object.freeze([
-  [16, 6, 0], [42, 11, 0], [74, 5, 1], [108, 12, 0], [146, 7, 0],
-  [188, 4, 0], [228, 10, 1], [262, 6, 0], [330, 9, 0], [348, 5, 0], [22, 13, 0]
-]);
-const POSTS = Object.freeze([0, 86, 174, 262, 348]);
-const ENTRY_Y = 46;
-const SCUFFS = Object.freeze([
-  [28, 128, 42], [196, 168, 34], [64, 214, 30], [236, 258, 40],
-  [36, 304, 28], [176, 346, 32], [88, 392, 24], [214, 418, 22]
+  [22, 10, 1.3, false], [58, 16, 1.1, false], [92, 8, 1.5, true],
+  [136, 14, 1.0, false], [178, 7, 1.2, false], [218, 15, 1.5, true],
+  [254, 9, 1.1, false], [326, 12, 1.2, false], [346, 7, 1.0, false],
+  [40, 26, 0.9, false], [156, 24, 0.9, false], [272, 22, 1.0, false],
 ]);
 
-const PAL = {
-  k: '#12181c',
-  n: '#243038',
-  w: '#f1eee2',
-  g: '#d3b984',
-  G: '#7a6240',
-  y: '#f0cb72',
-  m: '#c5d0d4',
-  M: '#4d5c64',
-  r: '#e25822',
-  R: '#8a3018',
-  f: '#ffb060',
-  a: '#7ec8d8',
-  c: '#2f6f80',
-  C: '#e7f7fb',
-  b: '#3fba6a',
-  B: '#1c5a38',
-  p: '#c4504a',
-  d: '#e23b4a',
-  e: '#c4a06a',
-  E: '#6e5432',
-  u: '#6d8794'
-};
+const SCRUBS = Object.freeze([
+  [12, 118, 1.0], [18, 198, 0.85], [10, 278, 1.1], [16, 356, 0.95], [13, 434, 1.05],
+  [348, 134, 0.95], [343, 218, 1.1], [350, 304, 0.9], [344, 386, 1.0], [348, 450, 0.85],
+]);
 
-const ALIASES = {
-  projectile: 'bolt', arrow: 'bolt', crossbow: 'bolt',
-  ice: 'frost', cold: 'frost',
-  shock: 'lightning', electric: 'lightning', thunder: 'lightning',
-  toxin: 'poison', acid: 'poison', venom: 'poison', poisonstatus: 'poison', statuspoison: 'poison',
-  aura: 'support', lantern: 'support', banner: 'support', heal: 'support',
-  heroupgrade: 'hero',
-  flame: 'fire',
-  heart: 'hp', health: 'hp',
-  experience: 'xp', star: 'xp',
-  sword: 'damage', attack: 'damage',
-  attackspeed: 'haste', speed: 'haste',
-  coin: 'currency', gold: 'currency',
-  shield: 'armor',
-  vital: 'vitality',
-  cracked: 'brittle', fragile: 'brittle',
-  freeze: 'slow', frozen: 'slow', chill: 'slow',
-  skull: 'defeat', dead: 'defeat', lose: 'defeat',
-  win: 'victory',
-  lock: 'locked',
-  empty: 'plus', emptyslot: 'plus', place: 'plus',
-  critical: 'crit', critchance: 'crit',
-  soundoff: 'mute', soundon: 'sound'
-};
+const CRACKS = Object.freeze([
+  [[62, 118], [76, 130], [70, 144], [84, 152]],
+  [[264, 164], [250, 178], [262, 194], [248, 206]],
+  [[112, 248], [126, 258], [120, 274], [134, 284]],
+  [[282, 312], [268, 326], [276, 342]],
+  [[88, 378], [102, 392], [96, 408], [110, 418]],
+  [[234, 416], [248, 428], [240, 444]],
+]);
 
-let backdropReady = false;
-let backdrop = null;
+const PEBBLES = Object.freeze([
+  [44, 102, 3.2, 2.0], [312, 124, 3.8, 2.2], [52, 178, 2.6, 1.7], [306, 202, 3.0, 1.9],
+  [40, 260, 3.6, 2.1], [318, 282, 2.8, 1.8], [48, 342, 3.1, 2.0], [308, 366, 3.5, 2.2],
+  [54, 424, 2.9, 1.8], [304, 442, 3.4, 2.0], [132, 196, 2.4, 1.5], [228, 276, 2.6, 1.6],
+  [144, 352, 2.2, 1.4], [216, 398, 2.5, 1.5],
+]);
 
-function hash2(x, y) {
-  let n = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) >>> 0;
-  n = (n ^ (n >>> 13)) >>> 0;
-  return Math.imul(n, 1274126177) >>> 0;
+const SCORCH_MARKS = Object.freeze([
+  [104, 174, 18, 10], [246, 238, 22, 12], [148, 322, 20, 11], [266, 386, 19, 10],
+]);
+
+const SKID_MARKS = Object.freeze([
+  [124, 126, 128, 184], [134, 126, 138, 184],
+  [218, 286, 224, 352], [228, 286, 234, 352],
+]);
+
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+    && typeof ctx.createRadialGradient === 'function'
+  );
 }
 
-function hashString(text) {
-  let h = 2166136261;
-  const value = String(text);
-  for (let i = 0; i < value.length; i++) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function horizonY(x) {
-  const wave = Math.sin(x * 0.02) * 6 + Math.sin(x * 0.053 + 1.1) * 3 + Math.sin(x * 0.11) * 2;
-  return 40 + Math.round(wave);
-}
-
-function makeCanvas(width, height) {
-  if (typeof OffscreenCanvas === 'function') {
-    try { return new OffscreenCanvas(width, height); } catch { /* use a DOM canvas if present */ }
-  }
-  const doc = globalThis.document;
-  if (doc && typeof doc.createElement === 'function') {
-    const canvas = doc.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-  return null;
-}
-
-function readAlpha(ctx) {
-  return Number.isFinite(ctx.globalAlpha) ? ctx.globalAlpha : 1;
-}
-
-function wearOf(index) {
-  return BREAK_RANK[index] / (PICKETS - 1);
-}
-
-function breakAt(index) {
-  const wear = wearOf(index);
-  return FENCE_FAILING * (1 - wear * wear);
-}
-
-function crackAt(index) {
-  const wear = wearOf(index);
-  return FENCE_CRACKED - FENCE_FAILING * wear * wear * wear;
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
 }
 
 function fenceRatio(state) {
@@ -10236,1908 +9800,852 @@ function fenceRatio(state) {
   return hp / max;
 }
 
-function woodKit(ratio) {
-  if (ratio > FENCE_CRACKED) {
-    return {
-      light: '#e2ebf0', mid: '#92a4b0', dark: '#4f606c', edge: '#1e2830',
-      iron: '#eef5f8', ironDark: '#384650', strap: '#6f8290', hazard: '#f0cb72',
-    };
-  }
-  if (ratio > FENCE_FAILING) {
-    return {
-      light: '#c2cbd0', mid: '#74828a', dark: '#424d54', edge: '#1a2024',
-      iron: '#c6d0d4', ironDark: '#303a40', strap: '#5c6a72', hazard: '#d4a84e',
-    };
-  }
-  if (ratio > FENCE_RUIN) {
-    return {
-      light: '#8e847e', mid: '#5a504c', dark: '#362e2c', edge: '#161212',
-      iron: '#889094', ironDark: '#2a3034', strap: '#4a5256', hazard: '#9e7238',
-    };
-  }
-  return {
-    light: '#6e524c', mid: '#402c28', dark: '#261a18', edge: '#100c0a',
-    iron: '#5c6064', ironDark: '#22282c', strap: '#3a4044', hazard: '#72442e',
-  };
-}
-
-function paintSky(ctx) {
-  const stops = [[0, '#070d12'], [14, '#0f1b24'], [28, '#1b2c2e'], [48, '#364a46']];
-  ctx.fillStyle = '#070d12';
-  ctx.fillRect(0, 0, W, H);
-  for (let y = 0; y < 56; y += 2) {
-    let upper = stops[0];
-    let lower = stops[stops.length - 1];
-    for (let i = 0; i < stops.length - 1; i++) {
-      if (y >= stops[i][0] && y <= stops[i + 1][0]) {
-        upper = stops[i];
-        lower = stops[i + 1];
-        break;
-      }
-    }
-    const span = Math.max(1, lower[0] - upper[0]);
-    const t = Math.round(((y - upper[0]) / span) * 4) / 4;
-    ctx.fillStyle = mixHex(upper[1], lower[1], t);
-    ctx.fillRect(0, y, W, 2);
-  }
-}
-
-function mixHex(a, b, t) {
-  const pa = hexRgb(a);
-  const pb = hexRgb(b);
-  const q = Math.max(0, Math.min(1, t));
-  const channel = index => Math.round((pa[index] + (pb[index] - pa[index]) * q) / 8) * 8;
-  return `rgb(${channel(0)},${channel(1)},${channel(2)})`;
-}
-
-function hexRgb(hex) {
-  const value = parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
-
-function drawMoon(ctx) {
-  const x = 292;
-  const y = 3;
-  const base = readAlpha(ctx);
-  ctx.globalAlpha = base * 0.14;
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x - 6, y - 2, 19, 13);
-  ctx.globalAlpha = base * 0.22;
-  ctx.fillStyle = '#f8e9c6';
-  ctx.fillRect(x - 3, y - 1, 13, 11);
-  ctx.globalAlpha = base;
-  ctx.fillStyle = '#f5e8c8';
-  const cells = [
-    [3, 0], [4, 0], [5, 0], [6, 0],
-    [2, 1], [3, 1], [4, 1], [5, 1], [6, 1],
-    [1, 2], [2, 2], [3, 2], [4, 2], [5, 2],
-    [1, 3], [2, 3], [3, 3], [4, 3],
-    [0, 4], [1, 4], [2, 4], [3, 4],
-    [0, 5], [1, 5], [2, 5], [3, 5],
-    [1, 6], [2, 6], [3, 6], [4, 6], [5, 6],
-    [2, 7], [3, 7], [4, 7], [5, 7], [6, 7],
-    [3, 8], [4, 8], [5, 8], [6, 8]
-  ];
-  for (const [cx, cy] of cells) ctx.fillRect(x + cx, y + cy, 1, 1);
-  ctx.fillStyle = '#d9c89a';
-  ctx.fillRect(x + 1, y + 4, 1, 2);
-  ctx.fillRect(x + 2, y + 3, 1, 1);
-  ctx.fillStyle = '#c4b48a';
-  ctx.fillRect(x + 5, y + 6, 1, 1);
-}
-
-function drawTree(ctx, x, height) {
-  const base = horizonY(x);
-  const top = base - height;
-  const trunk = height > 16 ? 3 : 2;
-  ctx.fillStyle = '#0e1612';
-  ctx.fillRect(x, top + 2, trunk, Math.max(2, height - 2));
-  ctx.fillStyle = '#1a2820';
-  ctx.fillRect(x - 4, top + 4, 4, 2);
-  ctx.fillRect(x + trunk, top + 7, 4, 2);
-  if (height > 14) ctx.fillRect(x - 2, top + 2, 2, 2);
-  ctx.fillStyle = '#243028';
-  ctx.fillRect(x - 1, base - 2, trunk + 2, 2);
-}
-
-function paintEntryEdge(ctx) {
-  const y = ENTRY_Y;
-  ctx.fillStyle = '#101816';
-  ctx.fillRect(0, y + 10, W, 6);
-  ctx.fillStyle = '#6a8074';
-  ctx.fillRect(0, y + 3, W, 8);
-  ctx.fillStyle = '#314038';
-  ctx.fillRect(0, y + 8, W, 4);
-  ctx.fillStyle = '#d5e2d6';
-  ctx.fillRect(0, y + 1, W, 2);
-  let x = 0;
-  let stone = 0;
-  while (x < W) {
-    const n = hash2(stone * 3 + 1, 41);
-    const span = 7 + (n % 11);
-    const rise = (n >>> 3) & 1;
-    ctx.fillStyle = (n & 32) ? '#d5e2d6' : '#b7c8ba';
-    ctx.fillRect(x, y + rise, span, 1);
-    ctx.fillStyle = (n & 32) ? '#5e7268' : '#4a5c52';
-    ctx.fillRect(x, y + 2 + rise, Math.max(1, span - 1), 2);
-    ctx.fillStyle = '#1a2420';
-    ctx.fillRect(x + span - 1, y + 1, 1, 10);
-    if ((n % 4) === 0) {
-      ctx.fillStyle = '#101816';
-      ctx.fillRect(x + 2, y + 5, 1, 4);
-    }
-    if ((n % 6) === 0) {
-      ctx.fillStyle = '#2a342e';
-      ctx.fillRect(x + 1, y - 4, 2, 5);
-      ctx.fillStyle = '#d5e2d6';
-      ctx.fillRect(x + 1, y - 4, 2, 1);
-    }
-    x += span;
-    stone += 1;
-  }
-  ctx.fillStyle = '#0e1612';
-  ctx.fillRect(0, y + 12, W, 2);
-  ctx.fillStyle = '#6a7e72';
-  ctx.fillRect(0, y + 14, W, 1);
-}
-
-function paintApproach(ctx) {
-  const top = APPROACH_TOP;
-  ctx.fillStyle = '#161e1c';
-  ctx.fillRect(0, top, W, 48);
-  ctx.fillStyle = '#4a5c52';
-  ctx.fillRect(0, top, W, 1);
-  ctx.fillStyle = '#101816';
-  ctx.fillRect(0, top + 36, W, 12);
-  for (let x = 0; x < W; x += 4) {
-    const n = hash2(x, 422);
-    if ((n & 3) !== 0) continue;
-    const y = top + 4 + ((n >>> 2) & 7) * 2;
-    ctx.fillStyle = (n & 16) ? '#2a3830' : '#101816';
-    ctx.fillRect(x, y, 3 + (n & 1), 1);
-  }
-}
-
-function fillStandingGround(ctx, x, y, width, height) {
-  ctx.fillStyle = '#3a2c22';
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = '#a08058';
-  ctx.fillRect(x, y, width, 1);
-  if (height > 6 && width > 8) {
-    ctx.fillStyle = '#5c4634';
-    ctx.fillRect(x + 4, y + 4, width - 8, 1);
-  }
-  if (height > 3) {
-    ctx.fillStyle = '#241c16';
-    ctx.fillRect(x, y + height - 3, width, 3);
-  }
-}
-
-function paintField(ctx) {
-  for (let x = 0; x < W; x += 2) {
-    const near = horizonY(x);
-    const far = near - 7 - ((x >> 3) & 1);
-    ctx.fillStyle = '#0e1718';
-    ctx.fillRect(x, far, 2, near - far);
-    ctx.fillStyle = '#1e2c2c';
-    ctx.fillRect(x, far, 2, 1);
-  }
-  for (let x = 0; x < W; x += 2) {
-    const y0 = horizonY(x);
-    const edge = Math.min(x, W - 1 - x);
-    const margin = edge < 18 ? 0 : edge < 42 ? 1 : 2;
-    const far = margin === 0 ? '#141e1e' : margin === 1 ? '#1d2927' : '#263430';
-    const mid = margin === 0 ? '#121a1a' : margin === 1 ? '#192422' : '#212e2a';
-    const near = margin === 0 ? '#101718' : margin === 1 ? '#161f1e' : '#1d2825';
-    const farEnd = 176;
-    const midEnd = 330;
-    const lip = ENTRY_Y + 16;
-    ctx.fillStyle = margin === 0 ? '#0d1516' : '#141e1c';
-    ctx.fillRect(x, y0, 2, Math.max(0, lip - y0));
-    ctx.fillStyle = far;
-    ctx.fillRect(x, lip, 2, farEnd - lip);
-    ctx.fillStyle = mid;
-    ctx.fillRect(x, farEnd, 2, midEnd - farEnd);
-    ctx.fillStyle = near;
-    ctx.fillRect(x, midEnd, 2, SLEEPER_Y - midEnd);
-    ctx.fillStyle = '#7b9188';
-    ctx.fillRect(x, y0, 2, 1);
-  }
-  for (const [x, height] of TREES) drawTree(ctx, x, height);
-  // Subtle moonlit ground pebbles and tactical clearing texture
-  for (let y = 64; y < APPROACH_TOP; y += 4) {
-    for (let x = 8; x < 352; x += 4) {
-      const dx = Math.abs(x - 180) / 180;
-      const n = hash2(x, y);
-      if ((n % 100) > 48 + dx * 48) {
-        ctx.fillStyle = (n & 3) === 0 ? '#31423c' : '#283632';
-        ctx.fillRect(x, y, 1, 1);
-      } else if ((n % 19) === 0) {
-        ctx.fillStyle = '#121a19';
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-  }
-  for (let y = APPROACH_TOP - 14; y < SLEEPER_Y - 8; y += 3) {
-    for (let x = 0; x < W; x += 3) {
-      if ((hash2(x + 19, y) & 3) === 0) {
-        ctx.fillStyle = '#182220';
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-  }
-  const patches = [
-    [36, 156, 22, 3, '#1e2824'], [248, 188, 26, 3, '#323c36'],
-    [110, 236, 16, 2, '#1e2824'], [292, 274, 18, 3, '#2c3630'],
-    [58, 328, 24, 3, '#222a26'], [186, 366, 20, 2, '#303a34'],
-    [24, 412, 28, 3, '#1c2420'], [250, 404, 22, 3, '#1c2420']
-  ];
-  for (const [x, y, width, height, color] of patches) {
-    const py = y >= 390 ? y + FENCE_DY : y;
-    ctx.fillStyle = color;
-    ctx.fillRect(x, py, width, height);
-  }
-  ctx.fillStyle = '#1a2420';
-  for (const [x, y, width] of SCUFFS) {
-    const sy = y >= 380 ? y + FENCE_DY : y;
-    ctx.fillRect(x, sy, width, 1);
-    ctx.fillRect(x + 5, sy + 2, Math.max(8, width - 12), 1);
-  }
-  drawEdgeRuins(ctx);
-  for (let i = 0; i < 16; i++) {
-    const n = hash2(80 + i, 17);
-    const x = i % 2 === 0 ? 12 + (n % 22) : 328 + (n % 22);
-    const y = 150 + ((n >>> 8) % 250);
-    ctx.fillStyle = '#3a463e';
-    ctx.fillRect(x, y, 3, 2);
-    ctx.fillStyle = '#141c18';
-    ctx.fillRect(x, y + 2, 3, 1);
-  }
-  paintApproach(ctx);
-  paintEntryEdge(ctx);
-}
-
-function drawEdgeRuins(ctx) {
-  const marks = [[16, 214, 16], [340, 248, 20], [22, 336, 12], [334, 372, 14]];
-  for (const [x, y, height] of marks) {
-    ctx.fillStyle = '#3a342c';
-    ctx.fillRect(x, y - height, 3, height);
-    ctx.fillStyle = '#2a241c';
-    ctx.fillRect(x - 2, y - 3, 7, 3);
-    ctx.fillStyle = '#4a4034';
-    ctx.fillRect(x, y - height, 1, 2);
-  }
-}
-
-function paintYard(ctx) {
-  const front = slotGeometry(0);
-  const back = slotGeometry(ARENA.cols);
-  const groundY = SLEEPER_Y + 6;
-  fillStandingGround(ctx, 0, groundY, W, H - groundY);
-  for (let y = groundY + 4; y < H - 8; y += 4) {
-    ctx.fillStyle = ((y >> 2) & 1) ? '#34281f' : '#463628';
-    ctx.fillRect(0, y, W, 1);
-  }
-  // Footing under each row, then the open board between the rows and at the heel.
-  const foot = (slot) => {
-    const height = Math.min(14, Math.max(8, Math.round(slot.height * 0.3)));
-    const y = slot.top + slot.height - height - 2;
-    fillStandingGround(ctx, 0, y, W, height);
-  };
-  foot(front);
-  foot(back);
-  const gapTop = front.top + front.height;
-  const gapH = back.top - gapTop;
-  if (gapH > 0) fillStandingGround(ctx, 0, gapTop, W, gapH);
-  const heel = back.top + back.height;
-  if (heel < H - 1) fillStandingGround(ctx, heel, W, Math.min(10, H - heel));
-  const blockLeft = front.left;
-  const blockRight = slotGeometry(ARENA.cols - 1).left + front.width;
-  const gapMark = gapTop + Math.floor(Math.max(gapH, 1) / 2);
-  const heelMark = Math.min(H - 6, heel + 2);
-  for (let x = blockLeft; x < blockRight; x += 13) {
-    const n = hash2(x, front.y);
-    ctx.fillStyle = (n & 1) ? '#c4a06a' : '#6e5432';
-    ctx.fillRect(x + (n & 3), gapMark, 1, 1);
-    ctx.fillRect(x + ((n >>> 2) & 3), heelMark, 1, 1);
-  }
-  ctx.fillStyle = '#1c1612';
-  ctx.fillRect(0, H - 4, W, 4);
-}
-
-function paintBackdrop(ctx) {
-  paintSky(ctx);
-  drawMoon(ctx);
-  paintField(ctx);
-  paintYard(ctx);
-}
-
-function backdropCanvas() {
-  if (backdropReady) return backdrop;
-  backdropReady = true;
-  const canvas = makeCanvas(W, H);
-  if (!canvas || typeof canvas.getContext !== 'function') return null;
-  const context = canvas.getContext('2d');
-  if (!context) return null;
-  try { context.imageSmoothingEnabled = false; } catch { /* direct pixels still work */ }
-  paintBackdrop(context);
-  backdrop = canvas;
-  return backdrop;
-}
-
-function drawStars(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  for (let i = 0; i < STARS.length; i++) {
-    const [x, y, gold] = STARS[i];
-    const twinkle = reduced ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(time * 1.7 + i * 1.3));
-    ctx.globalAlpha = base * twinkle;
-    ctx.fillStyle = gold ? '#f0cb72' : (i % 3 === 0 ? '#d5e6ea' : '#8fb0b8');
-    const span = i % 5 === 0 ? 2 : 1;
-    ctx.fillRect(x, y, span, span);
-  }
-  ctx.globalAlpha = base;
-}
-
-function drawMist(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  const shift = reduced ? 6 : Math.floor(time * 7) % 48;
-  ctx.globalAlpha = base * 0.16;
-  ctx.fillStyle = '#d5e6ea';
-  for (let i = 0; i < 7; i++) {
-    const x = ((i * 58 + shift) % 420) - 24;
-    const y = 14 + (i % 3) * 4;
-    ctx.fillRect(x, y, 26, 1);
-    ctx.fillRect(x + 6, y + 1, 12, 1);
-  }
-  ctx.globalAlpha = base;
-}
-
 function directorHasBoss(state) {
-  return !!(state && state.director && state.director.hasBoss === true);
+  return Boolean(state && state.director && state.director.hasBoss === true);
 }
 
-// Wash laid over the cached night, only while a boss wave is current.
-// Full-width bands, never columns. Fence posts begin just above the rail, so the veil stops above them.
-// The sky and the open field stay translucent so the moon, stars, and tree line still read.
-// The pale entry stones are the one bright band above the fence; a dark crimson cover
-// keeps that lip under the fence rail, including after the rail has worn down.
-function drawBossWave(ctx, time, reduced) {
-  const base = readAlpha(ctx);
-  const pulse = reduced ? 0 : (0.5 + 0.5 * Math.sin(time * 1.15));
-  const sky = 0.44 + pulse * 0.08;
-  ctx.globalAlpha = base * sky;
-  ctx.fillStyle = '#9a3040';
-  ctx.fillRect(0, 0, W, 24);
-  ctx.fillStyle = '#b03848';
-  ctx.fillRect(0, 24, W, 16);
-  ctx.globalAlpha = base * (0.28 + pulse * 0.06);
-  ctx.fillStyle = '#8a2838';
-  ctx.fillRect(0, 64, W, 154);
-  ctx.globalAlpha = base * 0.2;
-  ctx.fillStyle = '#6a2030';
-  const veilTop = 218;
-  const veilBottom = 418 + FENCE_DY - 10;
-  ctx.fillRect(0, veilTop, W, Math.max(0, veilBottom - veilTop));
-  // The entry stones are a pale full-width band. Cover them, then lay a short
-  // crimson lip whose row stays under the fence rail, worn or intact.
-  ctx.globalAlpha = base * 0.86;
-  ctx.fillStyle = '#30141c';
-  ctx.fillRect(0, 40, W, 24);
-  ctx.globalAlpha = base * (0.46 + pulse * 0.08);
-  ctx.fillStyle = '#a04048';
-  ctx.fillRect(0, ENTRY_Y, W, 2);
-  const shift = reduced ? 12 : Math.floor(time * 6) % 48;
-  ctx.globalAlpha = base * 0.28;
-  ctx.fillStyle = '#a04840';
-  for (let i = 0; i < 4; i++) {
-    const x = ((i * 96 + shift) % 420) - 24;
-    const y = 10 + (i % 2) * 6;
-    ctx.fillRect(x, y, 12, 1);
-  }
-  ctx.globalAlpha = base;
-  drawMoon(ctx);
-}
-
-function drawTuft(ctx, x, y, sway) {
-  ctx.fillStyle = '#1a2824';
-  ctx.fillRect(x, y, 1, 4);
-  ctx.fillStyle = '#2a5040';
-  ctx.fillRect(x + sway, y - 4, 1, 4);
-  ctx.fillRect(x - 2 - sway, y - 2, 1, 3);
-  ctx.fillRect(x + 2 + sway, y - 3, 1, 3);
-  ctx.fillStyle = '#6a9460';
-  ctx.fillRect(x + sway, y - 5, 1, 1);
-}
-
-function drawGrass(ctx, time, reduced) {
-  for (let i = 0; i < TUFTS.length; i++) {
-    const [x, y] = TUFTS[i];
-    const sway = reduced ? 0 : Math.round(Math.sin(time * 1.4 + i) );
-    drawTuft(ctx, x, y, sway);
-  }
-}
-
-function drawPicket(ctx, index, ratio, kit) {
-  const x = index * 12;
-  const broken = ratio <= breakAt(index);
-  const merlon = (index % 2) === 0;
-  const top = merlon ? 429 : 434;
-  const base = 466;
-  if (broken) {
-    if (((index * 5 + 3) % 4) === 0 || (ratio <= FENCE_RUIN && (index % 2) === 0)) {
-      ctx.fillStyle = kit.edge;
-      ctx.fillRect(x + 2, 461, 3, 4);
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 7, 459, 1, 6);
-      return false;
-    }
-    const stump = (ratio <= FENCE_RUIN ? 5 + (index % 3) : 9 + (index % 4) * 3);
-    const y = base - stump;
-    ctx.fillStyle = kit.edge;
-    ctx.fillRect(x + 1, y, 10, stump);
-    ctx.fillStyle = kit.dark;
-    ctx.fillRect(x + 2, y + 2, 8, Math.max(0, stump - 2));
-    ctx.fillStyle = kit.light;
-    ctx.fillRect(x + 2, y, 6, 1);
-    // Exposed steel rebar prongs
-    ctx.fillStyle = kit.iron;
-    ctx.fillRect(x + 3, y - 3, 1, 3);
-    ctx.fillRect(x + 8, y - 2, 1, 2);
-    return false;
-  }
-  // Fortified concrete-and-steel bastion armor block
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, top, 12, base - top);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, top + 2, 10, base - (top + 2));
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 1, top + 2, 10, 7);
-  // Bright beveled top armor lip
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x + 1, top, 10, 2);
-  // Recessed firing slit on embrasure blocks
-  if (!merlon) {
-    ctx.fillStyle = '#0c1216';
-    ctx.fillRect(x + 3, top + 4, 6, 2);
-    ctx.fillStyle = kit.ironDark;
-    ctx.fillRect(x + 2, top + 3, 8, 1);
-  }
-  // Horizontal riveted steel reinforcement girder
-  ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x, 446, 12, 6);
-  ctx.fillStyle = kit.strap;
-  ctx.fillRect(x, 447, 12, 3);
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 447, 12, 1);
-  ctx.fillRect(x + 2, 449, 2, 1);
-  ctx.fillRect(x + 8, 449, 2, 1);
-  // Lower armor plate seams & corner bolts
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 454, 8, 10);
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x + 2, 455, 1, 1);
-  ctx.fillRect(x + 9, 455, 1, 1);
-  ctx.fillRect(x + 2, 462, 1, 1);
-  ctx.fillRect(x + 9, 462, 1, 1);
-  if (ratio <= crackAt(index)) {
-    ctx.fillStyle = '#121010';
-    ctx.fillRect(x + 5, top + 4, 1, 6);
-    ctx.fillRect(x + 4, top + 10, 1, 8);
-    ctx.fillRect(x + 6, top + 16, 1, 7);
-    if (ratio <= (FENCE_CRACKED + FENCE_FAILING) / 2) {
-      ctx.fillRect(x + 8, top + 7, 1, 6);
-      ctx.fillRect(x + 7, top + 13, 1, 6);
+function heroUpgrades(state) {
+  const slots = state?.slots;
+  if (!Array.isArray(slots)) return {};
+  for (const s of slots) {
+    if (s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero')) {
+      return s.unit.upgrades || {};
     }
   }
-  if (ratio <= FENCE_FAILING && (index % 3) === 0) {
-    ctx.fillStyle = '#241410';
-    ctx.fillRect(x + 2, 455, 8, 5);
-    ctx.fillStyle = '#e25822';
-    ctx.fillRect(x + 4, 457, 2, 1);
-  }
-  return true;
+  return {};
 }
 
-function drawWire(ctx, intact, kit, ratio) {
-  // Razor-wire concertina coils along the upper parapet
-  for (let i = 0; i < PICKETS; i++) {
-    const x = i * 12;
-    const top = (i % 2) === 0 ? 429 : 434;
-    if (intact[i]) {
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 1, 425, 10, 1);
-      ctx.fillRect(x + 5, 425, 1, top - 425);
-      ctx.fillStyle = kit.iron;
-      ctx.fillRect(x + 3, 424, 2, 1);
-      ctx.fillRect(x + 8, 426, 2, 1);
-      if (intact[i + 1]) {
-        ctx.fillStyle = kit.ironDark;
-        ctx.fillRect(x + 10, 425, 4, 1);
-      }
-    } else if (ratio > FENCE_RUIN) {
-      ctx.fillStyle = kit.ironDark;
-      ctx.fillRect(x + 2, 437 + (i % 3) * 2, 7, 1);
-    }
-  }
-}
-
-function postFalls(x, ratio) {
-  if (x < 20 || x > 340) return ratio <= FENCE_FAILING;
-  if (x === 174) return ratio <= 0;
-  return ratio <= FENCE_RUIN;
-}
-
-function drawPost(ctx, x, ratio, kit) {
-  if (postFalls(x, ratio)) {
-    ctx.fillStyle = kit.dark;
-    ctx.fillRect(x, 461, 12, 5);
-    ctx.fillRect(x + 3, 457, 6, 4);
-    ctx.fillStyle = kit.edge;
-    ctx.fillRect(x + 1, 465, 10, 2);
-    return;
-  }
-  // Heavy armored steel buttress pylon
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, 417, 10, 53);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(x + 1, 419, 8, 49);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x + 2, 421, 5, 45);
-  // Beveled steel turret cap & twin rivets
-  ctx.fillStyle = kit.iron;
-  ctx.fillRect(x, 417, 10, 3);
-  ctx.fillRect(x + 1, 446, 8, 5);
-  ctx.fillStyle = kit.hazard;
-  ctx.fillRect(x + 2, 423, 6, 2);
-  ctx.fillStyle = kit.ironDark;
-  ctx.fillRect(x + 1, 448, 8, 1);
-  if (ratio <= FENCE_CRACKED) {
-    ctx.fillStyle = '#141010';
-    ctx.fillRect(x + 4, 429, 1, 13);
-    if (ratio <= FENCE_FAILING) {
-      ctx.fillRect(x + 6, 433, 1, 11);
-      ctx.fillRect(x + 3, 438, 1, 6);
-    }
-  }
-}
-
-function drawRubble(ctx, kit, ratio) {
-  if (ratio > FENCE_RUIN) return;
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(36, 456, 26, 3);
-  ctx.fillRect(48, 453, 4, 3);
-  ctx.fillRect(188, 458, 34, 3);
-  ctx.fillRect(300, 455, 22, 3);
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(36, 459, 26, 1);
-  ctx.fillRect(188, 461, 34, 1);
-  ctx.fillRect(300, 458, 22, 1);
-}
-
-function shiftFenceArt(ctx, draw) {
-  const can = typeof ctx.save === 'function' && typeof ctx.restore === 'function' && typeof ctx.translate === 'function';
-  if (can) {
-    ctx.save();
-    ctx.translate(0, FENCE_DY);
-  }
-  try {
-    draw();
-  } finally {
-    if (can) ctx.restore();
-  }
-}
-
-function drawSleeper(ctx, ratio, kit) {
-  const y = SLEEPER_ART_Y;
-  // Heavy armored steel base sill with hazard caution chevrons
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(0, y, W, 6);
-  ctx.fillStyle = kit.dark;
-  ctx.fillRect(0, y + 1, W, 4);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(0, y + 1, W, 2);
-  // Bright full-width bastion top rail (stays brightest full-width horizontal band)
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(0, y, W, 1);
-  // Caution hazard stripe blocks along the lower steel footing
-  for (let x = 6; x < W - 6; x += 16) {
-    ctx.fillStyle = kit.hazard;
-    ctx.fillRect(x, y + 2, 6, 2);
-  }
-  if (ratio <= FENCE_FAILING) {
-    for (let i = 0; i < PICKETS; i++) {
-      if (ratio > breakAt(i)) continue;
-      ctx.fillStyle = '#181412';
-      ctx.fillRect(i * 12 + 3, y + 1, 7, 4);
-    }
-  }
-  for (let x = 14; x < W; x += 16) {
-    ctx.fillStyle = kit.iron;
-    ctx.fillRect(x, y + 2, 1, 2);
-  }
-}
-
-function drawWallImmunity(ctx, count, time, reduced) {
-  if (!(count > 0)) return;
-  const base = readAlpha(ctx);
-  const pulse = reduced ? 0.85 : (0.7 + 0.3 * Math.sin(time * 6.5));
-  shiftFenceArt(ctx, () => {
-    // Luminous cyan Aegis energy rim across the center bastion parapet (strictly inside [60..300])
-    ctx.globalAlpha = base * 0.55 * pulse;
-    ctx.fillStyle = '#70e8ff';
-    ctx.fillRect(62, 427, 236, 2);
-    ctx.globalAlpha = base * 0.9 * pulse;
-    ctx.fillStyle = '#d8fbff';
-    ctx.fillRect(68, 428, 224, 1);
-    // Shield charge pips centered cleanly above the bastion rail
-    const pips = Math.min(8, Math.floor(count));
-    const step = 10;
-    const total = pips * step - 4;
-    const startX = Math.round(W / 2 - total / 2);
-    ctx.globalAlpha = base;
-    for (let i = 0; i < pips; i++) {
-      const px = startX + i * step;
-      ctx.fillStyle = '#0c1b22';
-      ctx.fillRect(px - 1, 439, 8, 6);
-      ctx.fillStyle = '#4ad8f8';
-      ctx.fillRect(px, 440, 6, 4);
-      ctx.fillStyle = '#e6fcff';
-      ctx.fillRect(px + 1, 441, 4, 2);
-    }
-  });
-  ctx.globalAlpha = base;
-}
-
-function drawFence(ctx, ratio, wallImmunity = 0, time = 0, reduced = false) {
-  shiftFenceArt(ctx, () => {
-    const kit = woodKit(ratio);
-    const intact = new Array(PICKETS);
-    for (let i = 0; i < PICKETS; i++) intact[i] = drawPicket(ctx, i, ratio, kit);
-    drawWire(ctx, intact, kit, ratio);
-    drawSleeper(ctx, ratio, kit);
-    for (const x of POSTS) drawPost(ctx, x, ratio, kit);
-    drawRubble(ctx, kit, ratio);
-  });
-  if (wallImmunity > 0) drawWallImmunity(ctx, wallImmunity, time, reduced);
-}
-
-function drawBanner(ctx, ratio, time, reduced, phase) {
-  if (ratio < FENCE_RUIN || postFalls(174, ratio)) return;
-  shiftFenceArt(ctx, () => drawBannerArt(ctx, ratio, time, reduced, phase));
-}
-
-function drawBannerArt(ctx, ratio, time, reduced, phase) {
-  const wave = reduced ? 0 : (Math.sin(time * 2.2) > 0 ? 1 : 0);
-  const y = 416 + wave;
-  ctx.fillStyle = '#6e5432';
-  ctx.fillRect(178, 414, 2, 34);
-  const torn = ratio <= FENCE_CRACKED;
-  const clothW = torn ? 11 : 15;
-  ctx.fillStyle = ratio <= FENCE_FAILING ? '#7a3030' : '#9a3a3a';
-  ctx.fillRect(180, y, clothW, 9);
-  ctx.fillStyle = '#6e2424';
-  ctx.fillRect(180, y + 8, clothW, 1);
-  ctx.fillStyle = '#d3b984';
-  ctx.fillRect(182, y + 3, torn ? 4 : 7, 2);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(184, y + 2, 2, 4);
-  if (torn) {
-    ctx.fillStyle = '#4e3820';
-    ctx.fillRect(180 + clothW, y + 5, 2, 2);
-    ctx.fillRect(180 + clothW - 1, y + 7, 3, 2);
-  }
-  if (phase === 'victory' && ratio > FENCE_FAILING) {
-    ctx.fillStyle = '#f0cb72';
-    ctx.fillRect(182, y + 1, 1, 1);
-    ctx.fillRect(188, y + 1, 1, 1);
-  }
-}
-
-function drawEmbers(ctx, ratio, time, reduced) {
-  if (ratio > FENCE_FAILING) return;
-  shiftFenceArt(ctx, () => drawEmberArt(ctx, ratio, time, reduced));
-}
-
-function drawEmberArt(ctx, ratio, time, reduced) {
-  const base = readAlpha(ctx);
-  for (let i = 0; i < PICKETS; i++) {
-    if (ratio > breakAt(i) || (i % 3) !== 0) continue;
-    const loop = reduced ? 0.35 : ((time * (7 + (i % 4)) + i * 1.7) % 16) / 16;
-    const x = i * 12 + 5;
-    const y = Math.round(462 - loop * 14);
-    ctx.globalAlpha = base * (1 - loop) * 0.9;
-    ctx.fillStyle = (i % 2) === 0 ? '#ffd08a' : '#e25822';
-    ctx.fillRect(x, y, 1, 1 + (i & 1));
-  }
-  ctx.globalAlpha = base;
-}
-
-function drawBrackets(ctx, x, y, w, h) {
-  const arm = Math.max(5, Math.min(8, Math.round(Math.min(w, h) * 0.16)));
-  ctx.fillStyle = '#d3b984';
-  ctx.fillRect(x + 1, y + 1, arm, 2);
-  ctx.fillRect(x + 1, y + 1, 2, arm);
-  ctx.fillRect(x + w - arm - 1, y + 1, arm, 2);
-  ctx.fillRect(x + w - 3, y + 1, 2, arm);
-  ctx.fillRect(x + 1, y + h - 3, arm, 2);
-  ctx.fillRect(x + 1, y + h - arm - 1, 2, arm);
-  ctx.fillRect(x + w - arm - 1, y + h - 3, arm, 2);
-  ctx.fillRect(x + w - 3, y + h - arm - 1, 2, arm);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x + 1, y + 1, 3, 1);
-  ctx.fillRect(x + w - 4, y + 1, 3, 1);
-  ctx.fillStyle = '#7a6240';
-  ctx.fillRect(x + 1, y + h - 2, arm, 1);
-  ctx.fillRect(x + w - arm - 1, y + h - 2, arm, 1);
-}
-
-function drawSlot(ctx, slot, time, reduced, phase) {
-  const x = slot.left;
-  const y = slot.top;
-  const w = slot.width;
-  const h = slot.height;
-  const unit = slot.unit;
-  const occupied = !!(unit && typeof unit === 'object');
-  const hero = occupied && (unit.kind === 'hero' || unit.type === 'hero');
-  const front = slot.row === 0;
-  ctx.fillStyle = '#070b0e';
-  ctx.fillRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
-  ctx.fillStyle = front ? '#20323c' : '#182830';
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = hero ? '#8a7044' : (occupied ? '#4e6470' : '#9eb4be');
-  ctx.fillRect(x, y, w, 1);
-  ctx.fillRect(x, y, 1, h);
-  ctx.fillStyle = '#0c1216';
-  ctx.fillRect(x, y + h - 1, w, 1);
-  ctx.fillRect(x + w - 1, y, 1, h);
-  const pad = 3;
-  const wellH = Math.max(8, Math.round(h * 0.5));
-  ctx.fillStyle = occupied ? (front ? '#1a2c36' : '#14242c') : '#0e161c';
-  ctx.fillRect(x + pad, y + pad, w - pad * 2, wellH);
-  ctx.fillStyle = '#5c6a72';
-  ctx.fillRect(x + 2, y + 2, 2, 2);
-  ctx.fillRect(x + w - 4, y + 2, 2, 2);
-  ctx.fillRect(x + 2, y + pad + wellH - 2, 2, 2);
-  ctx.fillRect(x + w - 4, y + pad + wellH - 2, 2, 2);
-  const foot = y + Math.round(h / 2);
-  const footW = w - 12;
-  const footX = x + 6;
-  const footH = Math.min(10, y + h - foot - 4);
-  ctx.fillStyle = front ? '#314654' : '#283848';
-  ctx.fillRect(footX, foot - 1, footW, footH);
-  ctx.fillStyle = hero ? '#d3b984' : '#6a8490';
-  ctx.fillRect(footX, foot - 1, footW, 1);
-  ctx.fillStyle = '#10181c';
-  ctx.fillRect(footX + 2, foot + 5, footW - 4, 2);
-  ctx.fillStyle = '#243844';
-  ctx.fillRect(x + 4, foot, 3, 6);
-  ctx.fillRect(x + w - 7, foot, 3, 6);
-  const groundTop = foot + 4;
-  const groundH = Math.max(4, y + h - 2 - groundTop);
-  fillStandingGround(ctx, x + 2, groundTop, w - 4, groundH);
-  if (!occupied) {
-    const pulse = phase === 'placing' && !reduced && Math.sin(time * 3) > 0;
-    const cx = x + Math.round(w / 2) - 1;
-    const cy = y + Math.round(h * 0.28);
-    ctx.fillStyle = pulse ? '#d7f3f8' : '#6d8794';
-    ctx.fillRect(cx, cy - 5, 2, 10);
-    ctx.fillRect(cx - 5, cy, 12, 2);
-    ctx.fillStyle = '#d5e6ea';
-    ctx.fillRect(cx, cy, 2, 2);
+// =========================================================================
+// SKY, BLOOD MOON & RUINED OVERPASS HORIZON (y = 0 .. 66)
+// =========================================================================
+function drawSkyAndHorizon(ctx, time, reduced, hasBoss) {
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, 68);
+  if (hasBoss) {
+    skyGrad.addColorStop(0, '#180710');
+    skyGrad.addColorStop(0.55, '#421220');
+    skyGrad.addColorStop(1, '#782428');
   } else {
-    ctx.fillStyle = '#8aa0aa';
-    ctx.fillRect(footX, foot - 1, 2, 2);
-    ctx.fillRect(footX + footW - 2, foot - 1, 2, 2);
+    skyGrad.addColorStop(0, '#0a1524');
+    skyGrad.addColorStop(0.55, '#193148');
+    skyGrad.addColorStop(1, '#315460');
   }
-  if (hero) {
-    drawBrackets(ctx, x, y, w, h);
-    ctx.fillStyle = '#7a6240';
-    ctx.fillRect(footX, foot + 3, footW, 2);
-    ctx.fillStyle = '#f0cb72';
-    ctx.fillRect(footX, foot + 3, footW, 1);
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, 68);
+
+  // Soft horizon atmospheric glow
+  const glowGrad = ctx.createRadialGradient(W * 0.5, 58, 12, W * 0.5, 58, 210);
+  if (hasBoss) {
+    glowGrad.addColorStop(0, 'rgba(255, 86, 56, 0.36)');
+    glowGrad.addColorStop(1, 'rgba(255, 60, 40, 0)');
+  } else {
+    glowGrad.addColorStop(0, 'rgba(120, 214, 210, 0.22)');
+    glowGrad.addColorStop(1, 'rgba(60, 120, 140, 0)');
   }
-}
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(0, 0, W, 68);
 
-function drawTies(ctx, row) {
-  const y = slotGeometry(row * ARENA.cols).y + 6;
-  for (let col = 0; col < ARENA.cols - 1; col += 1) {
-    const slot = slotGeometry(row * ARENA.cols + col);
-    const seam = slot.left + slot.width - 1;
-    ctx.fillStyle = '#5c6a72';
-    ctx.fillRect(seam, y, 2, 2);
-    ctx.fillStyle = '#c5d0d4';
-    ctx.fillRect(seam, y, 2, 1);
+  // Twinkling stars
+  for (let i = 0; i < STARS.length; i++) {
+    const [sx, sy, sr, gold] = STARS[i];
+    const tw = reduced ? 0.85 : 0.45 + 0.55 * Math.sin(time * 1.8 + i * 1.7);
+    ctx.save();
+    ctx.globalAlpha = tw * (hasBoss ? 0.55 : 0.9);
+    ctx.fillStyle = gold ? '#ffe39a' : '#d8f1ff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
-}
 
-// The side rooms stay open for a later element. Only a thin sill continues
-// the fence footing to the edge, and it stops above the slot rows.
-function drawShoulders(ctx, ratio) {
-  const kit = woodKit(ratio);
-  const margin = ARENA.sideMargin;
-  drawSill(ctx, 0, margin, kit);
-  drawSill(ctx, W - margin, margin, kit);
-}
-
-function drawSill(ctx, x, width, kit) {
-  const y = SLEEPER_Y + 2;
-  ctx.fillStyle = kit.light;
-  ctx.fillRect(x, y, width, 1);
-  ctx.fillStyle = kit.mid;
-  ctx.fillRect(x, y + 1, width, 2);
-  ctx.fillStyle = kit.edge;
-  ctx.fillRect(x, y + 3, width, 1);
-}
-
-function readSlots(state) {
-  const slots = [];
-  for (let i = 0; i < 10; i++) {
-    const geo = slotGeometry(i);
-    const unit = state && state.slots && state.slots[i] ? state.slots[i].unit : null;
-    slots.push({ ...geo, unit: unit || null });
+  // Illustrated Crescent / Blood Moon
+  const mx = 296;
+  const my = 20;
+  const moonGlow = ctx.createRadialGradient(mx, my, 4, mx, my, 32);
+  if (hasBoss) {
+    moonGlow.addColorStop(0, 'rgba(255, 110, 82, 0.46)');
+    moonGlow.addColorStop(1, 'rgba(255, 70, 50, 0)');
+  } else {
+    moonGlow.addColorStop(0, 'rgba(255, 236, 178, 0.38)');
+    moonGlow.addColorStop(1, 'rgba(255, 224, 150, 0)');
   }
-  return slots;
+  ctx.fillStyle = moonGlow;
+  ctx.beginPath();
+  ctx.arc(mx, my, 32, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = hasBoss ? '#ff7662' : '#fff0c4';
+  ctx.beginPath();
+  ctx.arc(mx, my, 9.5, 0.35 * Math.PI, 1.65 * Math.PI, false);
+  ctx.quadraticCurveTo(mx - 3.2, my, mx + Math.cos(0.35 * Math.PI) * 9.5, my + Math.sin(0.35 * Math.PI) * 9.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Distant Wasteland Mesas & City Ruin Silhouette
+  ctx.fillStyle = hasBoss ? '#2c0d16' : '#12222d';
+  ctx.beginPath();
+  ctx.moveTo(0, 66);
+  ctx.lineTo(0, 44);
+  ctx.lineTo(24, 34);
+  ctx.lineTo(48, 42);
+  ctx.lineTo(66, 30);
+  ctx.lineTo(84, 30);
+  ctx.lineTo(94, 46);
+  ctx.lineTo(132, 40);
+  ctx.lineTo(154, 46);
+  ctx.lineTo(192, 36);
+  ctx.lineTo(222, 44);
+  ctx.lineTo(254, 32);
+  ctx.lineTo(278, 32);
+  ctx.lineTo(294, 45);
+  ctx.lineTo(324, 35);
+  ctx.lineTo(360, 42);
+  ctx.lineTo(360, 66);
+  ctx.closePath();
+  ctx.fill();
+
+  // Subtle rim highlight along mesa ridge
+  ctx.strokeStyle = hasBoss ? 'rgba(255, 118, 96, 0.35)' : 'rgba(148, 214, 218, 0.25)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Broken Highway Overpass Entrance Lip (where zombies pour onto the road)
+  const lipGrad = ctx.createLinearGradient(0, 50, 0, 68);
+  lipGrad.addColorStop(0, hasBoss ? '#4d2228' : '#3d5258');
+  lipGrad.addColorStop(0.45, hasBoss ? '#311418' : '#26353a');
+  lipGrad.addColorStop(1, '#121a1e');
+  ctx.fillStyle = lipGrad;
+  ctx.fillRect(0, 52, W, 14);
+
+  // Guardrail posts & top bevel along entry cliff
+  ctx.fillStyle = hasBoss ? '#99484e' : '#7ea0a6';
+  ctx.fillRect(0, 52, W, 2);
+  ctx.strokeStyle = '#0d1418';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 65.5);
+  ctx.lineTo(W, 65.5);
+  ctx.stroke();
+  for (let px = 18; px < W; px += 36) {
+    ctx.fillStyle = '#1b262c';
+    ctx.fillRect(px, 46, 5, 8);
+    ctx.fillStyle = '#8fa9b0';
+    ctx.fillRect(px + 1, 46, 3, 2);
+  }
+
+  // Drifting stylized atmospheric mist wisps
+  ctx.save();
+  ctx.globalAlpha = hasBoss ? 0.16 : 0.12;
+  ctx.fillStyle = hasBoss ? '#ff8b78' : '#d2f0f5';
+  const drift = reduced ? 0 : (time * 9) % (W + 80);
+  for (let i = 0; i < 4; i++) {
+    const mxp = ((i * 105 + drift) % (W + 80)) - 40;
+    const myp = 20 + (i % 2) * 14;
+    ctx.beginPath();
+    ctx.ellipse(mxp, myp, 26, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
-function drawFenceTorches(ctx, ratio, time, reduced) {
-  if (ratio <= FENCE_RUIN) return;
-  const base = readAlpha(ctx);
-  shiftFenceArt(ctx, () => {
-    const lanterns = [86, 262];
-    for (let i = 0; i < lanterns.length; i++) {
-      const px = lanterns[i];
-      if (postFalls(px, ratio)) continue;
-      const flicker = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 5.2 + i * 2.1));
-      const warm = ratio <= FENCE_FAILING ? 0.55 : 1;
-      // Soft stepped lantern light halo casting upward onto approach ground (stays strictly inside [60..300] and above fence)
-      ctx.globalAlpha = base * (0.09 + flicker * 0.04) * warm;
-      ctx.fillStyle = '#f0a848';
-      ctx.fillRect(px - 18, 398, 44, 34);
-      ctx.globalAlpha = base * (0.14 + flicker * 0.05) * warm;
-      ctx.fillStyle = '#ffd578';
-      ctx.fillRect(px - 9, 408, 26, 20);
-      ctx.globalAlpha = base;
-      // Iron sconce bracket + glowing flame
-      ctx.fillStyle = '#4e5c64';
-      ctx.fillRect(px + 2, 412, 4, 6);
-      ctx.fillStyle = '#e26a28';
-      ctx.fillRect(px + 2, 409, 4, 4);
-      ctx.fillStyle = flicker > 0.45 ? '#fff3c4' : '#f0cb72';
-      ctx.fillRect(px + 3, 410 - (flicker > 0.7 ? 1 : 0), 2, 2);
+// =========================================================================
+// WASTELAND HIGHWAY BATTLEFIELD (y = 66 .. 496)
+// =========================================================================
+function drawHighwayField(ctx, time, reduced, hasBoss) {
+  const fieldTop = 65;
+  const fieldBot = FENCE_Y - 12; // 500
+  const fieldH = fieldBot - fieldTop;
+
+  // Desert sandy-slate rocky shoulders (x = 0..28 and x = 332..360)
+  const shoulderGrad = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+  shoulderGrad.addColorStop(0, hasBoss ? '#312122' : '#2a3330');
+  shoulderGrad.addColorStop(0.55, hasBoss ? '#3a2624' : '#323c36');
+  shoulderGrad.addColorStop(1, hasBoss ? '#2c1c1a' : '#252e2a');
+  ctx.fillStyle = shoulderGrad;
+  ctx.fillRect(0, fieldTop, W, fieldH);
+
+  // Main Cracked Asphalt Wasteland Highway (x = 26..334)
+  const roadLeft = 26;
+  const roadW = W - roadLeft * 2;
+  const roadGrad = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+  roadGrad.addColorStop(0, hasBoss ? '#2c2228' : '#28363c');
+  roadGrad.addColorStop(0.45, hasBoss ? '#34272d' : '#314248');
+  roadGrad.addColorStop(0.88, hasBoss ? '#2e2226' : '#2b3a40');
+  roadGrad.addColorStop(1, '#1e282d');
+  ctx.fillStyle = roadGrad;
+  ctx.fillRect(roadLeft, fieldTop, roadW, fieldH);
+
+  // Subtle center lighting crown on asphalt for depth
+  const crownGrad = ctx.createLinearGradient(roadLeft, 0, roadLeft + roadW, 0);
+  crownGrad.addColorStop(0, 'rgba(8, 14, 18, 0.34)');
+  crownGrad.addColorStop(0.22, 'rgba(130, 175, 185, 0.06)');
+  crownGrad.addColorStop(0.5, 'rgba(170, 215, 222, 0.11)');
+  crownGrad.addColorStop(0.78, 'rgba(130, 175, 185, 0.06)');
+  crownGrad.addColorStop(1, 'rgba(8, 14, 18, 0.34)');
+  ctx.fillStyle = crownGrad;
+  ctx.fillRect(roadLeft, fieldTop, roadW, fieldH);
+
+  // Concrete road curbs with clean cartoon ink borders
+  for (const cx of [roadLeft - 5, roadLeft + roadW - 1]) {
+    ctx.fillStyle = '#536468';
+    ctx.fillRect(cx, fieldTop, 6, fieldH);
+    ctx.fillStyle = '#7b8f94';
+    ctx.fillRect(cx + 1, fieldTop, 2, fieldH);
+    ctx.strokeStyle = '#121a1e';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(cx, fieldTop, 6, fieldH);
+    // Curb expansion joints
+    ctx.fillStyle = '#1b262b';
+    for (let jy = fieldTop + 26; jy < fieldBot - 10; jy += 44) {
+      ctx.fillRect(cx, jy, 6, 2);
     }
-  });
-  ctx.globalAlpha = base;
+  }
+
+  // Faded painted amber highway edge lines & center dashed road stripe
+  ctx.save();
+  ctx.fillStyle = hasBoss ? 'rgba(235, 142, 92, 0.24)' : 'rgba(232, 194, 108, 0.22)';
+  ctx.fillRect(roadLeft + 10, fieldTop + 4, 3, fieldH - 12);
+  ctx.fillRect(roadLeft + roadW - 13, fieldTop + 4, 3, fieldH - 12);
+
+  // Center dashed highway stripe
+  ctx.fillStyle = hasBoss ? 'rgba(248, 168, 96, 0.26)' : 'rgba(242, 206, 114, 0.24)';
+  for (let dy = fieldTop + 18; dy < fieldBot - 36; dy += 44) {
+    rRect(ctx, W / 2 - 2.5, dy, 5, 22, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Tire skid marks
+  ctx.save();
+  ctx.strokeStyle = 'rgba(14, 20, 24, 0.26)';
+  ctx.lineWidth = 3.2;
+  ctx.lineCap = 'round';
+  for (const [x1, y1, x2, y2] of SKID_MARKS) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Subtle scorch patches & asphalt cracks
+  for (const [sx, sy, rx, ry] of SCORCH_MARKS) {
+    const sg = ctx.createRadialGradient(sx, sy, 1, sx, sy, rx);
+    sg.addColorStop(0, 'rgba(14, 16, 18, 0.34)');
+    sg.addColorStop(1, 'rgba(14, 16, 18, 0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(15, 22, 26, 0.45)';
+  ctx.lineWidth = 1.4;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const poly of CRACKS) {
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Pebbles along highway edges
+  for (const [px, py, rx, ry] of PEBBLES) {
+    ctx.fillStyle = '#182226';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 1, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5a6c70';
+    ctx.beginPath();
+    ctx.ellipse(px, py, rx * 0.85, ry * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Animated wasteland grass tufts along outer shoulders
+  for (let i = 0; i < SCRUBS.length; i++) {
+    const [gx, gy, sc] = SCRUBS[i];
+    const sway = reduced ? 0 : Math.sin(time * 2.1 + i * 1.4) * 2.0;
+    ctx.save();
+    ctx.strokeStyle = '#131d19';
+    ctx.lineWidth = 3.2 * sc;
+    ctx.lineCap = 'round';
+    for (const [dx, h] of [[-4, 8], [0, 11], [4, 7]]) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.quadraticCurveTo(gx + dx * 0.6 + sway * 0.5, gy - h * 0.55, gx + dx + sway, gy - h * sc);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#538a5e';
+    ctx.lineWidth = 1.8 * sc;
+    for (const [dx, h] of [[-4, 8], [0, 11], [4, 7]]) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.quadraticCurveTo(gx + dx * 0.6 + sway * 0.5, gy - h * 0.55, gx + dx + sway, gy - h * sc);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Painted yellow kill-zone hazard line just ahead of the steel wall
+  const dangerY = FENCE_Y - 22;
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = '#f8d260';
+  for (let hx = 34; hx < W - 38; hx += 22) {
+    ctx.beginPath();
+    ctx.moveTo(hx, dangerY);
+    ctx.lineTo(hx + 11, dangerY);
+    ctx.lineTo(hx + 7, dangerY + 5);
+    ctx.lineTo(hx - 4, dangerY + 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Warm twin floodlight beams illuminating the wall kill-zone (smoothly feathered to 0)
+  const sweep = reduced ? 0 : Math.sin(time * 0.9) * 14;
+  const beamTopY = FENCE_Y - 225;
+  for (const [lx, dir] of [[86, -1], [274, 1]]) {
+    const beamGrad = ctx.createLinearGradient(lx, FENCE_Y - 12, lx, beamTopY);
+    beamGrad.addColorStop(0, hasBoss ? 'rgba(255, 204, 134, 0.24)' : 'rgba(255, 236, 168, 0.20)');
+    beamGrad.addColorStop(0.45, hasBoss ? 'rgba(255, 166, 106, 0.09)' : 'rgba(250, 228, 152, 0.08)');
+    beamGrad.addColorStop(0.85, 'rgba(255, 224, 148, 0.015)');
+    beamGrad.addColorStop(1, 'rgba(255, 224, 148, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(lx - 9, FENCE_Y - 12);
+    ctx.lineTo(lx + 9, FENCE_Y - 12);
+    ctx.lineTo(lx + 76 + sweep * dir, beamTopY);
+    ctx.lineTo(lx - 76 + sweep * dir, beamTopY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Boss wave subtle crimson atmosphere wash across road
+  if (hasBoss) {
+    const pulse = reduced ? 0.14 : 0.11 + 0.05 * Math.sin(time * 2.2);
+    const wash = ctx.createLinearGradient(0, fieldTop, 0, fieldBot);
+    wash.addColorStop(0, `rgba(210, 44, 58, ${pulse})`);
+    wash.addColorStop(1, 'rgba(180, 32, 42, 0.03)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, fieldTop, W, fieldH);
+  }
+}
+
+// =========================================================================
+// ILLUSTRATED ARMORED STEEL FORTRESS WALL (y = 492 .. 536)
+// =========================================================================
+function drawFortressWall(ctx, ratio, time, reduced) {
+  const wallTop = FENCE_Y - 18; // 494
+  const wallH = 38;
+  const damaged = ratio <= 0.65;
+  const critical = ratio <= 0.35;
+
+  // Ground drop shadow under wall front
+  const shGrad = ctx.createLinearGradient(0, wallTop - 10, 0, wallTop + 2);
+  shGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  shGrad.addColorStop(1, 'rgba(0, 0, 0, 0.52)');
+  ctx.fillStyle = shGrad;
+  ctx.fillRect(0, wallTop - 10, W, 12);
+
+  // Main beveled steel wall body
+  const bodyGrad = ctx.createLinearGradient(0, wallTop, 0, wallTop + wallH);
+  if (critical) {
+    bodyGrad.addColorStop(0, '#967c76');
+    bodyGrad.addColorStop(0.24, '#6a524d');
+    bodyGrad.addColorStop(0.76, '#483532');
+    bodyGrad.addColorStop(1, '#261a18');
+  } else if (damaged) {
+    bodyGrad.addColorStop(0, '#b8c4cc');
+    bodyGrad.addColorStop(0.24, '#7d8e98');
+    bodyGrad.addColorStop(0.76, '#4f5e68');
+    bodyGrad.addColorStop(1, '#28323a');
+  } else {
+    bodyGrad.addColorStop(0, '#dce8f0');
+    bodyGrad.addColorStop(0.22, '#9ab0be');
+    bodyGrad.addColorStop(0.75, '#5b707e');
+    bodyGrad.addColorStop(1, '#2d3b45');
+  }
+
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(0, wallTop, W, wallH);
+
+  // Razor-wire defensive coils along top parapet
+  ctx.save();
+  ctx.strokeStyle = critical ? '#5a443e' : '#32424c';
+  ctx.lineWidth = 1.8;
+  for (let wx = 8; wx < W - 4; wx += 14) {
+    ctx.beginPath();
+    ctx.ellipse(wx, wallTop - 1, 7, 4.2, -0.25, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = critical ? '#a68b80' : '#d2e2ec';
+  ctx.lineWidth = 0.9;
+  for (let wx = 8; wx < W - 4; wx += 14) {
+    ctx.beginPath();
+    ctx.ellipse(wx, wallTop - 1.5, 6.2, 3.6, -0.25, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Bright beveled top armor lip
+  ctx.fillStyle = critical ? '#c49d90' : '#eef7fc';
+  ctx.fillRect(0, wallTop, W, 3.2);
+  ctx.fillStyle = '#12191e';
+  ctx.fillRect(0, wallTop + 3.2, W, 1.5);
+
+  // Armor panel vertical seams & steel rivets
+  const panelW = 36;
+  for (let px = 0; px < W; px += panelW) {
+    ctx.fillStyle = '#172128';
+    ctx.fillRect(px, wallTop + 4, 2, wallH - 6);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+    ctx.fillRect(px + 2, wallTop + 5, 1.2, wallH - 8);
+    // Corner rivets
+    for (const [rx, ry] of [[px + 6, wallTop + 9], [px + panelW - 6, wallTop + 9], [px + 6, wallTop + 21], [px + panelW - 6, wallTop + 21]]) {
+      ctx.fillStyle = '#19232a';
+      ctx.beginPath();
+      ctx.arc(rx, ry + 0.7, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = critical ? '#a88c82' : '#d8e6ee';
+      ctx.beginPath();
+      ctx.arc(rx, ry, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Caution Yellow-Black Diagonal Hazard Band along lower steel girder
+  const bandY = wallTop + 25;
+  const bandH = 8;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, bandY, W, bandH);
+  ctx.clip();
+  ctx.fillStyle = '#1b2226';
+  ctx.fillRect(0, bandY, W, bandH);
+  ctx.fillStyle = critical ? '#d96b38' : damaged ? '#d8a63c' : '#f4c84c';
+  for (let sx = -10; sx < W + 16; sx += 18) {
+    ctx.beginPath();
+    ctx.moveTo(sx, bandY + bandH);
+    ctx.lineTo(sx + 8, bandY + bandH);
+    ctx.lineTo(sx + 14, bandY);
+    ctx.lineTo(sx + 6, bandY);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.strokeStyle = '#10161c';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(0, bandY);
+  ctx.lineTo(W, bandY);
+  ctx.moveTo(0, bandY + bandH);
+  ctx.lineTo(W, bandY + bandH);
+  ctx.stroke();
+
+  // Heavy Reinforced Steel Buttress Pylons + Floodlight Turret Lamps
+  const pylons = [14, 86, 274, 346];
+  for (const cx of pylons) {
+    const pw = 18;
+    const ph = 42;
+    const px = cx - pw / 2;
+    const py = wallTop - 4;
+    const pg = ctx.createLinearGradient(px, py, px + pw, py);
+    pg.addColorStop(0, '#3e4f5a');
+    pg.addColorStop(0.45, '#9ab0be');
+    pg.addColorStop(1, '#2b3740');
+    rRect(ctx, px, py, pw, ph, 4);
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.strokeStyle = '#10161c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Lamp / warning beacon on inner pylons (86 & 274)
+    if (cx === 86 || cx === 274) {
+      const blink = critical ? (0.45 + 0.55 * Math.sin(time * 9)) : 1;
+      ctx.save();
+      ctx.globalAlpha = blink;
+      ctx.fillStyle = critical ? '#ff4a32' : '#ffe896';
+      ctx.beginPath();
+      ctx.arc(cx, py + 9, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#141c22';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Progressive Damage: Jagged Vector Cracks, Scorch & Glowing Embers
+  if (damaged) {
+    const cracks = [
+      [[52, wallTop + 4], [58, wallTop + 14], [53, wallTop + 23]],
+      [[148, wallTop + 3], [142, wallTop + 13], [150, wallTop + 24]],
+      [[216, wallTop + 5], [224, wallTop + 15], [218, wallTop + 25]],
+      [[308, wallTop + 4], [302, wallTop + 16], [310, wallTop + 24]],
+    ];
+    const shown = critical ? cracks.length : 2;
+    ctx.save();
+    ctx.strokeStyle = '#100c0b';
+    ctx.lineWidth = critical ? 2.4 : 1.8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < shown; i++) {
+      const pts = cracks[i];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+      ctx.stroke();
+      if (critical) {
+        ctx.strokeStyle = '#ff6a28';
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+        ctx.strokeStyle = '#100c0b';
+        ctx.lineWidth = 2.4;
+      }
+    }
+    ctx.restore();
+  }
+
+  // Critical smoking wisps
+  if (critical && !reduced) {
+    for (let i = 0; i < 3; i++) {
+      const sx = 64 + i * 116;
+      const cycle = (time * 0.9 + i * 0.37) % 1;
+      const sy = wallTop + 8 - cycle * 24;
+      ctx.save();
+      ctx.globalAlpha = (1 - cycle) * 0.36;
+      ctx.fillStyle = '#201818';
+      ctx.beginPath();
+      ctx.arc(sx + Math.sin(time * 3 + i) * 4, sy, 4 + cycle * 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Clean dark ink bottom outline of the steel wall
+  ctx.strokeStyle = '#0e1419';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(0, wallTop + wallH);
+  ctx.lineTo(W, wallTop + wallH);
+  ctx.stroke();
+}
+
+// =========================================================================
+// GLOWING ENERGY WALL SHIELD (AEGIS IMMUNITY)
+// =========================================================================
+function drawWallShield(ctx, count, time, reduced) {
+  if (!(count > 0)) return;
+  const pulse = reduced ? 0.85 : 0.72 + 0.28 * Math.sin(time * 4.2);
+  const y = FENCE_Y - 22;
+
+  ctx.save();
+  // Translucent curved plasma barrier band
+  const shieldGrad = ctx.createLinearGradient(0, y - 10, 0, y + 8);
+  shieldGrad.addColorStop(0, 'rgba(72, 224, 255, 0)');
+  shieldGrad.addColorStop(0.5, `rgba(92, 232, 255, ${0.26 * pulse})`);
+  shieldGrad.addColorStop(1, 'rgba(42, 168, 220, 0.06)');
+  ctx.fillStyle = shieldGrad;
+  ctx.fillRect(0, y - 10, W, 18);
+
+  // Crisp glowing energy ridge arc
+  ctx.strokeStyle = `rgba(154, 246, 255, ${0.85 * pulse})`;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(6, y + 3);
+  ctx.quadraticCurveTo(W / 2, y - 8, W - 6, y + 3);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.75 * pulse})`;
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.moveTo(16, y + 1);
+  ctx.quadraticCurveTo(W / 2, y - 7, W - 16, y + 1);
+  ctx.stroke();
+
+  // Shield Charge Pips centered above wall
+  const shown = Math.min(8, Math.floor(count));
+  const spacing = 12;
+  const startX = W / 2 - ((shown - 1) * spacing) / 2;
+  for (let i = 0; i < shown; i++) {
+    const px = startX + i * spacing;
+    const py = y - 6;
+    ctx.fillStyle = '#0e2c3a';
+    ctx.beginPath();
+    ctx.moveTo(px, py - 5);
+    ctx.lineTo(px + 4.5, py - 2);
+    ctx.lineTo(px + 3.5, py + 3);
+    ctx.lineTo(px, py + 5.5);
+    ctx.lineTo(px - 3.5, py + 3);
+    ctx.lineTo(px - 4.5, py - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#8ef4ff';
+    ctx.beginPath();
+    ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// =========================================================================
+// CENTRAL COMMANDER BASTION DECK (y = 532 .. 640) — ZERO 2×5 GRID!
+// =========================================================================
+function drawCommanderDeck(ctx, state, time, reduced) {
+  const deckTop = FENCE_Y + 20; // 532
+  const deckH = H - deckTop;
+
+  // Heavy fortified steel-concrete bastion deck floor
+  const deckGrad = ctx.createLinearGradient(0, deckTop, 0, H);
+  deckGrad.addColorStop(0, '#222d34');
+  deckGrad.addColorStop(0.42, '#1a242b');
+  deckGrad.addColorStop(1, '#10181d');
+  ctx.fillStyle = deckGrad;
+  ctx.fillRect(0, deckTop, W, deckH);
+
+  // Subtle metallic decking seams
+  ctx.save();
+  ctx.strokeStyle = 'rgba(130, 174, 190, 0.08)';
+  ctx.lineWidth = 1;
+  for (let y = deckTop + 18; y < H; y += 22) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  for (let x = 45; x < W; x += 90) {
+    ctx.beginPath();
+    ctx.moveTo(x, deckTop);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Power conduits running from Center Platform to Flanking Auto-Skill Pods
+  const cx = W / 2; // 180
+  const cy = ARENA.frontY + 4; // 564
+  const upg = heroUpgrades(state);
+  const hasFire = (upg.napalm || 0) > 0 || (upg.shrapnel || 0) > 0;
+  const hasFrost = (upg.cryo_barrage || 0) > 0 || (upg.frostbite || 0) > 0;
+  const hasTech = (upg.orbital_beam || 0) > 0 || (upg.ricochet || 0) > 0;
+  const hasCar = (upg.armored_car || 0) > 0;
+
+  ctx.save();
+  ctx.strokeStyle = '#10171d';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(74, 574);
+  ctx.lineTo(cx, cy + 4);
+  ctx.lineTo(286, 574);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#334652';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  // Animated energy pulses along conduits when Auto Skills are unlocked
+  if (hasFire || hasFrost || hasTech || hasCar) {
+    const glow = reduced ? 0.7 : 0.45 + 0.45 * Math.sin(time * 4.5);
+    ctx.strokeStyle = hasTech ? `rgba(100, 240, 255, ${glow})` : hasFire ? `rgba(255, 140, 56, ${glow})` : `rgba(246, 206, 100, ${glow})`;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Decorative Flanking Auto-Skill Support Pods (Left & Right of Hero)
+  for (const [px, accent, lit] of [
+    [74, hasFire ? '#ff7c32' : '#f0c454', hasFire || hasCar],
+    [286, hasFrost ? '#78ecff' : '#64e2ff', hasFrost || hasTech]
+  ]) {
+    const py = 574;
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 7, 22, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hexagonal steel launcher pad
+    const padGrad = ctx.createLinearGradient(px - 18, py - 10, px + 18, py + 10);
+    padGrad.addColorStop(0, '#506470');
+    padGrad.addColorStop(1, '#26333c');
+    rRect(ctx, px - 18, py - 10, 36, 20, 7);
+    ctx.fillStyle = padGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#0f161c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Glowing core LED
+    const pulse = reduced ? 0.85 : 0.55 + 0.45 * Math.sin(time * 3.8 + px);
+    ctx.fillStyle = lit ? accent : '#394b56';
+    ctx.save();
+    ctx.globalAlpha = lit ? pulse : 0.65;
+    ctx.beginPath();
+    ctx.arc(px, py, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = '#12191e';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
+  // Ammo Crates tucked cleanly on outer deck flanks
+  for (const [bx, by] of [[18, 564], [316, 564]]) {
+    rRect(ctx, bx, by, 26, 16, 3);
+    ctx.fillStyle = '#485a46';
+    ctx.fill();
+    ctx.strokeStyle = '#111815';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.fillStyle = '#6c8468';
+    ctx.fillRect(bx + 2, by + 2, 22, 4);
+    ctx.fillStyle = '#e8c45e';
+    ctx.fillRect(bx + 10, by + 7, 6, 3);
+  }
+
+  // HEROIC CENTRAL COMMANDER GUNNERY PLATFORM (Anchors fixed center Wall Gunner!)
+  const platRx = 46;
+  const platRy = 22;
+
+  // Soft golden ambient halo
+  const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, 56);
+  halo.addColorStop(0, 'rgba(246, 204, 96, 0.22)');
+  halo.addColorStop(1, 'rgba(246, 204, 96, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 58, 30, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer beveled steel base ellipse
+  ctx.fillStyle = '#10171d';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, platRx + 2, platRy + 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const outerGrad = ctx.createLinearGradient(cx, cy - platRy, cx, cy + platRy);
+  outerGrad.addColorStop(0, '#6a808e');
+  outerGrad.addColorStop(0.5, '#3b4c57');
+  outerGrad.addColorStop(1, '#212c34');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx, platRy, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#0e1419';
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  // Inner dark recessed steel deck with pulsing gold tactical ring
+  ctx.fillStyle = '#1b262e';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx - 8, platRy - 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const ringAlpha = reduced ? 0.78 : 0.58 + 0.34 * Math.sin(time * 2.8);
+  ctx.save();
+  ctx.strokeStyle = `rgba(248, 206, 94, ${ringAlpha})`;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, platRx - 7, platRy - 4, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Four directional brass chevron ticks around the central platform
+  ctx.fillStyle = '#f2c864';
+  for (const [tx, ty] of [[cx, cy - platRy + 2], [cx, cy + platRy - 2], [cx - platRx + 5, cy], [cx + platRx - 5, cy]]) {
+    ctx.beginPath();
+    ctx.arc(tx, ty, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// =========================================================================
+// MINIMAL-CTX FALLBACK (for unit tests with fillRect-only stubs)
+// =========================================================================
+function drawMinimalFallback(ctx, ratio) {
+  ctx.fillStyle = '#1a2c38';
+  ctx.fillRect(0, 0, W, 65);
+  ctx.fillStyle = '#2a3940';
+  ctx.fillRect(0, 65, W, FENCE_Y - 75);
+  ctx.fillStyle = ratio > 0.35 ? '#8ca0ae' : '#6c4d48';
+  ctx.fillRect(0, FENCE_Y - 12, W, 28);
+  ctx.fillStyle = '#1b262e';
+  ctx.fillRect(0, FENCE_Y + 16, W, H - (FENCE_Y + 16));
 }
 
 function drawWorld(ctx, state, options) {
   if (!ctx || typeof ctx.fillRect !== 'function') return;
-  const opts = options && typeof options === 'object' ? options : {};
+  const opts = options || {};
   const time = Number.isFinite(opts.time) ? opts.time : 0;
-  const reduced = !!opts.reducedMotion;
-  const phase = state && typeof state.phase === 'string' ? state.phase : 'playing';
+  const reduced = Boolean(opts.reducedMotion || opts.settings?.reducedMotion);
   const ratio = fenceRatio(state);
-  const canStack = typeof ctx.save === 'function' && typeof ctx.restore === 'function';
-  if (canStack) ctx.save();
+  const hasBoss = directorHasBoss(state);
+  const wallImmunity = Number.isFinite(state?.wallImmunity) ? Math.max(0, Math.floor(state.wallImmunity)) : 0;
+
+  if (!isRichCtx(ctx)) {
+    drawMinimalFallback(ctx, ratio);
+    return;
+  }
+
+  ctx.save();
   try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* ignored */ }
-    if (typeof ctx.beginPath === 'function' && typeof ctx.rect === 'function' && typeof ctx.clip === 'function') {
-      ctx.beginPath();
-      ctx.rect(0, 0, W, H);
-      ctx.clip();
-    }
-    const cached = backdropCanvas();
-    if (cached && typeof ctx.drawImage === 'function') ctx.drawImage(cached, 0, 0, W, H);
-    else paintBackdrop(ctx);
-    if (directorHasBoss(state)) drawBossWave(ctx, time, reduced);
-    drawStars(ctx, time, reduced);
-    drawMist(ctx, time, reduced);
-    drawGrass(ctx, time, reduced);
-    drawFence(ctx, ratio, Number(state?.wallImmunity) || 0, time, reduced);
-    drawFenceTorches(ctx, ratio, time, reduced);
-    drawBanner(ctx, ratio, time, reduced, phase);
-    drawEmbers(ctx, ratio, time, reduced);
-    drawShoulders(ctx, ratio);
-    for (const slot of readSlots(state)) drawSlot(ctx, slot, time, reduced, phase);
-    drawTies(ctx, 0);
-    drawTies(ctx, 1);
+    drawSkyAndHorizon(ctx, time, reduced, hasBoss);
+    drawHighwayField(ctx, time, reduced, hasBoss);
+    drawFortressWall(ctx, ratio, time, reduced);
+    drawWallShield(ctx, wallImmunity, time, reduced);
+    drawCommanderDeck(ctx, state, time, reduced);
   } finally {
-    if (canStack) ctx.restore();
+    ctx.restore();
   }
 }
 
-function iconRows(id, rows) {
-  if (!Array.isArray(rows) || rows.length !== 16) throw new Error(`Fencefall icon "${id}" must have 16 rows`);
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (typeof row !== 'string' || row.length !== 16) throw new Error(`Fencefall icon "${id}" row ${i} must be 16 wide`);
-    for (const ch of row) {
-      if (ch !== '.' && !PAL[ch]) throw new Error(`Fencefall icon "${id}" swatch "${ch}" is unknown`);
-    }
-  }
-  if (!rows.some(row => [...row].some(ch => ch !== '.'))) throw new Error(`Fencefall icon "${id}" is blank`);
-  return rows;
-}
-
-const ICONS = {
-  bolt: iconRows('bolt', [
-    '................',
-    '.......yy.......',
-    '......ywwy......',
-    '......yw.y......',
-    '.......yy.......',
-    '.......mm.......',
-    '.......mm.......',
-    '.......mm.......',
-    '......mMMm......',
-    '......mmmm......',
-    '.......mm.......',
-    '......m..m......',
-    '.......mm.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  fire: iconRows('fire', [
-    '................',
-    '.......r........',
-    '......rrr.......',
-    '.....rrfrr......',
-    '.....rfyfr......',
-    '....rrfyyrr.....',
-    '....rfyyyfr.....',
-    '...rrfyyyyrr....',
-    '...rfyyyyyfr....',
-    '....rfyyyRr.....',
-    '.....rRRRr......',
-    '......RRR.......',
-    '.......R........',
-    '................',
-    '................',
-    '................'
-  ]),
-  frost: iconRows('frost', [
-    '................',
-    '.......C........',
-    '......aCa.......',
-    '.....aCCCa......',
-    '....aCCwwCa.....',
-    '...aCCwCCwCa....',
-    '....aCwwCCa.....',
-    '.....aCCCa......',
-    '......aCa.......',
-    '.......C........',
-    '......a.a.......',
-    '.....a...a......',
-    '......ccc.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  lightning: iconRows('lightning', [
-    '................',
-    '......yy........',
-    '.....yyy........',
-    '.....fyy........',
-    '....yy..........',
-    '...yyy..........',
-    '..yyyyyy........',
-    '......fy........',
-    '.....yy.........',
-    '....yy..........',
-    '...fy...........',
-    '..yy............',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  poison: iconRows('poison', [
-    '................',
-    '.......b........',
-    '......bbb.......',
-    '.....bBBBb......',
-    '.....bbwbb......',
-    '....bbbBbbb.....',
-    '....bbBBBbb.....',
-    '.....bBBBb......',
-    '......bBb.......',
-    '.......B........',
-    '......b.b.......',
-    '.......b........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  support: iconRows('support', [
-    '................',
-    '.......g........',
-    '......ggg.......',
-    '.......m........',
-    '......mym.......',
-    '.....myyym......',
-    '.....mywym......',
-    '.....myyym......',
-    '......mym.......',
-    '.......m........',
-    '......mmm.......',
-    '.......m........',
-    '......m.m.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  hero: iconRows('hero', [
-    '................',
-    '......yyy.......',
-    '.....ygggy......',
-    '....ygwwwgy.....',
-    '....gwkkwkg.....',
-    '....gwwwwkg.....',
-    '.....gwwgg......',
-    '......mmm.......',
-    '.....mmmmm......',
-    '....mmgggmm.....',
-    '....mmmmmmm.....',
-    '.....mgggm......',
-    '......mmm.......',
-    '.......m........',
-    '................',
-    '................'
-  ]),
-  hybrid: iconRows('hybrid', [
-    '................',
-    '....aa..........',
-    '...aCCa.........',
-    '..aCCCCa....r...',
-    '..aCwCCa...rr...',
-    '...aCCa...rfr...',
-    '..........rfr...',
-    '....gg...rr.....',
-    '...gGGg.........',
-    '..gGGGGg........',
-    '..gGwGGg........',
-    '...gGGg.........',
-    '....gg..........',
-    '................',
-    '................',
-    '................'
-  ]),
-  tower: iconRows('tower', [
-    '................',
-    '....m......m....',
-    '....mm....mm....',
-    '....mymmmym.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '......mmm.......',
-    '......mym.......',
-    '......mmm.......',
-    '.....mmmmm......',
-    '....mmmmmmm.....',
-    '....MMMMMMM.....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  burn: iconRows('burn', [
-    '................',
-    '........r.......',
-    '.......rrr......',
-    '......rfyr......',
-    '......ryyr......',
-    '.......rR.......',
-    '....RRRRRRR.....',
-    '....kkkkkkk.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  slow: iconRows('slow', [
-    '................',
-    '......CCCC......',
-    '.....C....C.....',
-    '.....C.ww.C.....',
-    '......C..C......',
-    '.......CC.......',
-    '......C..C......',
-    '.....C....C.....',
-    '.....C.ww.C.....',
-    '......CCCC......',
-    '.......mm.......',
-    '......m..m......',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  stun: iconRows('stun', [
-    '................',
-    '.......y........',
-    '......y.y.......',
-    '...y...y...y....',
-    '....y.yyy.y.....',
-    '.....yyyyy......',
-    '...yyyyyyyyy....',
-    '.....yyyyy......',
-    '....y.yyy.y.....',
-    '...y...y...y....',
-    '......y.y.......',
-    '.......y........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  brittle: iconRows('brittle', [
-    '................',
-    '......mmmm......',
-    '.....mwwwwm.....',
-    '....mw.w..wm....',
-    '....mw..w..m....',
-    '....m..w...m....',
-    '....m...w.wm....',
-    '.....m.w.wm.....',
-    '......mmmm......',
-    '.......dd.......',
-    '......d..d......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  fence: iconRows('fence', [
-    '................',
-    '...m.m.m.m.m.m..',
-    '...mmmmmmmmmmm..',
-    '...me.e.e.e.m...',
-    '...me.e.e.e.m...',
-    '...me.e.e.e.m...',
-    '...mmmmmmmmmmm..',
-    '...m........m...',
-    '..mmm......mmm..',
-    '..m.m......m.m..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  hp: iconRows('hp', [
-    '................',
-    '................',
-    '.....rr..rr.....',
-    '....rrrrrrrr....',
-    '....rrwwrrrr....',
-    '....rrrrrrrr....',
-    '.....rrrrrr.....',
-    '......rrrr......',
-    '.......rr.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  xp: iconRows('xp', [
-    '................',
-    '.......y........',
-    '......yyy.......',
-    '.....yyyyy......',
-    '....yywywyy.....',
-    '...yyyyyyyyy....',
-    '..yyyyyyyyyyyy..',
-    '......yyy.......',
-    '......yyy.......',
-    '......yyy.......',
-    '.....yyyyy......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  wave: iconRows('wave', [
-    '................',
-    '..m....m....m...',
-    '.mm...mm...mm...',
-    'm.m..m.m..m.m...',
-    'mmm..mmm..mmm...',
-    '................',
-    '...m....m....m..',
-    '..mm...mm...mm..',
-    '.m.m..m.m..m.m..',
-    '.mmm..mmm..mmm..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  crit: iconRows('crit', [
-    '................',
-    '.......y........',
-    '..y...yyy...y...',
-    '...y.yyyyy.y....',
-    '....yyyyyyy.....',
-    '.yyyyywywyyyyy..',
-    '....yyyyyyy.....',
-    '...y.yyyyy.y....',
-    '..y...yyy...y...',
-    '.......y........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  damage: iconRows('damage', [
-    '................',
-    '.............g..',
-    '............gg..',
-    '...........gwg..',
-    '..........g.g...',
-    '.........g.g....',
-    '........g.g.....',
-    '.......g.g......',
-    '......g.g.......',
-    '.....g.g........',
-    '....mmm.........',
-    '.....m..........',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  range: iconRows('range', [
-    'gg..........gg..',
-    'g............g..',
-    'g............g..',
-    '................',
-    '................',
-    '.......aa.......',
-    '......a..a......',
-    '......a..a......',
-    '.......aa.......',
-    '................',
-    '................',
-    'g............g..',
-    'g............g..',
-    'gg..........gg..',
-    '................',
-    '................'
-  ]),
-  haste: iconRows('haste', [
-    '................',
-    '......ggg.......',
-    '.....g...g......',
-    '....gg...gg.....',
-    '...gg..g..gg....',
-    '..gg..ggg..gg...',
-    '......ggg.......',
-    '.....gg.gg......',
-    '....gg...gg.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  rank: iconRows('rank', [
-    '................',
-    '.......m........',
-    '......mmm.......',
-    '.....m...m......',
-    '................',
-    '......yyy.......',
-    '.....yyyyy......',
-    '....yy...yy.....',
-    '................',
-    '.....ggggg......',
-    '....ggggggg.....',
-    '...gg.....gg....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  merge: iconRows('merge', [
-    '................',
-    '...a......gg....',
-    '....a....g..g...',
-    '.aaaaaaa.g..g...',
-    '....a....gggg...',
-    '...a......gg....',
-    '.........g..g...',
-    '.......ggggggg..',
-    '.........g..g...',
-    '..........gg....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  pause: iconRows('pause', [
-    '................',
-    '................',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '....mmm..mmm....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  play: iconRows('play', [
-    '................',
-    '................',
-    '....m...........',
-    '....mm..........',
-    '....mmm.........',
-    '....mmmm........',
-    '....mmmmm.......',
-    '....mmmm........',
-    '....mmm.........',
-    '....mm..........',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  victory: iconRows('victory', [
-    '................',
-    '.......g........',
-    '......gyg.......',
-    '.....gyyyg......',
-    '....gyyyyyyg....',
-    '...gyyyyyyyyg...',
-    '....gyyyyyyg....',
-    '.....gyyyg......',
-    '......gyg.......',
-    '.......g........',
-    '......mmm.......',
-    '.....mmmmm......',
-    '......mmm.......',
-    '................',
-    '................',
-    '................'
-  ]),
-  defeat: iconRows('defeat', [
-    '................',
-    '......kkkk......',
-    '.....kwwwk......',
-    '....kwywywk.....',
-    '....kwkkkwk.....',
-    '....kwwwwwk.....',
-    '.....kwwkk......',
-    '......kkk.......',
-    '......k.k.......',
-    '.....k...k......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  weapon: iconRows('weapon', [
-    '................',
-    '.......m........',
-    '......mm........',
-    '......mm........',
-    '.....mwm........',
-    '.....mm.........',
-    '....mm..........',
-    '....mm..........',
-    '...mmm..........',
-    '..myym..........',
-    '...mm...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  charm: iconRows('charm', [
-    '................',
-    '.......g........',
-    '......g.g.......',
-    '......gyg.......',
-    '.......g........',
-    '......y.y.......',
-    '.......g........',
-    '......g.g.......',
-    '.......g........',
-    '......g.g.......',
-    '.......g........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  armor: iconRows('armor', [
-    '................',
-    '.....mmmmm......',
-    '....mmmmmmm.....',
-    '....mmmwmmm.....',
-    '....mmmmmmm.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '......mmm.......',
-    '......m.m.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  vitality: iconRows('vitality', [
-    '................',
-    '.....rr..rr.....',
-    '....rrrrrrrr....',
-    '....rrryyrrr....',
-    '.....rryyrr.....',
-    '......rrr.......',
-    '.......r........',
-    '......mmm.......',
-    '......mym.......',
-    '......mmm.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  locked: iconRows('locked', [
-    '................',
-    '......mmm.......',
-    '.....m...m......',
-    '.....m...m......',
-    '....mmmmmmm.....',
-    '....mmmywmm.....',
-    '....mmmmmmm.....',
-    '....mmmmmmm.....',
-    '.....mmmmm......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  plus: iconRows('plus', [
-    '................',
-    '................',
-    '.......gg.......',
-    '.......gg.......',
-    '.......gg.......',
-    '....gggggggg....',
-    '....gggggggg....',
-    '.......gg.......',
-    '.......gg.......',
-    '.......gg.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  warning: iconRows('warning', [
-    '................',
-    '.......y........',
-    '......yyy.......',
-    '.....yy.yy......',
-    '....yy.k.yy.....',
-    '...yy.yyy.yy....',
-    '..yy.yyyyy.yy...',
-    '.yy.yy.k.yy.yy..',
-    '.yyyyyyyyyyyyy..',
-    '....MMMMMMM.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  currency: iconRows('currency', [
-    '................',
-    '................',
-    '......gggg......',
-    '.....g....g.....',
-    '.....g.yy.g.....',
-    '.....g.yy.g.....',
-    '.....g....g.....',
-    '......gggg......',
-    '.......GG.......',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  move: iconRows('move', [
-    '................',
-    '.......a........',
-    '......aaa.......',
-    '.....aa.aa......',
-    '....aa...aa.....',
-    '.......a........',
-    '.......a........',
-    '.......a........',
-    '....ggggggg.....',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  sound: iconRows('sound', [
-    '................',
-    '....m...........',
-    '....mm..y.......',
-    '.mmmmm..y.y.....',
-    '.m.mmm..y...y...',
-    '.m.mmm..y.y.....',
-    '.mmmmm..y.......',
-    '....mm..........',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  mute: iconRows('mute', [
-    '................',
-    '....m......r....',
-    '....mm....r.....',
-    '.mmmmm...r......',
-    '.m.mmm..r.......',
-    '.m.mmm...r......',
-    '.mmmmm....r.....',
-    '....mm.....r....',
-    '....m...........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  splash: iconRows('splash', [
-    '................',
-    '.......r........',
-    '..r...rrr...r...',
-    '...r.rrfrr.r....',
-    '....rrrrrrr.....',
-    '.rrrrrryyrrrrr..',
-    '....rrrrrrr.....',
-    '...r.rrfrr.r....',
-    '..r...rrr...r...',
-    '.......r........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  chain: iconRows('chain', [
-    '................',
-    '....mm..........',
-    '...m..m.........',
-    '...m..m...mm....',
-    '....mm...m..m...',
-    '........m..m....',
-    '....mm...mm.....',
-    '...m..m.........',
-    '...m..m...mm....',
-    '....mm...m..m...',
-    '........m..m....',
-    '.........mm.....',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  pierce: iconRows('pierce', [
-    '................',
-    '.............y..',
-    '....MMMM....yy..',
-    '....MMMM...y.y..',
-    '....MMMM....yy..',
-    '....MMMM.....y..',
-    '....MMMM........',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ]),
-  surge: iconRows('surge', [
-    '................',
-    '................',
-    '....CCCCCCCC....',
-    '..CCaaaaaaaaCC..',
-    '.Caa........aaC.',
-    '....CCCCCCCC....',
-    '..CCaawwwwaaCC..',
-    '.Caa........aaC.',
-    '....yyyyyyyy....',
-    '..yy........yy..',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '................'
-  ])
-};
-
-const ACCENTS = ['g', 'y', 'r', 'f', 'a', 'C', 'b', 'p', 'm', 'e'];
-
-function fallbackRows(id) {
-  const h = hashString(id || '?');
-  const a = ACCENTS[h % ACCENTS.length];
-  const b = ACCENTS[(h >>> 5) % ACCENTS.length];
-  const diamond = [
-    '................',
-    '................',
-    '......mmmm......',
-    '.....m....m.....',
-    '....m......m....',
-    '...m........m...',
-    '...m...12...m...',
-    '...m..1221..m...',
-    '...m...12...m...',
-    '...m........m...',
-    '....m......m....',
-    '.....m....m.....',
-    '......mmmm......',
-    '.......MM.......',
-    '................',
-    '................'
-  ];
-  return diamond.map(row => row.split('1').join(a).split('2').join(b));
-}
-
-function normalizeId(id) {
-  return String(id ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function rowsFor(id) {
-  const key = normalizeId(id);
-  if (ICONS[key]) return ICONS[key];
-  const alias = ALIASES[key];
-  if (alias && ICONS[alias]) return ICONS[alias];
-  return fallbackRows(key || '?');
-}
-
+/** Crisp vector icon drawer (kept exported for compatibility). */
 function drawIcon(ctx, id, x, y, size = 16) {
   if (!ctx || typeof ctx.fillRect !== 'function') return;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  const box = Number.isFinite(size) && size > 0 ? size : 16;
-  const scale = box / 16;
-  const rows = rowsFor(id);
-  const canStack = typeof ctx.save === 'function' && typeof ctx.restore === 'function';
-  if (canStack) ctx.save();
-  try {
-    try { ctx.imageSmoothingEnabled = false; } catch { /* ignored */ }
-    for (let row = 0; row < 16; row++) {
-      const line = rows[row];
-      for (let col = 0; col < 16; col++) {
-        const color = PAL[line[col]];
-        if (!color) continue;
-        ctx.fillStyle = color;
-        ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
-      }
-    }
-  } finally {
-    if (canStack) ctx.restore();
-  }
-}
+  const s = Math.max(8, Number.isFinite(size) ? size : 16);
+  const cx = x + s / 2;
+  const cy = y + s / 2;
+  const r = s * 0.38;
+  const key = String(id || '').toLowerCase();
 
-function drawPadCorners(ctx, left, top, w, h, color, arm = 5, thick = 1) {
-  ctx.fillStyle = color;
-  ctx.fillRect(left, top, arm, thick);
-  ctx.fillRect(left, top, thick, arm);
-  ctx.fillRect(left + w - arm, top, arm, thick);
-  ctx.fillRect(left + w - thick, top, thick, arm);
-  ctx.fillRect(left, top + h - thick, arm, thick);
-  ctx.fillRect(left, top + h - arm, thick, arm);
-  ctx.fillRect(left + w - arm, top + h - thick, arm, thick);
-  ctx.fillRect(left + w - thick, top + h - arm, thick, arm);
-}
+  if (!isRichCtx(ctx)) {
+    ctx.fillStyle = '#f0cb72';
+    ctx.fillRect(x + 2, y + 2, Math.max(2, s - 4), Math.max(2, s - 4));
+    return;
+  }
 
-function drawBulwarkSprite(ctx, cx, cy, ratio) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const damaged = ratio <= 0.65;
-  const critical = ratio <= 0.32;
-  // Ground shadow
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
-  ctx.fillRect(x - 24, y + 6, 48, 5);
-  // 5 sharpened iron stakes protruding upward
-  const spikes = [-19, -10, -1, 8, 17];
-  for (let i = 0; i < spikes.length; i++) {
-    if (critical && (i === 1 || i === 3)) continue;
-    const sx = x + spikes[i];
-    const tall = damaged && i === 2 ? 4 : 7;
-    ctx.fillStyle = '#33424a';
-    ctx.fillRect(sx, y - 8 - tall, 4, tall + 2);
-    ctx.fillStyle = '#a8bec6';
-    ctx.fillRect(sx + 1, y - 8 - tall, 2, tall);
-    ctx.fillStyle = '#f2f7f8';
-    ctx.fillRect(sx + 1, y - 8 - tall, 1, 2);
-  }
-  // Main reinforced timber-and-steel barricade body
-  ctx.fillStyle = '#181410';
-  ctx.fillRect(x - 23, y - 9, 46, 17);
-  ctx.fillStyle = critical ? '#4e3528' : damaged ? '#6e4c34' : '#8d6440';
-  ctx.fillRect(x - 22, y - 8, 44, 15);
-  // Vertical plank seams & top edge highlight
-  ctx.fillStyle = critical ? '#6a4836' : '#c09866';
-  ctx.fillRect(x - 22, y - 8, 44, 2);
-  ctx.fillStyle = '#2c1e14';
-  for (let px = -14; px <= 14; px += 7) ctx.fillRect(x + px, y - 8, 1, 15);
-  // Twin forged-iron cross straps + rivets
-  ctx.fillStyle = '#405058';
-  ctx.fillRect(x - 23, y - 5, 46, 4);
-  ctx.fillRect(x - 23, y + 2, 46, 4);
-  ctx.fillStyle = '#8fa4ae';
-  ctx.fillRect(x - 22, y - 5, 44, 1);
-  ctx.fillRect(x - 22, y + 2, 44, 1);
-  ctx.fillStyle = '#eef4f6';
-  for (let rx = -18; rx <= 18; rx += 9) {
-    ctx.fillRect(x + rx, y - 4, 2, 1);
-    ctx.fillRect(x + rx, y + 3, 2, 1);
-  }
-  // Progressive battle cracks
-  if (damaged) {
-    ctx.fillStyle = '#120d0a';
-    ctx.fillRect(x - 8, y - 7, 2, 6);
-    ctx.fillRect(x - 6, y - 2, 2, 5);
-    ctx.fillRect(x + 9, y - 6, 2, 7);
-  }
-  if (critical) {
-    ctx.fillStyle = '#120d0a';
-    ctx.fillRect(x - 16, y - 8, 5, 5);
-    ctx.fillRect(x + 4, y - 8, 4, 6);
-    ctx.fillStyle = '#e06038';
-    ctx.fillRect(x - 7, y - 1, 1, 2);
-    ctx.fillRect(x + 10, y - 2, 1, 2);
-  }
-}
-
-function drawSpikesSprite(ctx, cx, cy, time, reduced) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const glint = reduced ? -1 : Math.floor(time * 4) % 5;
-  // Iron base grate recessed on the ground
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.55)';
-  ctx.fillRect(x - 23, y - 6, 46, 15);
-  ctx.fillStyle = '#242e34';
-  ctx.fillRect(x - 22, y - 5, 44, 13);
-  ctx.fillStyle = '#404f58';
-  ctx.fillRect(x - 22, y - 5, 44, 1);
-  ctx.fillRect(x - 22, y + 7, 44, 1);
-  // Back row of forged steel spikes
-  for (let i = 0; i < 5; i++) {
-    const sx = x - 19 + i * 9;
-    ctx.fillStyle = '#38464e';
-    ctx.fillRect(sx, y - 6, 6, 6);
-    ctx.fillStyle = '#8b9ba4';
-    ctx.fillRect(sx + 1, y - 9, 4, 7);
-    ctx.fillStyle = i === glint ? '#ffffff' : '#dce8ee';
-    ctx.fillRect(sx + 2, y - 11, 2, 5);
-  }
-  // Front staggered row of crimson-tipped thorn spikes
-  for (let i = 0; i < 4; i++) {
-    const sx = x - 15 + i * 9;
-    ctx.fillStyle = '#283238';
-    ctx.fillRect(sx, y, 6, 6);
-    ctx.fillStyle = '#a0b2bc';
-    ctx.fillRect(sx + 1, y - 3, 4, 7);
-    ctx.fillStyle = (i + 2) % 5 === glint ? '#fff4d0' : '#f2eee4';
-    ctx.fillRect(sx + 2, y - 5, 2, 4);
-    ctx.fillStyle = '#c4583c';
-    ctx.fillRect(sx + 2, y - 5, 2, 1);
-  }
-}
-
-function drawFlareSprite(ctx, cx, cy, time, reduced) {
-  const x = Math.round(cx);
-  const y = Math.round(cy);
-  const pulse = reduced ? 0.5 : (0.5 + 0.5 * Math.sin(time * 4.5));
-  const sway = reduced ? 0 : (Math.sin(time * 8) > 0 ? 1 : 0);
-  // Warm ground illumination pool
   ctx.save();
-  ctx.globalAlpha = 0.14 + pulse * 0.06;
-  ctx.fillStyle = '#f0cb72';
-  ctx.beginPath();
-  ctx.arc(x, y, 28 + pulse * 4, 0, Math.PI * 2);
-  ctx.fill();
-  // Translucent reveal detection ring (115px matches simulation reveal radius)
-  ctx.globalAlpha = 0.22 + pulse * 0.08;
-  ctx.strokeStyle = '#f7d578';
-  ctx.lineWidth = 1;
-  ctx.setLineDash?.([4, 4]);
-  ctx.beginPath();
-  ctx.arc(x, y, 115, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash?.([]);
-  ctx.restore();
+  try {
+    rRect(ctx, x + 0.5, y + 0.5, s - 1, s - 1, s * 0.22);
+    ctx.fillStyle = '#132028';
+    ctx.fill();
+    ctx.strokeStyle = '#486772';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
-  // Shadow & iron tripod legs
-  ctx.fillStyle = 'rgba(8, 12, 14, 0.5)';
-  ctx.fillRect(x - 10, y + 6, 20, 4);
-  ctx.fillStyle = '#2a343a';
-  ctx.fillRect(x - 8, y + 2, 3, 7);
-  ctx.fillRect(x + 5, y + 2, 3, 7);
-  ctx.fillRect(x - 1, y + 3, 3, 6);
-  // Ornate brass brazier bowl
-  ctx.fillStyle = '#5a421e';
-  ctx.fillRect(x - 9, y - 4, 18, 7);
-  ctx.fillStyle = '#c89b46';
-  ctx.fillRect(x - 8, y - 5, 16, 5);
-  ctx.fillStyle = '#f0cb72';
-  ctx.fillRect(x - 9, y - 5, 18, 2);
-  ctx.fillStyle = '#8a3418';
-  ctx.fillRect(x - 6, y - 6, 12, 2);
-  // Dancing radiant solar flame
-  ctx.fillStyle = '#e86824';
-  ctx.fillRect(x - 5 + sway, y - 12, 10, 7);
-  ctx.fillStyle = '#ffc84a';
-  ctx.fillRect(x - 4 + sway, y - 15, 8, 8);
-  ctx.fillStyle = '#fff9d6';
-  ctx.fillRect(x - 2 + sway, y - 17, 4, 7);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x - 1 + sway, y - 14, 2, 3);
+    const color = key.includes('fire') || key.includes('napalm') || key.includes('burn') ? '#ff6c30'
+      : key.includes('frost') || key.includes('cryo') || key.includes('slow') ? '#7ce8ff'
+      : key.includes('light') || key.includes('ricochet') || key.includes('stun') ? '#ffe14a'
+      : key.includes('poison') ? '#7dce6a'
+      : key.includes('orbital') || key.includes('beam') ? '#54f0ff'
+      : '#f0cb72';
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+  } finally {
+    ctx.restore();
+  }
 }
-
 
 };
 __ff_factories["src/shared.js"] = function(__ff_exports, __ff_load) {
@@ -14742,11 +13250,11 @@ function combatStats(unit,state) {
   return stats;
 }
 const SW_BASE_CD = Object.freeze({
-  napalm: [7.2, 5.8, 4.6],
-  armored_car: [9.4, 7.6, 6.0],
-  cryo_barrage: [7.6, 6.2, 4.9],
-  orbital_beam: [8.2, 6.7, 5.3],
-  ricochet: [7.4, 6.0, 4.8],
+  napalm: [7.0, 5.6, 4.4, 3.5],
+  armored_car: [9.0, 7.2, 5.8, 4.6],
+  cryo_barrage: [7.4, 6.0, 4.8, 3.8],
+  orbital_beam: [8.0, 6.5, 5.2, 4.1],
+  ricochet: [7.2, 5.8, 4.6, 3.6],
 });
 
 function superweaponCooldown(id, rank, haste = 0) {
@@ -15073,44 +13581,32 @@ function updateCombat(state, dt) {
 __ff_factories["src/systems/drafts.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["draftXpCost"] = draftXpCost;
-__ff_exports["findTowerOnBoard"] = findTowerOnBoard;
-__ff_exports["findAutoDeploySlot"] = findAutoDeploySlot;
 __ff_exports["generateDraft"] = generateDraft;
 __ff_exports["rerollDraft"] = rerollDraft;
 __ff_exports["updateDrafts"] = updateDrafts;
 __ff_exports["chooseDraft"] = chooseDraft;
 const __ff_m0 = __ff_load("src/systems/hero.js");
-const __ff_m1 = __ff_load("src/data/towers.js");
-const __ff_m2 = __ff_load("src/data/expeditions.js");
-const __ff_m3 = __ff_load("src/shared.js");
+const __ff_m1 = __ff_load("src/data/expeditions.js");
+const __ff_m2 = __ff_load("src/shared.js");
 const HERO_UPGRADES = __ff_m0["HERO_UPGRADES"];
+const isAutoSkill = __ff_m0["isAutoSkill"];
 const availableHeroUpgradeIds = __ff_m0["availableHeroUpgradeIds"];
 const applyHeroUpgrade = __ff_m0["applyHeroUpgrade"];
-const TOWERS = __ff_m1["TOWERS"];
-const RANK_SCALE = __ff_m1["RANK_SCALE"];
-const EXPEDITIONS = __ff_m2["EXPEDITIONS"];
-const AUTO_DEPLOY_ORDER = __ff_m3["AUTO_DEPLOY_ORDER"];
-const BASE_TYPES = __ff_m3["BASE_TYPES"];
-const clone = __ff_m3["clone"];
-const createUnit = __ff_m3["createUnit"];
-const emit = __ff_m3["emit"];
-const random = __ff_m3["random"];
+const EXPEDITIONS = __ff_m1["EXPEDITIONS"];
+const clone = __ff_m2["clone"];
+const emit = __ff_m2["emit"];
+const random = __ff_m2["random"];
 /**
- * Three-choice roguelike drafts (Fencefall v4).
+ * Three-choice roguelike drafts (Fencefall v5 — Pure Solo Gunner).
  *
  * One tap resolves immediately:
- * - Hero weapon & auto super-weapon evolutions level up directly.
- * - Base bastion turrets auto-deploy to the best open wall slot on 1st pick,
- *   and directly level up (Lv.1 -> Lv.4) on repeat picks — zero merge puzzle,
- *   zero separate placement phase.
- * - Draft rerolls use simple `rerollsLeft` charges (no secondary energy currency).
+ * - Every 3-of-1 draft offers ONLY Hero Gun Mods (枪械强化) and Auto Skills (自动技能).
+ * - Side turrets & 2×5 slot grid are removed; the Gunner holds the center wall position.
+ * - Draft rerolls spend `rerollsLeft` charges.
  */
 
 
 
-
-
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 /** XP required to open the next draft after `opened` drafts have already been granted. */
 function draftXpCost(opened) {
@@ -15118,36 +13614,17 @@ function draftXpCost(opened) {
   return 6 + 4 * n;
 }
 
-function findTowerOnBoard(state, type) {
-  if (!state || !Array.isArray(state.slots)) return null;
-  for (const slot of state.slots) {
-    if (slot?.unit && slot.unit.kind === 'tower' && slot.unit.type === type) return slot;
-  }
-  return null;
-}
-
-function findAutoDeploySlot(state) {
-  if (!state || !Array.isArray(state.slots)) return -1;
-  for (const idx of AUTO_DEPLOY_ORDER) {
-    if (state.slots[idx] && !state.slots[idx].unit) return idx;
-  }
-  for (let i = 0; i < state.slots.length; i++) {
-    if (state.slots[i] && !state.slots[i].unit) return i;
-  }
-  return -1;
-}
-
 function generateDraft(state) {
   if (!state || !Array.isArray(state.slots)) {
-    return BASE_TYPES.slice(0, 3).map((type) => towerCard(state, type));
+    return ['volley', 'napalm', 'cadence'].map((id) => heroCard(state, id));
   }
   const heroIds = new Set(availableUpgradeIds(state));
   const cards = allValidCards(state, heroIds);
-  let picked = uniqueCards(selectThree(state, cards)).filter((card) => cardValid(state, card, heroIds));
+  let picked = uniqueCards(selectThree(state, cards)).filter((card) => cardValid(card, heroIds));
   if (picked.length < 3) {
     const used = new Set(picked.map((card) => card.id));
     for (const card of cards) {
-      if (used.has(card.id) || !cardValid(state, card, heroIds)) continue;
+      if (used.has(card.id) || !cardValid(card, heroIds)) continue;
       picked.push(card);
       used.add(card.id);
       if (picked.length === 3) break;
@@ -15196,7 +13673,7 @@ function updateDrafts(state) {
     const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
     state.draftLevel = opened + 1;
     const stagePace = EXPEDITIONS[state.expedition]?.xpPace;
-    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.6);
+    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.72);
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;
@@ -15253,54 +13730,6 @@ function chooseDraft(state, index) {
     return ok();
   }
 
-  if (option.kind === 'tower') {
-    if (typeof option.type !== 'string' || !BASE_TYPES.includes(option.type)) return fail('unknown_tower');
-    const existing = findTowerOnBoard(state, option.type);
-    if (existing?.unit) {
-      if (existing.unit.rank >= RANK_SCALE.maxRank) return fail('max_rank');
-      existing.unit.rank += 1;
-      state.draft = null;
-      state.phase = 'playing';
-      if (!Array.isArray(state.events)) state.events = [];
-      emit(state, 'upgrade_tower', {
-        towerType: existing.unit.type,
-        rank: existing.unit.rank,
-        slot: existing.index,
-        x: existing.x,
-        y: existing.y,
-        id: existing.unit.id
-      });
-      emit(state, 'ui', {
-        action: 'upgrade_tower',
-        towerType: existing.unit.type,
-        rank: existing.unit.rank,
-        slot: existing.index,
-        x: existing.x,
-        y: existing.y,
-        id: existing.unit.id
-      });
-      return ok();
-    }
-    const slotIndex = findAutoDeploySlot(state);
-    if (slotIndex < 0) return fail('no_slot');
-    const slot = state.slots[slotIndex];
-    const unit = createUnit(state, option.type, 1, 'tower');
-    slot.unit = unit;
-    state.draft = null;
-    state.phase = 'playing';
-    if (!Array.isArray(state.events)) state.events = [];
-    emit(state, 'ui', {
-      action: 'place',
-      towerType: unit.type,
-      rank: 1,
-      x: slot.x,
-      y: slot.y,
-      slot: slotIndex,
-      id: unit.id
-    });
-    return ok();
-  }
-
   return fail('bad_option');
 }
 
@@ -15349,12 +13778,6 @@ function findHero(state) {
   return null;
 }
 
-function countEmpty(state) {
-  let count = 0;
-  for (const slot of state.slots || []) if (slot && !slot.unit) count += 1;
-  return count;
-}
-
 function defeatPending(state) {
   return !!(state.fence && Number.isFinite(state.fence.hp) && state.fence.hp <= 0);
 }
@@ -15366,10 +13789,6 @@ function victoryPending(state) {
     if (enemy && enemy.dead !== true && Number.isFinite(enemy.hp) && enemy.hp > 0) return false;
   }
   return true;
-}
-
-function catalogTowerTypes() {
-  return BASE_TYPES.filter((type) => TOWERS && TOWERS[type]);
 }
 
 function upgradeSpec(id) {
@@ -15393,21 +13812,6 @@ function availableUpgradeIds(state) {
   return hero ? availableHeroUpgradeIds(hero) : [];
 }
 
-function towerCard(state, type) {
-  const existing = state ? findTowerOnBoard(state, type)?.unit : null;
-  const currentRank = existing ? existing.rank : 0;
-  const nextRank = currentRank + 1;
-  return {
-    id: `tower:${type}`,
-    kind: 'tower',
-    type,
-    action: existing ? 'upgrade' : 'deploy',
-    rank: currentRank,
-    nextRank,
-    cap: RANK_SCALE.maxRank
-  };
-}
-
 function heroCard(state, id) {
   const spec = upgradeSpec(id);
   const cap = readCap(spec);
@@ -15416,7 +13820,7 @@ function heroCard(state, id) {
     id: `hero_upgrade:${id}`,
     kind: 'hero_upgrade',
     upgradeId: id,
-    superweapon: SUPERWEAPON_IDS.has(id)
+    superweapon: isAutoSkill(id)
   };
   if (cap != null) card.cap = cap;
   card.nextLevel = level + 1;
@@ -15425,29 +13829,20 @@ function heroCard(state, id) {
 }
 
 function allValidCards(state, heroIds) {
-  const cards = [];
-  const hasEmpty = countEmpty(state) > 0;
-  for (const type of catalogTowerTypes()) {
-    const existing = findTowerOnBoard(state, type)?.unit;
-    if (existing) {
-      if (existing.rank < RANK_SCALE.maxRank) cards.push(towerCard(state, type));
-    } else if (hasEmpty) {
-      cards.push(towerCard(state, type));
-    }
+  const mainIds = [];
+  for (const id of heroIds) {
+    if (id !== 'overclock') mainIds.push(id);
   }
-  for (const id of heroIds) cards.push(heroCard(state, id));
+  const cards = mainIds.map((id) => heroCard(state, id));
+  if (cards.length < 3 && heroIds.has('overclock')) {
+    cards.push(heroCard(state, 'overclock'));
+  }
   return uniqueCards(cards);
 }
 
-function cardValid(state, card, heroIds) {
+function cardValid(card, heroIds) {
   if (!card || typeof card !== 'object' || typeof card.id !== 'string' || !card.id) return false;
-  if (card.kind === 'hero_upgrade') {
-    return typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
-  }
-  if (card.kind !== 'tower' || typeof card.type !== 'string' || !BASE_TYPES.includes(card.type)) return false;
-  const existing = findTowerOnBoard(state, card.type)?.unit;
-  if (existing) return existing.rank < RANK_SCALE.maxRank;
-  return countEmpty(state) > 0;
+  return card.kind === 'hero_upgrade' && typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
 }
 
 function uniqueCards(cards) {
@@ -15462,9 +13857,9 @@ function uniqueCards(cards) {
 }
 
 function selectThree(state, cards) {
-  const towers = shuffle(state, cards.filter((c) => c.kind === 'tower'));
-  const superweapons = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && c.superweapon));
-  const coreHero = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && !c.superweapon));
+  const skills = shuffle(state, cards.filter((c) => c.superweapon));
+  const gunMods = shuffle(state, cards.filter((c) => !c.superweapon && c.upgradeId !== 'overclock'));
+  const fallback = cards.filter((c) => c.upgradeId === 'overclock');
   const picked = [];
   const take = (pool) => {
     while (pool.length) {
@@ -15476,12 +13871,12 @@ function selectThree(state, cards) {
     }
     return false;
   };
-  // BangBang-first mix: 1 Super-Weapon/Evolution + 1 Core Hero or Super-Weapon + 1 Bastion Turret (deploy/level-up)
-  take(superweapons);
-  if (!take(coreHero)) take(superweapons);
-  take(towers);
-  const rest = shuffle(state, [...superweapons, ...coreHero, ...towers]);
+  // Always mix Auto Skills (自动技能) and Gun Mods (枪械强化): 1–2 of each whenever available
+  take(skills);
+  take(gunMods);
+  const rest = shuffle(state, [...skills, ...gunMods]);
   while (picked.length < 3 && rest.length) take(rest);
+  while (picked.length < 3 && fallback.length) take(fallback);
   return picked.slice(0, 3);
 }
 
@@ -15499,6 +13894,7 @@ function shuffle(state, items) {
 };
 __ff_factories["src/systems/hero.js"] = function(__ff_exports, __ff_load) {
 "use strict";
+__ff_exports["isAutoSkill"] = isAutoSkill;
 __ff_exports["availableHeroUpgradeIds"] = availableHeroUpgradeIds;
 __ff_exports["getHeroStats"] = getHeroStats;
 __ff_exports["applyHeroUpgrade"] = applyHeroUpgrade;
@@ -15510,20 +13906,37 @@ const getProfileBonuses = __ff_m1["getProfileBonuses"];
 
 
 const HERO_BASE = Object.freeze({
-  damage: 14,
-  interval: 0.65,
-  range: 320,
-  critChance: 0.08,
+  damage: 18,
+  interval: 0.5,
+  range: 390,
+  critChance: 0.1,
   critMultiplier: 1.75,
-  projectileSpeed: 540,
+  projectileSpeed: 580,
   splash: 0,
   chain: 0,
-  chainRange: 70,
+  chainRange: 75,
   pierce: 0,
   mechanics: Object.freeze([]),
 });
 __ff_exports["HERO_BASE"] = HERO_BASE;
 
+
+const AUTO_SKILL_IDS = Object.freeze([
+  'split_shot',
+  'ricochet',
+  'napalm',
+  'armored_car',
+  'cryo_barrage',
+  'orbital_beam',
+]);
+__ff_exports["AUTO_SKILL_IDS"] = AUTO_SKILL_IDS;
+
+
+const AUTO_SKILL_SET = new Set(AUTO_SKILL_IDS);
+
+function isAutoSkill(id) {
+  return typeof id === 'string' && AUTO_SKILL_SET.has(id);
+}
 
 const BONUS_LIMITS = Object.freeze({
   damage: [-0.5, 2.5],
@@ -15538,24 +13951,128 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function upgrade(id, cap, en, zh, info, detail, effect) {
-  return deepFreeze({id,cap,name:{en,zh},description:{en:'Hero · '+info,zh:'英雄 · '+detail},effect});
+function upgrade(id, cap, category, en, zh, info, detail, effect) {
+  return deepFreeze({
+    id,
+    cap,
+    category,
+    name: {en, zh},
+    description: {en: info, zh: detail},
+    effect,
+  });
 }
+
 const HERO_UPGRADES = deepFreeze({
-  volley:upgrade('volley',2,'Split Volley','齐射扩容','Fire at one additional target per rank.','每级多射击一个目标。',{multishot:1}),
-  strike:upgrade('strike',4,'Heavy Bore','重膛装药','Gain 5 damage. Critical hits push enemies back 18 px.','伤害 +5，暴击击退非首领 18 像素。',{damageAdd:5}),
-  cadence:upgrade('cadence',4,'Rapid Loader','速射机匣','Gain 14% attack speed.','攻速 +14%。',{haste:0.14}),
-  pierce:upgrade('pierce',2,'Armor Core','穿甲弹芯','Pierce one additional target and ignore 25% armor per rank.','每级穿透 +1 名敌人，并忽略 25% 护甲。',{pierce:1}),
-  shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds. Rank 2+ leaves scorch fire.','爆炸弹溅射并灼烧敌群 2.6 秒，2 级起留下灼烧火坑。',{splash:30,burn:{dps:4,duration:2.6}}),
-  frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take. Rank 2+ shatters on death.','减速目标并使其易伤，2 级起击杀触发冰霜碎裂。',{brittle:{power:0.1,duration:2.6}}),
-  focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 100 wall HP, 40% surge power, and +1 Aegis wall immunity.','城墙生命 +100，冲击波威力 +40%，城墙免疫 +1 次。',{fence:100}),
-  split_shot:upgrade('split_shot',3,'Split Shrapnel','子母分裂弹','Gain 3 damage. Hits burst into 2/3/4 piercing shrapnel bolts.','伤害 +3，命中后向四周分裂出 2/3/4 发贯穿子母弹。',{damageAdd:3}),
-  ricochet:upgrade('ricochet',3,'EM Ricochet','电磁穿刺','Gain 2 damage. Shots chain to 2/3/4 foes and call periodic EM sky-strikes.','伤害 +2，子弹电弧弹射 2/3/4 名敌人，并周期降下自动雷击。',{damageAdd:2}),
-  napalm:upgrade('napalm',3,'Napalm Barrage','燃油弹火海','Gain 24 px blast radius and auto-lob Napalm canisters leaving a fire sea.','溅射范围 +24 像素，周期自动空投燃油弹形成大范围持续火海。',{splash:24}),
-  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 wall HP and periodically dispatch an Armored Sweeper truck up the densest lane.','城墙生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
-  cryo_barrage:upgrade('cryo_barrage',3,'Glacial Barrage','干冰连发柱','Apply brittle (+10%/rank) and periodically launch a sweeping fan of 5/7/9 piercing ice shards.','附加易伤（+10%/级），周期自动齐射 5/7/9 道贯穿干冰柱击退尸潮。',{brittle:{power:0.1,duration:2.6}}),
-  orbital_beam:upgrade('orbital_beam',3,'Orbital Laser','高能射线','Gain +0.25x crit multiplier and periodically fire a vertical piercing laser beam.','暴击倍率 +0.25，周期自动发射纵贯战场的高能激光柱重创整列与首领。',{critMultiplier:0.25})
+  // --- 枪械强化 (Gun Mods) ---
+  volley: upgrade(
+    'volley', 3, 'gun',
+    'Multi-Volley', '齐射弹道',
+    'Fire at +1 additional zombie every shot.',
+    '每次开火额外多打 1 个目标，弹幕铺满全屏。',
+    {multishot: 1}
+  ),
+  strike: upgrade(
+    'strike', 5, 'gun',
+    'Heavy Rounds', '重膛高爆弹',
+    'Gun damage +6. Crits knock back non-boss zombies.',
+    '子弹伤害 +6，暴击时将普通僵尸震退 18 像素。',
+    {damageAdd: 6}
+  ),
+  cadence: upgrade(
+    'cadence', 5, 'gun',
+    'Rapid Fire', '极速连射',
+    'Fire rate +16% for faster bullet streams.',
+    '枪械攻速 +16%，弹幕倾泻更密集。',
+    {haste: 0.16}
+  ),
+  pierce: upgrade(
+    'pierce', 4, 'gun',
+    'Armor Pierce', '穿甲弹芯',
+    'Bullets pierce +1 zombie and ignore 25% armor.',
+    '子弹穿透 +1 名僵尸，并无视 25% 护甲。',
+    {pierce: 1}
+  ),
+  shrapnel: upgrade(
+    'shrapnel', 4, 'gun',
+    'Flame Rounds', '烈焰爆裂弹',
+    'Explosive hits burn zombies for 2.6s. Lv.2+ leaves burning patches.',
+    '子弹命中爆炸溅射并灼烧 2.6 秒，2 级起留下地面火坑。',
+    {splash: 30, burn: {dps: 5, duration: 2.6}}
+  ),
+  frostbite: upgrade(
+    'frostbite', 4, 'gun',
+    'Frost Rounds', '急冻减速弹',
+    'Slows zombies and boosts damage taken. Lv.2+ shatters on kill.',
+    '减速僵尸并附加易伤，2 级起击杀触发范围冰爆。',
+    {brittle: {power: 0.1, duration: 2.6}}
+  ),
+  focus: upgrade(
+    'focus', 4, 'gun',
+    'Deadeye Crit', '致命暴击',
+    'Crit chance +10% & crit damage +30%. Lv.2+ executes low-HP foes.',
+    '暴击率 +10%、暴击伤害 +30%，2 级起解锁残血斩杀。',
+    {critChance: 0.1, critMultiplier: 0.3}
+  ),
+  bastion: upgrade(
+    'bastion', 3, 'gun',
+    'Fortified Wall', '钢铁城墙',
+    'Wall HP +120, shockwave +40%, and +1 wall shield block.',
+    '城墙血量 +120，危急冲击波 +40%，城墙免伤护盾 +1 次。',
+    {fence: 120}
+  ),
+
+  // --- 自动技能 (Auto Skills) ---
+  split_shot: upgrade(
+    'split_shot', 4, 'skill',
+    'Split Shrapnel', '子母分裂弹',
+    'Damage +3. Hits auto-burst into 2/3/4/5 piercing shrapnel shots.',
+    '子弹伤害 +3，命中后自动向四周分裂出 2/3/4/5 发贯穿弹片。',
+    {damageAdd: 3}
+  ),
+  ricochet: upgrade(
+    'ricochet', 4, 'skill',
+    'EM Chain Strike', '电磁连锁雷',
+    'Bullets arc to 2/3/4/5 zombies and auto-call stunning sky lightning.',
+    '子弹电弧弹射 2/3/4/5 名僵尸，并定时自动降下麻痹天雷。',
+    {damageAdd: 2}
+  ),
+  napalm: upgrade(
+    'napalm', 4, 'skill',
+    'Napalm Fire Sea', '燃油弹火海',
+    'Blast radius +24. Periodically auto-drops Napalm creating a burning sea.',
+    '溅射范围 +24，定时自动空投燃油弹形成大范围持续火海。',
+    {splash: 24}
+  ),
+  armored_car: upgrade(
+    'armored_car', 4, 'skill',
+    'Armored Sweeper', '重装装甲车',
+    'Wall HP +80. Periodically auto-sends an armored truck crushing a lane.',
+    '城墙血量 +80，定时自动派出装甲车碾压并击退整列尸潮。',
+    {fence: 80}
+  ),
+  cryo_barrage: upgrade(
+    'cryo_barrage', 4, 'skill',
+    'Glacial Barrage', '干冰齐射柱',
+    'Adds brittle. Periodically auto-fires a fan of 5/7/9/11 piercing ice spears.',
+    '附加易伤，定时自动齐射 5/7/9/11 道贯穿冰柱横扫减速尸潮。',
+    {brittle: {power: 0.1, duration: 2.6}}
+  ),
+  orbital_beam: upgrade(
+    'orbital_beam', 4, 'skill',
+    'Orbital Laser', '高能激光柱',
+    'Crit damage +25%. Periodically auto-fires a vertical beam melting elites & bosses.',
+    '暴击伤害 +25%，定时自动发射纵贯战场的激光柱重创精英与首领。',
+    {critMultiplier: 0.25}
+  ),
+
+  // --- Repeatable Late-Game Fallback ---
+  overclock: upgrade(
+    'overclock', 20, 'gun',
+    'Firepower Overclock', '火力超频',
+    'Gun and auto-skill damage +12% per rank.',
+    '枪械与所有自动技能伤害额外 +12%，持续叠加火力。',
+    {damage: 0.12}
+  ),
 });
 __ff_exports["HERO_UPGRADES"] = HERO_UPGRADES;
 
@@ -15626,25 +14143,28 @@ function availableHeroUpgradeIds(unit) {
  */
 function getHeroStats(unit, state) {
   const levels = upgradeLevels(unit);
-  const {strike, cadence, pierce, volley, shrapnel, frostbite, focus, split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam} = levels;
+  const {
+    strike, cadence, pierce, volley, shrapnel, frostbite, focus,
+    split_shot, ricochet, napalm, armored_car, cryo_barrage, orbital_beam, overclock
+  } = levels;
   const bonus = readBonuses(state);
   const rawBonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot) || {};
   const extraPierce = Math.max(0, Math.floor(finiteOr(rawBonus.heroPierce, 0)));
   const stats = {
     ...HERO_BASE,
     mechanics: [],
-    damage: round4((HERO_BASE.damage + 5 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage)),
-    interval: round4(HERO_BASE.interval / (1 + 0.14 * cadence + bonus.haste)),
+    damage: round4((HERO_BASE.damage + 6 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage + 0.12 * overclock)),
+    interval: round4(HERO_BASE.interval / (1 + 0.16 * cadence + bonus.haste)),
     range: HERO_BASE.range + bonus.range,
     critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
     critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
-    fence: levels.bastion * 100 + armored_car * 60,
+    fence: levels.bastion * 120 + armored_car * 80,
     pierce: pierce + extraPierce,
-    armorPen: pierce * 0.25,
+    armorPen: Math.min(0.95, pierce * 0.25),
     critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
     multishot: volley,
     chain: ricochet ? 1 + ricochet : 0,
-    chainRange: ricochet ? 105 : HERO_BASE.chainRange,
+    chainRange: ricochet ? 112 : HERO_BASE.chainRange,
     split: split_shot ? 1 + split_shot : 0,
     shrapnelRank: shrapnel,
     frostbiteRank: frostbite,
@@ -15659,10 +14179,10 @@ function getHeroStats(unit, state) {
     stats.splash = (shrapnel ? 20 + 10 * shrapnel : 0) + 24 * napalm;
   }
   if (shrapnel) {
-    stats.burn = {dps: 4 * shrapnel, duration: 2.6};
+    stats.burn = {dps: 5 * shrapnel, duration: 2.6};
   }
   if (frostbite) {
-    stats.slow = {factor: round4(0.82 - 0.06 * frostbite), duration: 2.2};
+    stats.slow = {factor: round4(Math.max(0.5, 0.82 - 0.06 * frostbite)), duration: 2.2};
   }
   if (frostbite || cryo_barrage) {
     stats.brittle = {power: round4(0.1 * frostbite + 0.1 * cryo_barrage), duration: 2.6};
@@ -15701,13 +14221,13 @@ function applyHeroUpgrade(state, id) {
   try {
     upgrades[id] = current + 1;
     if (id === 'bastion' && state.fence) {
-      state.fence.maxHp += 100;
-      state.fence.hp += 100;
+      state.fence.maxHp += 120;
+      state.fence.hp += 120;
       state.wallImmunity = Math.max(0, Math.floor(state.wallImmunity || 0)) + 1;
     }
     if (id === 'armored_car' && state.fence) {
-      state.fence.maxHp += 60;
-      state.fence.hp += 60;
+      state.fence.maxHp += 80;
+      state.fence.hp += 80;
     }
   } catch {
     return {ok: false, reason: 'invalid_state'};
@@ -16302,23 +14822,23 @@ const NEXT_BUY_RANK = Object.freeze({
   bounty_seal: 11,
 });
 const BONUS_LABELS = {
-  damage: ['team damage', '全队伤害', '%'],
-  haste: ['team attack speed', '全队攻速', '%'],
-  critChance: ['team crit chance', '全队暴击率', '%'],
+  damage: ['gun damage', '枪械伤害', '%'],
+  haste: ['fire rate', '枪械攻速', '%'],
+  critChance: ['crit chance', '暴击率', '%'],
   reward: ['reward', '结算奖励', '%'],
-  superweaponHaste: ['super-weapon cooldown', '超武冷却', '%'],
-  surgePower: ['surge power', '冲击波威力', '%'],
+  superweaponHaste: ['auto-skill cooldown', '技能冷却', '%'],
+  surgePower: ['shockwave power', '冲击波威力', '%'],
   statusDamage: ['status damage', '异常增伤', '%'],
   shredPercent: ['max HP shred', '斩血比例', '%'],
   critKnockback: ['critical knockback', '暴击击退', 'px'],
   fence: ['starting wall HP', '开局城墙生命', ''],
   thorns: ['wall thorns', '城墙反伤', ''],
   freeRerolls: ['extra rerolls', '额外刷新次数', ''],
-  surgeCharges: ['surge charges', '冲击波充能', ''],
-  wallImmunity: ['wall immunity', '城墙免疫', ''],
-  openingDraft: ['opening airdrop', '开局免费空投', ''],
-  heroPierce: ['hero pierce', '英雄穿透', ''],
-  starterWeapon: ['starter evolution', '开局赠送进化', '']
+  surgeCharges: ['shockwave charges', '冲击波充能', ''],
+  wallImmunity: ['wall shield blocks', '城墙免伤次数', ''],
+  openingDraft: ['opening airdrop', '开局免费选卡', ''],
+  heroPierce: ['bullet pierce', '子弹穿透', ''],
+  starterWeapon: ['starter auto skill', '开局赠送技能', '']
 };
 const FRACTION_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] === '%');
 const ABSOLUTE_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] !== '%');
@@ -16351,12 +14871,12 @@ const equipmentNames = {
   splinter_bow: {en: 'Splinter Rifle', zh: '裂片步枪'},
   kinetic_core: {en: 'Kinetic Core', zh: '动能弹芯'},
   prism_lens: {en: 'Prism Overdrive', zh: '棱镜超频器'},
-  runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
+  runner_charm: {en: 'Runner Charm', zh: '疾射护符'},
   sun_spindle: {en: 'Pulse Spindle', zh: '脉冲核心'},
-  bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
-  fence_nails: {en: 'Bastion Bolts', zh: '堡垒钢钉'},
+  bounty_seal: {en: 'Bounty Seal', zh: '赏金印章'},
+  fence_nails: {en: 'Bastion Bolts', zh: '城墙钢钉'},
   vanguard_kit: {en: 'Reactive Plating', zh: '反应装甲'},
-  surge_capacitor: {en: 'Surge Capacitor', zh: '脉冲电容'}
+  surge_capacitor: {en: 'Surge Capacitor', zh: '冲击电容'}
 };
 const rawEquipment = [
   gear('splinter_bow', 'weapon', 60, {damage: 0.08}),
@@ -16388,10 +14908,10 @@ function track(id, cap, costs, bonuses, name, flavorEn, flavorZh) {
 }
 
 const permanentRecord = {
-  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.04}, {en: 'Firepower', zh: '火力强化'}, 'Permanent combat power across every run.', '跨对局生效的全队火力训练。'),
-  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.04}, {en: 'Quick Reload', zh: '迅捷装填'}, 'Shorten firing intervals for hero and turrets.', '缩短英雄与炮塔的射击间隔。'),
-  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 30}, {en: 'Steel Wall', zh: '钢铁城墙'}, 'Reinforce the bastion wall with extra HP.', '加固城墙结构，提高开局城墙生命。'),
-  economy: track('economy', 5, [40, 70, 110, 170, 240], {reward: 0.05, superweaponHaste: 0.04}, {en: 'War Chest', zh: '战备增幅'}, 'Boost currency payout and auto super-weapon recharge.', '提升结算货币并加快全自动超武充能。')
+  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.04}, {en: 'Firepower', zh: '枪械火力'}, 'Permanent gun firepower across every stage.', '跨关卡永久生效的枪械伤害训练。'),
+  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.04}, {en: 'Quick Reload', zh: '极速装填'}, 'Fire bullets faster in every stage.', '永久缩短枪手射击间隔，火力更密集。'),
+  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 30}, {en: 'Steel Wall', zh: '钢铁城墙'}, 'Reinforce the wall with extra starting HP.', '加固城墙结构，永久提高开局城墙血量。'),
+  economy: track('economy', 5, [40, 70, 110, 170, 240], {reward: 0.05, superweaponHaste: 0.04}, {en: 'War Chest', zh: '战备补给'}, 'Boost coin payout and auto-skill recharge speed.', '提升通关金币收益，并加快所有自动技能冷却。')
 };
 
 function deepFreeze(value) {
@@ -16454,10 +14974,10 @@ const GEMS = deepFreeze({
     id: 'gem_opening_drop',
     cost: 25,
     tier: 'epic',
-    name: {en: 'Opening Airdrop Gem', zh: '空投先锋宝石'},
+    name: {en: 'Opening Airdrop Gem', zh: '开局空投宝石'},
     description: {
-      en: 'Start every battle with 1 free instant 3-choice airdrop draft.',
-      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞。'
+      en: 'Start every stage with 1 free instant 3-of-1 upgrade pick.',
+      zh: '每关开场立即送 1 次免费三选一，开局直接起飞。'
     },
     bonuses: {openingDraft: 1},
   },
@@ -16465,10 +14985,10 @@ const GEMS = deepFreeze({
     id: 'gem_aegis_wall',
     cost: 40,
     tier: 'epic',
-    name: {en: 'Aegis Bastion Gem', zh: '城墙免疫宝石'},
+    name: {en: 'Wall Shield Gem', zh: '城墙免伤宝石'},
     description: {
-      en: 'Negate the first 5 hits on the wall and knock back attackers.',
-      zh: '城墙每局前 5 次受击完全免疫，并震退贴墙尸群。'
+      en: 'Block the first 5 hits on the wall and knock back nearby zombies.',
+      zh: '城墙每关前 5 次受击完全免伤，并震退贴墙尸群。'
     },
     bonuses: {wallImmunity: 5},
   },
@@ -16476,10 +14996,10 @@ const GEMS = deepFreeze({
     id: 'gem_pierce_core',
     cost: 45,
     tier: 'epic',
-    name: {en: 'Pierce Core Gem', zh: '贯穿核心宝石'},
+    name: {en: 'Pierce Core Gem', zh: '子弹穿透宝石'},
     description: {
-      en: 'Hero shots gain +1 pierce and +8% team damage.',
-      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松穿透尸潮。'
+      en: 'Bullets gain +1 pierce and +8% gun damage.',
+      zh: '子弹基础穿透 +1，枪械伤害 +8%，一发贯穿整排尸群。'
     },
     bonuses: {heroPierce: 1, damage: 0.08},
   },
@@ -16487,10 +15007,10 @@ const GEMS = deepFreeze({
     id: 'gem_elemental',
     cost: 55,
     tier: 'legend',
-    name: {en: 'Elemental Surge Gem', zh: '冰火共鸣宝石'},
+    name: {en: 'Elemental Surge Gem', zh: '冰火增伤宝石'},
     description: {
-      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned foes.',
-      zh: '攻击燃烧、减速、易伤或中毒敌人时，伤害额外 +25%。'
+      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned zombies.',
+      zh: '攻击燃烧、减速、易伤或中毒僵尸时，伤害额外 +25%。'
     },
     bonuses: {statusDamage: 0.25},
   },
@@ -16498,7 +15018,7 @@ const GEMS = deepFreeze({
     id: 'gem_shredder',
     cost: 65,
     tier: 'legend',
-    name: {en: 'HP Shredder Gem', zh: '百分比斩杀宝石'},
+    name: {en: 'HP Shredder Gem', zh: '暴击斩血宝石'},
     description: {
       en: 'Crits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
       zh: '暴击附带目标 4% 最大生命额外伤害（对首领上限 180）。'
@@ -16509,10 +15029,10 @@ const GEMS = deepFreeze({
     id: 'gem_overdrive',
     cost: 75,
     tier: 'legend',
-    name: {en: 'Overdrive Arsenal Gem', zh: '超武充能宝石'},
+    name: {en: 'Skill Haste Gem', zh: '技能急速宝石'},
     description: {
-      en: 'Auto super-weapons cycle 25% faster and start with 1 random evolution.',
-      zh: '全自动超武冷却缩短 25%，开局免费附带 1 项随机超武进化。'
+      en: 'Auto skills recharge 25% faster and start every stage with 1 random Auto Skill.',
+      zh: '所有自动技能冷却缩短 25%，开局免费赠送 1 个随机自动技能。'
     },
     bonuses: {superweaponHaste: 0.25, starterWeapon: 1},
   },
@@ -17590,64 +16110,64 @@ const spawnEnemy = __ff_m3["spawnEnemy"];
 
 const INTRO_HINTS = {
   shambler: {
-    en: 'Ash shamblers are crossing the field. Defeat these six to open the first draft.',
-    zh: '灰烬蹒者正在过场。击倒这六只就能拿到第一次整备。',
+    en: 'Ash shamblers are crossing the field. Defeat these six to open the first upgrade.',
+    zh: '灰烬蹒者正在逼近城墙。击倒 6 只即可触发首次升级选卡！',
   },
   runner: {
-    en: 'Wire runners are in the line. They reach the fence early, so shoot them first.',
-    zh: '线驰者混进了队列。它们会更早贴上栅栏，优先打掉。',
+    en: 'Wire runners are in the line. They reach the wall early, so drop them fast.',
+    zh: '线驰者混进了尸潮。它们移动很快会先贴近城墙，优先清理。',
   },
   swarm: {
-    en: 'Dust gnawers arrive in bunches. One is nothing; the bunch chews the fence.',
-    zh: '尘啮成群出现。一只不足为惧，一群就会啃栅栏。',
+    en: 'Dust gnawers arrive in bunches. Area skills sweep them away cleanly.',
+    zh: '尘啮成群涌来，靠火海和范围自动技能一波清场！',
   },
   spitter: {
-    en: 'Stops 135 px from the fence and spits acid. Set Priority targeting to drop it fast.',
-    zh: '在距防线 135 像素处停步喷酸，切换「高危」索敌优先集火清理。',
+    en: 'Stops 135 px from the wall and spits acid. Set Priority targeting to drop it fast.',
+    zh: '腐浆喷者会在中距离停步喷酸，切「高危」索敌优先集火清理。',
   },
   armored: {
-    en: 'Plate walkers shrug off more than half of each hit. Focus them down.',
-    zh: '板甲行者能挡下每次攻击的一半多。集火拆掉它们。',
+    en: 'Plate walkers block over half of each hit. Armor Pierce and burns melt them.',
+    zh: '板甲行者护甲极厚，用穿甲弹芯或燃烧伤害快速击穿。',
   },
   brute: {
-    en: 'Gate brutes are slow, huge, and hit the fence very hard.',
-    zh: '闸门蛮兽缓慢、巨大，对栅栏的打击非常重。',
+    en: 'Gate brutes are slow, huge, and slam the wall very hard.',
+    zh: '闸门蛮兽体型巨大，贴墙后每次重击都会大幅损耗城墙血量。',
   },
   boss: {
-    en: 'A Crown Breach calls dust gnawers while alive. Half health only enrages it. It only attacks the fence.',
-    zh: '冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。它只攻击栅栏。',
+    en: 'Crown Breach summons dust gnawers and enrages at half HP. Focus all firepower!',
+    zh: '冠裂兽会不断召唤尘啮，半血后狂暴！集中所有火力与激光柱击溃它。',
   },
   leaper: {
-    en: 'Crouches briefly then leaps forward. Frost slow and Lightning stun stop its charge.',
-    zh: '短暂蹲伏后向前扑跃，寒霜减速与电弧麻痹可有效打断其突进。',
+    en: 'Crouches briefly then vaults forward. Frost slow and EM lightning stop its leap.',
+    zh: '灰跃者蹲伏后会向前扑跃，急冻减速与电磁麻痹可有效打断其突袭。',
   },
   splitter: {
-    en: 'Crack broods release two dust gnawers when they die.',
-    zh: '裂巢死后会放出两只尘啮。',
+    en: 'Crack broods burst into two dust gnawers when killed.',
+    zh: '裂巢阵亡后会分裂出两只尘啮，注意用范围火力清扫。',
   },
   mender: {
-    en: 'Ash menders heal the most wounded ally. They do not heal themselves.',
-    zh: '烬补者会治疗伤得最重的同伴，不会治疗自己。',
+    en: 'Ash menders heal wounded allies nearby. Take them out early.',
+    zh: '烬补者会持续治疗周围重伤僵尸，建议优先点杀。',
   },
   shade: {
-    en: 'Fades every 1.4 s to dodge direct shots. Burn and poison clouds still hurt it while faded.',
-    zh: '每 1.4 秒虚化规避直射，但灼烧与毒雾在虚化期间依然生效。',
+    en: 'Phases every 1.4s to dodge direct bullets. Fire sea and burn still hurt it.',
+    zh: '幽影每 1.4 秒虚化躲避直射，火海与持续灼烧在虚化期间依然有效。',
   },
   banner: {
-    en: 'A standard wretch triples the pace of enemies near it. Kill it before that pack arrives.',
-    zh: '旗孽会让附近的敌人变为三倍速。在那队人抵达前打掉它。',
+    en: 'Standard wretches accelerate nearby zombies. Snipe the flag-bearer first!',
+    zh: '旗孽会让周围尸群疯狂加速冲锋，务必优先点杀旗手！',
   },
   warden: {
-    en: 'An ash warden weakens hits on a nearby ally. It is not shielded itself. Kill it first.',
-    zh: '烬卫会减弱对附近同伴的打击。它自己没有这层护盾。先打掉它。',
+    en: 'Ash wardens shield a nearby ally. Kill the warden first to break the shield.',
+    zh: '烬卫会为附近同伴施加减伤护盾，先打掉它瓦解防御。',
   },
   charge: {
-    en: 'A cinder charge bites once at the fence, then the fuse burns. Kill it before the blast.',
-    zh: '烬爆贴上栅栏后先啃一口，然后引线燃烧。爆炸前打掉它。',
+    en: 'Cinder charges light an explosive fuse at the wall. Kill them before the blast!',
+    zh: '烬爆者贴墙后会点燃自爆引线，务必在爆炸前击杀或震退！',
   },
   hush: {
-    en: 'While an ash hush is on the fence, defenders recharge more slowly. Kill it to restore the board.',
-    zh: '烬寂贴在栅栏上时，防守者充能变慢。打掉它，阵列就会恢复。',
+    en: 'While Ash Hush clamps to the wall, your fire rate drops. Clear it quickly!',
+    zh: '烬寂贴墙时会拖慢攻速与技能充能，尽快将其击杀恢复火力！',
   },
 };
 
@@ -17876,8 +16396,8 @@ function getWaveInfo(state) {
     if (Number.isFinite(at)) nextIn = Math.max(0, at - time);
   }
   const quiet = {
-    en: 'The fence is quiet. Ash shamblers will crest the field in a moment.',
-    zh: '栅栏还安静。灰烬蹒者马上就会出现在场上。',
+    en: 'The wall is quiet. Zombies will crest the field in a moment.',
+    zh: '城墙前一片寂静，第一波尸潮即将涌入！',
   };
   const name = current?.name || {en: 'Before the ash', zh: '灰烬未至'};
   const hint = current?.hint || quiet;
@@ -17983,7 +16503,7 @@ function autoHint(groups) {
   for (const group of groups) if (!kinds.includes(group.kind)) kinds.push(group.kind);
   const en = kinds.map(kind => ENEMIES[kind].name.en).join(', ');
   const zh = kinds.map(kind => ENEMIES[kind].name.zh).join('、');
-  return {en: `${en} advance on the fence.`, zh: `${zh}正向栅栏推进。`};
+  return {en: `${en} advance on the wall.`, zh: `${zh}正向城墙推进。`};
 }
 
 function lastSpawnTime(waves) {
@@ -18401,9 +16921,9 @@ const __ff_m1 = __ff_load("src/systems/hero.js");
 const __ff_m2 = __ff_load("src/shared.js");
 const __ff_m3 = __ff_load("src/i18n.js");
 const __ff_m4 = __ff_load("src/ui/icons.js");
-const TOWERS = __ff_m0["TOWERS"];
 const getUnitStats = __ff_m0["getUnitStats"];
 const HERO_UPGRADES = __ff_m1["HERO_UPGRADES"];
+const isAutoSkill = __ff_m1["isAutoSkill"];
 const TARGET_MODES = __ff_m2["TARGET_MODES"];
 const formatNumber = __ff_m3["formatNumber"];
 const localize = __ff_m3["localize"];
@@ -18411,10 +16931,11 @@ const translate = __ff_m3["t"];
 const catalogIcon = __ff_m4["catalogIcon"];
 const navIcon = __ff_m4["navIcon"];
 /**
- * Fencefall v4 Battle Draft & Unit Bottom Sheet.
- * - Full-screen zero-scroll 3-of-1 Draft modal (1 tap applies immediately: Hero mod, Auto Super-Weapon,
- *   New Turret auto-deploy, or Existing Turret Lv.1->Lv.4 upgrade).
- * - Compact mobile-friendly Unit Bottom Sheet with direct 4-mode targeting pills and clean stats.
+ * Fencefall v5 — Pure Solo-Gunner 3-of-1 Draft Modal & Gunner Inspector Bottom Sheet.
+ * - Full-screen zero-scroll 3-of-1 Draft modal offering ONLY Gun Mods (枪械强化)
+ *   and Auto Skills (自动技能), applied immediately in 1 tap.
+ * - Compact mobile-friendly Gunner Bottom Sheet with direct 4-mode targeting pills,
+ *   live stats, and active Auto Skills + Gun Mods list.
  */
 
 
@@ -18422,21 +16943,22 @@ const navIcon = __ff_m4["navIcon"];
 
 
 
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
-
 const ACCENTS = Object.freeze({
-  bolt: '#f0d56a',
-  fire: '#ff6c30',
-  frost: '#7ce8ff',
-  lightning: '#ffe14a',
-  poison: '#80e06a',
-  support: '#78d8c8',
   split_shot: '#ffaa44',
   ricochet: '#ffe14a',
   napalm: '#ff6c30',
   armored_car: '#f0cb72',
   cryo_barrage: '#7ce8ff',
   orbital_beam: '#54f0ff',
+  shrapnel: '#ff7a3a',
+  frostbite: '#7ee6ff',
+  pierce: '#a4e870',
+  bastion: '#78e0b8',
+  volley: '#ffd65a',
+  strike: '#ff8a56',
+  cadence: '#f6d268',
+  focus: '#ffe26a',
+  overclock: '#ff8c3c',
   hero: '#f0cb72',
 });
 
@@ -18495,49 +17017,26 @@ function fmt(n, lang) {
   return Number.isFinite(n) ? formatNumber(Math.round(n * 10) / 10, lang) : '0';
 }
 
-function stars(rank, max = 4) {
-  const r = Math.max(1, Math.min(max, Math.round(Number(rank) || 1)));
-  return '★'.repeat(r) + '☆'.repeat(Math.max(0, max - r));
-}
-
 function accentOf(option) {
   if (!option) return ACCENTS.hero;
-  if (option.kind === 'tower') return ACCENTS[option.type] || ACCENTS.hero;
-  if (option.kind === 'hero_upgrade') return ACCENTS[option.upgradeId] || ACCENTS.hero;
-  return ACCENTS.hero;
+  return ACCENTS[option.upgradeId] || ACCENTS.hero;
 }
 
 function iconIdOf(option) {
   if (!option) return 'hero';
-  if (option.kind === 'tower') return option.type;
-  if (option.kind === 'hero_upgrade') return option.upgradeId;
-  return 'hero';
+  return option.upgradeId || 'hero';
 }
 
 function draftCardMeta(option, lang, tr) {
-  if (option.kind === 'tower') {
-    const spec = TOWERS[option.type];
-    const name = loc(spec?.name, lang) || option.type;
-    const isUpgrade = option.action === 'upgrade' || (option.rank || 0) >= 1;
-    const fromRank = Math.max(1, option.rank || 1);
-    const toRank = option.nextRank || (isUpgrade ? fromRank + 1 : 1);
-    const tag = isUpgrade
-      ? tr('tagUpgradeTurret', {from: fromRank, to: toRank})
-      : tr('tagNewTurret');
-    const tagKind = isUpgrade ? 'is-upgrade' : 'is-new';
-    const desc = isUpgrade
-      ? (lang === 'zh'
-        ? `火力大幅飙升至 Lv.${toRank}，强化射速、射程与特效。`
-        : `Power up to Lv.${toRank} with higher damage, fire rate & range.`)
-      : (loc(spec?.description, lang) || '');
-    return {name, tag, tagKind, desc, isSuper: false};
-  }
-  const spec = HERO_UPGRADES[option.upgradeId];
-  const isSuper = SUPERWEAPON_IDS.has(option.upgradeId);
-  const name = loc(spec?.name, lang) || option.upgradeId;
+  const id = option.upgradeId;
+  const spec = HERO_UPGRADES[id];
+  const isSuper = isAutoSkill(id);
+  const name = loc(spec?.name, lang) || id;
   const lv = option.nextLevel || 1;
-  const cap = option.cap || spec?.cap || 3;
-  const tag = `${isSuper ? tr('tagSuperweapon') : tr('tagHero')} · Lv.${lv}/${cap}`;
+  const cap = option.cap || spec?.cap || 4;
+  const tag = id === 'overclock'
+    ? `${tr('tagHero')} · Lv.${lv}`
+    : `${isSuper ? tr('tagSuperweapon') : tr('tagHero')} · Lv.${lv}/${cap}`;
   const rawDesc = loc(option.description || spec?.description, lang) || '';
   const desc = rawDesc.replace(/^(Hero · |英雄 · )/, '');
   return {name, tag, tagKind: isSuper ? 'is-super' : 'is-hero', desc, isSuper};
@@ -18589,7 +17088,7 @@ function renderDraft(state, lang, tr) {
       style: `--choice-accent:${accent}`,
       'data-action': 'chooseDraft',
       'data-index': String(index),
-      'data-kind': option.kind || '',
+      'data-kind': option.kind || 'hero_upgrade',
       'data-type': option.type || '',
       'data-upgrade-id': option.upgradeId || '',
       'data-option-id': option.id || '',
@@ -18629,10 +17128,12 @@ function renderInspector(state, ui, lang, tr) {
   if (!unit) return null;
 
   const doc = currentDoc;
-  const isHeroUnit = unit.kind === 'hero' || unit.type === 'hero';
-  const spec = isHeroUnit ? null : TOWERS[unit.type];
-  const name = isHeroUnit ? tr('hero') : (loc(spec?.name, lang) || unit.type);
+  const name = tr('gunnerTitle');
   const stats = getUnitStats(unit, state);
+  const upgEntries = Object.entries(unit.upgrades || {})
+    .filter(([, lv]) => Number(lv) > 0)
+    .sort(([a], [b]) => Number(isAutoSkill(b)) - Number(isAutoSkill(a)));
+  const totalLevels = upgEntries.reduce((sum, [, lv]) => sum + Number(lv), 0);
 
   const sheet = el('section', {
     class: 'ff-sheet',
@@ -18641,17 +17142,18 @@ function renderInspector(state, ui, lang, tr) {
     'aria-label': name,
   });
 
-  // Compact header: icon + name + rank stars + kills + close
   const head = el('div', {class: 'ff-sheet-head'});
   const idBlock = el('div', {class: 'ff-sheet-id'}, [
-    el('span', {class: 'ff-sheet-icon'}, [catalogIcon(doc, isHeroUnit ? 'hero' : unit.type)]),
+    el('span', {class: 'ff-sheet-icon'}, [catalogIcon(doc, 'hero')]),
     el('div', {class: 'ff-sheet-titles'}, [
       el('div', {class: 'ff-sheet-name-row'}, [
         el('h3', {'data-testid': 'unit-name', text: name}),
         el('span', {
-          class: `ff-rank-pill${isHeroUnit ? ' is-hero' : ''}`,
+          class: 'ff-rank-pill is-hero',
           'data-testid': 'unit-rank',
-          text: isHeroUnit ? (lang === 'zh' ? '主炮英雄' : 'HERO') : `Lv.${unit.rank || 1} ${stars(unit.rank || 1)}`
+          text: totalLevels > 0
+            ? (lang === 'zh' ? `已强化 ${totalLevels} 级` : `${totalLevels} Upgrades`)
+            : (lang === 'zh' ? '自动瞄准' : 'AUTO-AIM')
         }),
       ]),
       el('span', {
@@ -18706,22 +17208,17 @@ function renderInspector(state, ui, lang, tr) {
   }
   sheet.append(statStrip);
 
-  // Hero active evolutions strip OR Turret 1-line description
-  if (isHeroUnit) {
-    const entries = Object.entries(unit.upgrades || {}).filter(([, lv]) => Number(lv) > 0);
-    if (entries.length) {
-      const mods = el('div', {class: 'ff-mod-chips', 'data-testid': 'hero-upgrades'});
-      for (const [id, lv] of entries) {
-        const u = HERO_UPGRADES[id];
-        mods.append(el('span', {
-          class: `ff-mod-chip${SUPERWEAPON_IDS.has(id) ? ' is-super' : ''}`,
-          text: `${loc(u?.name, lang) || id} Lv.${lv}`
-        }));
-      }
-      sheet.append(mods);
+  // Active Auto Skills & Gun Mods chips
+  if (upgEntries.length) {
+    const mods = el('div', {class: 'ff-mod-chips', 'data-testid': 'hero-upgrades'});
+    for (const [id, lv] of upgEntries) {
+      const u = HERO_UPGRADES[id];
+      mods.append(el('span', {
+        class: `ff-mod-chip${isAutoSkill(id) ? ' is-super' : ''}`,
+        text: `${loc(u?.name, lang) || id} Lv.${lv}`
+      }));
     }
-  } else if (spec?.description) {
-    sheet.append(el('p', {class: 'ff-sheet-desc', text: loc(spec.description, lang)}));
+    sheet.append(mods);
   }
 
   return sheet;
@@ -19026,6 +17523,12 @@ const MARKS = {
     L(22, 4, 22, 36, INK, 2),
     C(22, 34, 8, 'none', FROST, 1.8),
     L(10, 34, 34, 34, GOLD, 1.8),
+  ],
+  overclock: () => [
+    C(22, 22, 13, '#281c14', GOLD, 2.2),
+    P('M14 26 L22 12 L30 26', FIRE, 2.6),
+    P('M17 31 L22 22 L27 31', GOLD, 2.4),
+    C(22, 12, 2.2, INK),
   ],
   gem_opening_drop: () => [
     G('22,5 36,14 36,30 22,39 8,30 8,14', '#163544', GOLD, 2),
@@ -19374,49 +17877,47 @@ __ff_factories["src/ui/meta-panel.js"] = function(__ff_exports, __ff_load) {
 "use strict";
 __ff_exports["renderMetaPanel"] = renderMetaPanel;
 const __ff_m0 = __ff_load("src/shared.js");
-const __ff_m1 = __ff_load("src/data/towers.js");
-const __ff_m2 = __ff_load("src/data/enemies.js");
-const __ff_m3 = __ff_load("src/data/expeditions.js");
-const __ff_m4 = __ff_load("src/systems/hero.js");
-const __ff_m5 = __ff_load("src/systems/progression.js");
-const __ff_m6 = __ff_load("src/i18n.js");
-const __ff_m7 = __ff_load("src/ui/icons.js");
+const __ff_m1 = __ff_load("src/data/enemies.js");
+const __ff_m2 = __ff_load("src/data/expeditions.js");
+const __ff_m3 = __ff_load("src/systems/hero.js");
+const __ff_m4 = __ff_load("src/systems/progression.js");
+const __ff_m5 = __ff_load("src/i18n.js");
+const __ff_m6 = __ff_load("src/ui/icons.js");
 const CONTRACT_VERSION = __ff_m0["CONTRACT_VERSION"];
-const DIFFICULTIES = __ff_m0["DIFFICULTIES"];
-const TOWERS = __ff_m1["TOWERS"];
-const ENEMIES = __ff_m2["ENEMIES"];
-const CHAPTERS = __ff_m3["CHAPTERS"];
-const EXPEDITIONS = __ff_m3["EXPEDITIONS"];
-const STAGE_ORDER = __ff_m3["STAGE_ORDER"];
-const STAGES = __ff_m3["STAGES"];
-const TOTAL_STAGES = __ff_m3["TOTAL_STAGES"];
-const highestClearedStage = __ff_m3["highestClearedStage"];
-const highestUnlockedStage = __ff_m3["highestUnlockedStage"];
-const isStageUnlocked = __ff_m3["isStageUnlocked"];
-const nextStageId = __ff_m3["nextStageId"];
-const stageClearRecord = __ff_m3["stageClearRecord"];
-const stageIdFor = __ff_m3["stageIdFor"];
-const stageNumber = __ff_m3["stageNumber"];
-const totalStarsEarned = __ff_m3["totalStarsEarned"];
-const HERO_UPGRADES = __ff_m4["HERO_UPGRADES"];
-const EQUIPMENT = __ff_m5["EQUIPMENT"];
-const GEMS = __ff_m5["GEMS"];
-const GEM_ORDER = __ff_m5["GEM_ORDER"];
-const GEM_SLOTS = __ff_m5["GEM_SLOTS"];
-const PERMANENT_UPGRADES = __ff_m5["PERMANENT_UPGRADES"];
-const getProfileBonuses = __ff_m5["getProfileBonuses"];
-const nextArmoryBuy = __ff_m5["nextArmoryBuy"];
-const formatDuration = __ff_m6["formatDuration"];
-const formatNumber = __ff_m6["formatNumber"];
-const localize = __ff_m6["localize"];
-const translate = __ff_m6["t"];
-const catalogIcon = __ff_m7["catalogIcon"];
-const navIcon = __ff_m7["navIcon"];
+const ENEMIES = __ff_m1["ENEMIES"];
+const CHAPTERS = __ff_m2["CHAPTERS"];
+const EXPEDITIONS = __ff_m2["EXPEDITIONS"];
+const STAGE_ORDER = __ff_m2["STAGE_ORDER"];
+const STAGES = __ff_m2["STAGES"];
+const TOTAL_STAGES = __ff_m2["TOTAL_STAGES"];
+const highestClearedStage = __ff_m2["highestClearedStage"];
+const highestUnlockedStage = __ff_m2["highestUnlockedStage"];
+const isStageUnlocked = __ff_m2["isStageUnlocked"];
+const nextStageId = __ff_m2["nextStageId"];
+const stageClearRecord = __ff_m2["stageClearRecord"];
+const stageIdFor = __ff_m2["stageIdFor"];
+const stageNumber = __ff_m2["stageNumber"];
+const totalStarsEarned = __ff_m2["totalStarsEarned"];
+const HERO_UPGRADES = __ff_m3["HERO_UPGRADES"];
+const isAutoSkill = __ff_m3["isAutoSkill"];
+const EQUIPMENT = __ff_m4["EQUIPMENT"];
+const GEMS = __ff_m4["GEMS"];
+const GEM_ORDER = __ff_m4["GEM_ORDER"];
+const GEM_SLOTS = __ff_m4["GEM_SLOTS"];
+const PERMANENT_UPGRADES = __ff_m4["PERMANENT_UPGRADES"];
+const getProfileBonuses = __ff_m4["getProfileBonuses"];
+const nextArmoryBuy = __ff_m4["nextArmoryBuy"];
+const formatDuration = __ff_m5["formatDuration"];
+const formatNumber = __ff_m5["formatNumber"];
+const localize = __ff_m5["localize"];
+const translate = __ff_m5["t"];
+const catalogIcon = __ff_m6["catalogIcon"];
+const navIcon = __ff_m6["navIcon"];
 /**
- * Fencefall v4 Mobile-First Meta Screens:
- * - Home Battle Lobby (Resume banner, Starter Pack, Horizontal Sortie Strip, 4-Pill Difficulty, Big Deploy CTA)
+ * Fencefall v5 Mobile-First Meta Screens:
+ * - Home 20-Stage Campaign Lobby (Resume banner, Starter Pack, Stage Switcher & 5×4 Grid, Deploy CTA)
  * - Tabbed Armory (Core Gems 3-Socket / Gear / Permanent Upgrades)
- * - Clean 3-Tab Codex (Turrets / Hero & Super-Weapons / Enemies)
+ * - Clean 2-Tab Codex (Guns & Auto Skills / Zombies)
  * - Settings + Quick Guide + Save Backup
  * - Punchy Victory/Defeat Results Screen
  */
@@ -19428,16 +17929,14 @@ const navIcon = __ff_m7["navIcon"];
 
 
 
-
 const SCREENS = ['menu', 'battle', 'armory', 'codex', 'settings', 'howto', 'results'];
 const SLOT_ORDER = ['weapon', 'charm', 'armor'];
 const PERMANENT_ORDER = ['damage', 'haste', 'vitality', 'economy'];
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 const local = {
   screen: null,
   armoryTab: 'gems',
-  codexTab: 'towers',
+  codexTab: 'hero',
   confirmAbandon: false,
   stageNum: null,
   showStageGrid: false,
@@ -19865,7 +18364,7 @@ function renderArmory(ctx, root) {
     ['bonus-damage', tr(api, lang, 'damage'), `+${Math.round((bonuses.damage || 0) * 100)}%`],
     ['bonus-haste', lang === 'zh' ? '攻速' : 'Speed', `+${Math.round((bonuses.haste || 0) * 100)}%`],
     ['bonus-fence', tr(api, lang, 'fence'), `+${Math.round(bonuses.fence || 0)}`],
-    ['bonus-sw', lang === 'zh' ? '超武冷却' : 'Arsenal', bonuses.superweaponHaste > 0 ? `-${Math.round(bonuses.superweaponHaste * 100)}%` : '0%'],
+    ['bonus-sw', tr(api, lang, 'superweaponHaste'), bonuses.superweaponHaste > 0 ? `-${Math.round(bonuses.superweaponHaste * 100)}%` : '0%'],
   ];
   for (const [testid, label, val] of metrics) {
     summary.append(h(doc, 'div', {className: 'm-bonus-tile', 'data-testid': testid}, [
@@ -20093,16 +18592,16 @@ function renderArmoryUpgrades(ctx, host) {
 }
 
 // =========================================================================
-// 3. CLEAN 3-TAB CODEX (TURRETS / HERO & SUPER-WEAPONS / ENEMIES)
+// 3. CLEAN 2-TAB CODEX (GUNS & AUTO SKILLS / ZOMBIES)
 // =========================================================================
 function renderCodex(ctx, root) {
   const {doc, api, lang} = ctx;
   const stack = h(doc, 'div', {className: 'm-stack', 'data-testid': 'meta-codex'});
+  if (local.codexTab !== 'enemies') local.codexTab = 'hero';
 
   const tabs = h(doc, 'div', {className: 'm-seg-tabs', role: 'tablist', 'data-testid': 'codex-tabs'});
   for (const [id, label] of [
-    ['towers', tr(api, lang, 'towers')],
-    ['hero', lang === 'zh' ? '英雄与超武' : 'Hero & Arsenal'],
+    ['hero', lang === 'zh' ? '枪械与技能' : 'Guns & Skills'],
     ['enemies', tr(api, lang, 'enemies')]
   ]) {
     const active = local.codexTab === id;
@@ -20119,26 +18618,7 @@ function renderCodex(ctx, root) {
   stack.append(tabs);
 
   const grid = h(doc, 'div', {className: 'm-grid'});
-  if (local.codexTab === 'hero') {
-    for (const [id, spec] of Object.entries(HERO_UPGRADES)) {
-      const isSuper = SUPERWEAPON_IDS.has(id);
-      const card = h(doc, 'article', {className: `m-item-card${isSuper ? ' is-super-card' : ''}`, 'data-testid': `codex-hero-${id}`});
-      card.append(h(doc, 'div', {className: 'm-item-head'}, [
-        catalogIcon(doc, id),
-        h(doc, 'div', {className: 'm-item-info'}, [
-          h(doc, 'div', {className: 'm-item-title-row'}, [
-            h(doc, 'h3', {text: loc(spec.name, lang)}),
-            h(doc, 'span', {
-              className: `badge ${isSuper ? 'badge-legend' : ''}`,
-              text: `${isSuper ? tr(api, lang, 'tagSuperweapon') : tr(api, lang, 'tagHero')} · Max ${spec.cap}`
-            })
-          ]),
-          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang).replace(/^(Hero · |英雄 · )/, '')})
-        ])
-      ]));
-      grid.append(card);
-    }
-  } else if (local.codexTab === 'enemies') {
+  if (local.codexTab === 'enemies') {
     for (const [id, spec] of Object.entries(ENEMIES)) {
       const card = h(doc, 'article', {className: 'm-item-card', 'data-testid': `codex-enemy-${id}`});
       card.append(h(doc, 'div', {className: 'm-item-head'}, [
@@ -20154,18 +18634,28 @@ function renderCodex(ctx, root) {
       grid.append(card);
     }
   } else {
-    for (const [id, spec] of Object.entries(TOWERS)) {
-      const rate = spec.stats.interval > 0 ? Math.round((1 / spec.stats.interval) * 10) / 10 : 0;
-      const card = h(doc, 'article', {className: 'm-item-card', 'data-testid': `codex-tower-${id}`});
+    const entries = Object.entries(HERO_UPGRADES).sort(([a], [b]) => {
+      if (a === 'overclock') return 1;
+      if (b === 'overclock') return -1;
+      return Number(isAutoSkill(b)) - Number(isAutoSkill(a));
+    });
+    for (const [id, spec] of entries) {
+      const isSuper = isAutoSkill(id);
+      const card = h(doc, 'article', {className: `m-item-card${isSuper ? ' is-super-card' : ''}`, 'data-testid': `codex-hero-${id}`});
+      const badgeText = id === 'overclock'
+        ? (lang === 'zh' ? '枪械强化 · 可重复' : 'Gun Mod · Repeatable')
+        : `${isSuper ? tr(api, lang, 'tagSuperweapon') : tr(api, lang, 'tagHero')} · Max ${spec.cap}`;
       card.append(h(doc, 'div', {className: 'm-item-head'}, [
         catalogIcon(doc, id),
         h(doc, 'div', {className: 'm-item-info'}, [
           h(doc, 'div', {className: 'm-item-title-row'}, [
             h(doc, 'h3', {text: loc(spec.name, lang)}),
-            h(doc, 'span', {className: 'badge', text: loc(spec.role, lang)})
+            h(doc, 'span', {
+              className: `badge ${isSuper ? 'badge-legend' : ''}`,
+              text: badgeText
+            })
           ]),
-          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang)}),
-          h(doc, 'p', {className: 'm-mini-stats', text: `${tr(api, lang, 'damage')} ${spec.stats.damage} · ${rate}/s · ${tr(api, lang, 'range')} ${spec.stats.range}`})
+          h(doc, 'p', {className: 'm-item-desc', text: loc(spec.description, lang).replace(/^(Hero · |英雄 · )/, '')})
         ])
       ]));
       grid.append(card);
@@ -20241,7 +18731,7 @@ function renderSettings(ctx, root) {
     h(doc, 'p', {className: 'muted', text: tr(api, lang, 'howtoLead')})
   );
   const steps = h(doc, 'ol', {className: 'm-guide-list'});
-  for (const key of ['helpOverview', 'helpDraft', 'helpPlacement', 'helpRange', 'helpFence']) {
+  for (const key of ['helpOverview', 'helpDraft', 'helpRange', 'helpFence', 'helpPlacement']) {
     steps.append(h(doc, 'li', {text: tr(api, lang, key)}));
   }
   guide.append(steps);
@@ -20304,7 +18794,7 @@ function renderSettings(ctx, root) {
   });
   save.append(importArea, importBtn);
   stack.append(save);
-  stack.append(h(doc, 'p', {className: 'muted m-footnote', text: `Fencefall v4 · Contract ${CONTRACT_VERSION}`}));
+  stack.append(h(doc, 'p', {className: 'muted m-footnote', text: `Fencefall v5 · Contract ${CONTRACT_VERSION}`}));
   root.append(stack);
 }
 
@@ -20499,8 +18989,6 @@ const __ff_m6 = __ff_load("src/i18n.js");
 const superweaponCooldown = __ff_m0["superweaponCooldown"];
 const ARENA = __ff_m1["ARENA"];
 const DIFFICULTIES = __ff_m1["DIFFICULTIES"];
-const canPlan = __ff_m1["canPlan"];
-const hitSlot = __ff_m1["hitSlot"];
 const slotGeometry = __ff_m1["slotGeometry"];
 const bossApproaching = __ff_m2["bossApproaching"];
 const getWaveInfo = __ff_m2["getWaveInfo"];
@@ -20536,12 +19024,13 @@ const ARSENAL_SPECS = Object.freeze([
 ]);
 
 /**
- * Mobile-first App Shell & Live Battle HUD (Fencefall v4).
+ * Mobile-first App Shell & Live Battle HUD (Fencefall v5).
  * - Non-battle screens use a slim Top App Bar + Sticky 4-Tab Bottom Navigation Bar.
- * - Battle screen uses an unobstructed full-height canvas, slim translucent Top Status/XP strip,
- *   floating Auto-Arsenal super-weapon strip, and a thumb-zone Bottom Control Dock
- *   (Pause/Resume · 1× 1.5× 3× 10× · Menu).
- * - Dragging any defender on the wall moves to an empty slot or swaps with another defender.
+ * - Battle screen uses an unobstructed full-height HD vector canvas, slim translucent
+ *   Top Status/XP strip, floating Auto-Skill cooldown strip, and thumb-zone Bottom
+ *   Control Dock (Pause/Resume · 1× 1.5× 3× 10× · Menu).
+ * - Solo Wall Gunner is permanently anchored on the central platform; tapping the Gunner
+ *   toggles the Gunner Stats & Targeting Priority bottom sheet.
  */
 function mountShell(root, api) {
   if (!root || typeof root.appendChild !== 'function') {
@@ -20722,19 +19211,12 @@ function mountShell(root, api) {
     'data-testid': 'menu-root'
   });
 
-  const ghost = el('div', {
-    class: 'drag-ghost',
-    'data-testid': 'drag-ghost',
-    hidden: true
-  });
-
-  shell.append(topbar, body, hud, arsenalBar, battleDock, overlayRoot, menuRoot, bottomNav, ghost);
+  shell.append(topbar, body, hud, arsenalBar, battleDock, overlayRoot, menuRoot, bottomNav);
   root.replaceChildren(shell);
 
   let dead = false;
   let pointer = null;
   let suppressClick = false;
-  let snapToken = 0;
   let clickTimer = 0;
   let lastKey = '';
   let lastPaint = 0;
@@ -20745,61 +19227,32 @@ function mountShell(root, api) {
     pointer = {
       id: event.pointerId,
       type: event.pointerType || 'mouse',
-      index: indexFromClient(event.clientX, event.clientY, event.pointerType),
       x: event.clientX,
       y: event.clientY,
-      active: false
     };
-    try { canvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
-  }
-
-  function onPointerMove(event) {
-    if (dead || !pointer || pointer.id !== event.pointerId) return;
-    const dx = event.clientX - pointer.x;
-    const dy = event.clientY - pointer.y;
-    if (!pointer.active && Math.hypot(dx, dy) < 10) return;
-    const state = readState();
-    const start = pointer.index;
-    const unit = state && validSlot(start, state) ? state.slots[start]?.unit : null;
-    if (!unit) return;
-    pointer.active = true;
-    const hover = indexFromClient(event.clientX, event.clientY, pointer.type);
-    const kind = dropKind(state, start, hover);
-    showGhost(event.clientX, event.clientY, unit, kind);
-    api.act('hover', {index: hover, intent: kind === 'empty' || kind === 'swap' || kind === 'illegal' ? kind : ''});
   }
 
   function onPointerUp(event) {
     if (dead) return;
     if (pointer && pointer.id !== event.pointerId) return;
+    const startX = pointer ? pointer.x : event.clientX;
+    const startY = pointer ? pointer.y : event.clientY;
     const pointerType = pointer?.type || event.pointerType;
-    const start = pointer ? pointer.index : indexFromClient(event.clientX, event.clientY, pointerType);
-    const dragging = Boolean(pointer?.active);
     pointer = null;
     suppressClick = true;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => { suppressClick = false; }, 400);
-    const end = indexFromClient(event.clientX, event.clientY, pointerType);
-    if (dragging) finishDrag(start, end);
-    else {
-      hideGhost();
-      handleGesture(start, end);
-    }
+    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 36) return;
+    handleTap(event.clientX, event.clientY, pointerType);
   }
 
   function onPointerCancel() {
-    const start = pointer?.index;
-    const dragging = Boolean(pointer?.active);
     pointer = null;
-    api.act('hover', {index: -1});
-    if (dragging && validSlot(start, readState())) snapGhost(start);
-    else hideGhost();
   }
 
   function onClick(event) {
     if (dead || suppressClick) return;
-    const idx = indexFromClient(event.clientX, event.clientY);
-    handleGesture(idx, idx);
+    handleTap(event.clientX, event.clientY, 'mouse');
   }
 
   function onControl(event) {
@@ -20866,12 +19319,6 @@ function mountShell(root, api) {
       return;
     }
 
-    if (screen === 'battle' && state && event.code.startsWith('Arrow')) {
-      event.preventDefault();
-      nudgeSelection(event.code, state, ui);
-      return;
-    }
-
     const digit = digitFromCode(event.code);
     if (digit == null || screen !== 'battle' || !state) return;
     if (phaseName === 'draft') {
@@ -20889,7 +19336,6 @@ function mountShell(root, api) {
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
-  canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('click', onClick);
@@ -21115,134 +19561,38 @@ function mountShell(root, api) {
     setText(live, [phaseText, note].filter(Boolean).join(' · '));
   }
 
-  function handleGesture(startIndex, endIndex) {
+  function handleTap(clientX, clientY, pointerType) {
     const state = readState();
     const ui = readUI();
     if (!state || screenName(ui, state) !== 'battle') return;
-    const phaseName = state.phase;
-
-    if (!validSlot(endIndex, state)) {
-      if (!validSlot(startIndex, state) && slotIndex(ui?.selectedSlot) >= 0) {
-        api.act('selectSlot', {index: -1});
-      }
+    if (state.phase === 'draft') return;
+    const hit = heroSlotFromClient(clientX, clientY, pointerType, state);
+    if (hit >= 0) {
+      const next = slotIndex(ui?.selectedSlot) === hit ? -1 : hit;
+      api.act('selectSlot', {index: next});
       return;
     }
-
-    const planning = canPlan(state) && phaseName !== 'victory' && phaseName !== 'defeat';
-    if (planning && validSlot(startIndex, state) && startIndex !== endIndex && state.slots[startIndex]?.unit) {
-      api.act('move', {from: startIndex, to: endIndex});
-      return;
+    if (slotIndex(ui?.selectedSlot) >= 0) {
+      api.act('selectSlot', {index: -1});
     }
-    api.act('selectSlot', {index: endIndex});
   }
 
-  function nudgeSelection(code, state, ui) {
-    if ((state.slots?.length || 0) < 10) return;
-    const current = slotIndex(ui?.selectedSlot);
-    if (!validSlot(current, state)) {
-      api.act('selectSlot', {index: 0});
-      return;
-    }
-    const col = current % 5;
-    const row = Math.floor(current / 5);
-    let next = current;
-    if (code === 'ArrowLeft') next = row * 5 + ((col + 4) % 5);
-    else if (code === 'ArrowRight') next = row * 5 + ((col + 1) % 5);
-    else if (code === 'ArrowUp' && row === 1) next = col;
-    else if (code === 'ArrowDown' && row === 0) next = 5 + col;
-    if (next !== current) api.act('selectSlot', {index: next});
-  }
-
-  function showGhost(x, y, unit, kind) {
-    ghost.hidden = false;
-    ghost.classList.toggle('is-illegal', kind === 'illegal');
-    ghost.classList.toggle('is-empty', kind === 'empty');
-    ghost.classList.toggle('is-swap', kind === 'swap');
-    const label = unit?.kind === 'hero' || unit?.type === 'hero'
-      ? 'H'
-      : String(unit?.type || unit?.kind || '').slice(0, 4).toUpperCase();
-    setText(ghost, label);
-    ghost.style.left = `${x}px`;
-    ghost.style.top = `${y}px`;
-  }
-
-  function hideGhost() {
-    snapToken += 1;
-    ghost.hidden = true;
-    ghost.classList.remove('is-illegal', 'is-empty', 'is-swap', 'is-snapping');
-    setText(ghost, '');
-  }
-
-  function snapGhost(index) {
-    const center = slotClientCenter(index);
-    if (!center) { hideGhost(); return; }
-    ghost.classList.add('is-snapping');
-    ghost.style.left = `${center.x}px`;
-    ghost.style.top = `${center.y}px`;
-    const token = ++snapToken;
-    setTimeout(() => { if (token === snapToken) hideGhost(); }, 160);
-  }
-
-  function slotClientCenter(index) {
-    const rect = canvas.getBoundingClientRect();
-    if (!(rect.width > 0) || !(rect.height > 0)) return null;
-    const slot = slotGeometry(index);
-    return {
-      x: rect.left + (slot.x / ARENA.width) * rect.width,
-      y: rect.top + (slot.y / ARENA.height) * rect.height
-    };
-  }
-
-  function dropKind(state, from, to) {
-    if (!state || !validSlot(from, state) || !validSlot(to, state) || from === to) return 'same';
-    if (!canPlan(state) || state.phase === 'victory' || state.phase === 'defeat') return 'illegal';
-    const origin = state.slots[from]?.unit;
-    if (!origin) return 'illegal';
-    return state.slots[to]?.unit ? 'swap' : 'empty';
-  }
-
-  function finishDrag(from, to) {
-    api.act('hover', {index: -1});
-    const state = readState();
-    if (!state || !validSlot(from, state) || !state.slots[from]?.unit) {
-      hideGhost();
-      return;
-    }
-    const outcome = api.act('dragDrop', {from, to});
-    if (outcome?.ok && !outcome.snapped) {
-      hideGhost();
-      return;
-    }
-    snapGhost(from);
-  }
-
-  function indexFromClient(clientX, clientY, pointerType) {
+  function heroSlotFromClient(clientX, clientY, pointerType, state) {
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return -1;
+    const x = ((clientX - rect.left) / rect.width) * ARENA.width;
+    const y = ((clientY - rect.top) / rect.height) * ARENA.height;
+    if (x < -16 || y < -16 || x > ARENA.width + 16 || y > ARENA.height + 16) return -1;
+    const slots = Array.isArray(state?.slots) ? state.slots : [];
+    const heroIndex = slots.findIndex((s) => s?.unit && (s.unit.kind === 'hero' || s.unit.type === 'hero'));
+    if (heroIndex < 0) return -1;
+    const center = slotGeometry(heroIndex);
     const touch = pointerType === 'touch' || pointerType === 'pen';
-    const slopCss = touch ? 28 : 8;
-    const slopX = (slopCss / rect.width) * ARENA.width;
-    const slopY = (slopCss / rect.height) * ARENA.height;
-    let x = ((clientX - rect.left) / rect.width) * ARENA.width;
-    let y = ((clientY - rect.top) / rect.height) * ARENA.height;
-    if (x < -slopX || y < -slopY || x >= ARENA.width + slopX || y >= ARENA.height + slopY) return -1;
-    x = Math.max(0, Math.min(ARENA.width - 0.01, x));
-    y = Math.max(0, Math.min(ARENA.height - 0.01, y));
-    const direct = hitSlot(x, y);
-    if (direct >= 0) return direct;
-    let best = -1;
-    let bestDist = touch ? 32 : 12;
-    for (let index = 0; index < 10; index += 1) {
-      const slot = slotGeometry(index);
-      const dx = Math.max(slot.left - x, 0, x - (slot.left + slot.width));
-      const dy = Math.max(slot.top - y, 0, y - (slot.top + slot.height));
-      const dist = Math.hypot(dx, dy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = index;
-      }
-    }
-    return best;
+    const rx = touch ? 54 : 44;
+    const ry = touch ? 46 : 38;
+    const dx = Math.abs(x - center.x);
+    const dy = Math.abs(y - (center.y - 2));
+    return (dx <= rx && dy <= ry) ? heroIndex : -1;
   }
 
   function destroy() {
@@ -21251,7 +19601,6 @@ function mountShell(root, api) {
     clearInterval(timer);
     clearTimeout(clickTimer);
     canvas.removeEventListener('pointerdown', onPointerDown);
-    canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('click', onClick);

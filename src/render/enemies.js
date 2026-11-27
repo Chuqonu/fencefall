@@ -1,1074 +1,1159 @@
 /**
- * Original enemy sprites. Bottom-center anchor, one logical pixel per cell.
- * enemySize is the opaque grid drawEnemy paints. Walk and attack frames
- * share that box. Hit flash stays a flat wash. No simulation state is touched.
+ * Fencefall v5 — PvZ2-Style Sharp Cel-Shaded Vector Zombies (All 15 Species).
  *
- * Each kind keeps one opaque box on every frame:
- * shambler 22×26, runner 18×24, brute 32×34, armored 26×30,
- * spitter 22×26, swarm 12×14, boss 48×52,
- * leaper 20×28, splitter 24×22, mender 22×28, shade 16×30,
- * banner 26×32, warden 22×30, charge 18×26, hush 20×26.
- * A light rim (palette k) is the outer pixel so the shape reads on #122128.
- * enemy.enraged on a boss repaints the crown and core hotter inside that box.
+ * Bottom-center anchor (x, y) grounds each zombie's feet and contact shadow.
+ * Drawn directly at native high-DPI resolution with bold cartoon ink outlines,
+ * multi-tone cel gradients, expressive PvZ2 faces/eyes/teeth, smooth continuous
+ * 60fps skeletal motion (stride, bob, reach, bite lunge, squash-and-stretch on hit),
+ * and signature animated props per species.
  */
-const PALETTES = {
-  shambler: {k: '#efe6d2', '#': '#2a241c', o: '#8c8374', h: '#d9d0c0', e: '#f4e27a', s: '#1a1612'},
-  runner: {k: '#ffe0b8', '#': '#4a240e', o: '#e08a3a', h: '#fff0d0', e: '#fff6d8', s: '#2a1408'},
-  brute: {k: '#f0c0b4', '#': '#3a1410', o: '#a84838', h: '#f4d0c4', e: '#ffe0a0', s: '#1a0c0a'},
-  armored: {k: '#f4f7fb', '#': '#1c2430', o: '#8a96a4', h: '#ffffff', e: '#9fd0ea', s: '#10141a'},
-  spitter: {k: '#d8f0b0', '#': '#142818', o: '#3f7a48', h: '#c6ee78', e: '#e8f58a', s: '#0c140c'},
-  swarm: {k: '#f4e2b4', '#': '#3a2810', o: '#c4a05a', h: '#fff0c0', e: '#fff6d0', s: '#1a1208'},
-  boss: {k: '#f4c8dc', '#': '#1a0c14', o: '#7a3058', h: '#f0d0a0', e: '#ffe08a', r: '#e24a3a', s: '#10080c', f: '#ff2e14', c: '#ffd000', w: '#fff6c4'},
-  leaper: {k: '#ffe6b4', '#': '#24180c', o: '#d4842c', h: '#f6c56e', e: '#fff3c4', s: '#140e08'},
-  splitter: {k: '#f3e6e0', '#': '#2c1a24', o: '#6d5560', h: '#c4a8a4', e: '#e4d0d4', s: '#160e12'},
-  mender: {k: '#fbf8e4', '#': '#1c2816', o: '#7d9a58', h: '#e8d78a', e: '#f7f0bc', s: '#121a0e'},
-  shade: {k: '#e7f1f6', '#': '#1a242e', o: '#607888', h: '#b7c9d4', e: '#b7e4ea', s: '#101820'},
-  banner: {k: '#fbf1e2', '#': '#3a1218', o: '#8a2c34', h: '#f4e2c4', e: '#fff6ea', s: '#1a080c'},
-  warden: {k: '#e4eef6', '#': '#1a222c', o: '#5e7388', h: '#d6a84a', e: '#f4e0a4', s: '#141c24'},
-  charge: {k: '#f8e2c8', '#': '#2a120c', o: '#a84828', h: '#f0c56a', e: '#fff0c8', s: '#1a0c08'},
-  hush: {k: '#d5e4ea', '#': '#142028', o: '#4a6874', h: '#9fd0c8', e: '#e7f4f2', s: '#10181c'}
-};
 
-function makeGrid(width, height) {
-  const rows = [];
-  for (let y = 0; y < height; y += 1) rows.push(Array(width).fill('.'));
-  return {
-    width,
-    height,
-    rows,
-    put(x, y, ink) {
-      const ix = x | 0;
-      const iy = y | 0;
-      if (ix < 0 || iy < 0 || ix >= width || iy >= height) return;
-      rows[iy][ix] = ink;
-    }
-  };
-}
+const INK = '#12181e';
 
-function fillEllipse(grid, cx, cy, rx, ry, ink) {
-  const radiusX = rx | 0;
-  const radiusY = ry | 0;
-  if (radiusX < 0 || radiusY < 0) return;
-  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
-    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
-      const dx = radiusX === 0 ? (x === cx ? 0 : 2) : (x - cx) / radiusX;
-      const dy = radiusY === 0 ? (y === cy ? 0 : 2) : (y - cy) / radiusY;
-      if (dx * dx + dy * dy <= 1) grid.put(x, y, ink);
-    }
-  }
-}
-
-function eraseEllipse(grid, cx, cy, rx, ry) {
-  fillEllipse(grid, cx, cy, rx, ry, '.');
-}
-
-function glaze(grid, cx, cy, rx, ry, ink) {
-  const radiusX = rx | 0;
-  const radiusY = ry | 0;
-  if (radiusX < 0 || radiusY < 0) return;
-  for (let y = cy - radiusY; y <= cy + radiusY; y += 1) {
-    for (let x = cx - radiusX; x <= cx + radiusX; x += 1) {
-      const ix = x | 0;
-      const iy = y | 0;
-      if (iy < 0 || ix < 0 || iy >= grid.height || ix >= grid.width) continue;
-      const prev = grid.rows[iy][ix];
-      if (prev === '.' || prev === 'e' || prev === 'r') continue;
-      const dx = radiusX === 0 ? 0 : (ix - cx) / radiusX;
-      const dy = radiusY === 0 ? 0 : (iy - cy) / radiusY;
-      if (dx * dx + dy * dy <= 1) grid.put(ix, iy, ink);
-    }
-  }
-}
-
-function limb(grid, x0, y0, x1, y1, r0, r1, ink) {
-  let x = x0 | 0;
-  let y = y0 | 0;
-  const xEnd = x1 | 0;
-  const yEnd = y1 | 0;
-  const dx = Math.abs(xEnd - x);
-  const dy = Math.abs(yEnd - y);
-  const sx = x < xEnd ? 1 : -1;
-  const sy = y < yEnd ? 1 : -1;
-  let err = dx - dy;
-  const total = Math.max(dx, dy, 1);
-  let walked = 0;
-  const stamp = () => {
-    const t = Math.min(1, walked / total);
-    const radius = Math.max(0, Math.round(r0 + (r1 - r0) * t));
-    fillEllipse(grid, x, y, radius, radius, ink);
-    walked += 1;
-  };
-  stamp();
-  while (x !== xEnd || y !== yEnd) {
-    const e2 = err * 2;
-    if (e2 > -dy) {
-      err -= dy;
-      x += sx;
-      stamp();
-    }
-    if (e2 < dx) {
-      err += dx;
-      y += sy;
-      stamp();
-    }
-  }
-}
-
-function bresenham(x0, y0, x1, y1, plot) {
-  let x = x0 | 0;
-  let y = y0 | 0;
-  const xEnd = x1 | 0;
-  const yEnd = y1 | 0;
-  const dx = Math.abs(xEnd - x);
-  const dy = Math.abs(yEnd - y);
-  const sx = x < xEnd ? 1 : -1;
-  const sy = y < yEnd ? 1 : -1;
-  let err = dx - dy;
-  plot(x, y);
-  while (x !== xEnd || y !== yEnd) {
-    const e2 = err * 2;
-    if (e2 > -dy) {
-      err -= dy;
-      x += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      y += sy;
-    }
-    plot(x, y);
-  }
-}
-
-function fillPoly(grid, points, ink) {
-  const n = points.length;
-  if (n < 3) return;
-  let minY = points[0][1];
-  let maxY = points[0][1];
-  for (let i = 1; i < n; i += 1) {
-    if (points[i][1] < minY) minY = points[i][1];
-    if (points[i][1] > maxY) maxY = points[i][1];
-  }
-  for (let y = minY; y <= maxY; y += 1) {
-    const nodes = [];
-    let j = n - 1;
-    for (let i = 0; i < n; i += 1) {
-      const yi = points[i][1];
-      const yj = points[j][1];
-      if ((yi < y && yj >= y) || (yj < y && yi >= y)) {
-        const xi = points[i][0];
-        const xj = points[j][0];
-        nodes.push(xi + ((y - yi) / (yj - yi)) * (xj - xi));
-      }
-      j = i;
-    }
-    nodes.sort((a, b) => a - b);
-    for (let i = 0; i + 1 < nodes.length; i += 2) {
-      const x0 = Math.ceil(nodes[i]);
-      const x1 = Math.floor(nodes[i + 1]);
-      for (let x = x0; x <= x1; x += 1) grid.put(x, y, ink);
-    }
-  }
-  for (let i = 0; i < n; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % n];
-    bresenham(a[0], a[1], b[0], b[1], (x, y) => grid.put(x, y, ink));
-  }
-}
-
-function applyRim(grid) {
-  const {width, height, rows} = grid;
-  const src = rows.map((row) => row.slice());
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const ink = src[y][x];
-      if (ink === '.' || ink === 'e' || ink === 'r') continue;
-      const edge = x === 0 || y === 0 || x === width - 1 || y === height - 1
-        || src[y - 1][x] === '.'
-        || src[y + 1][x] === '.'
-        || src[y][x - 1] === '.'
-        || src[y][x + 1] === '.';
-      if (edge) rows[y][x] = 'k';
-    }
-  }
-}
-
-function sprite(width, height, paint) {
-  const grid = makeGrid(width, height);
-  paint(grid);
-  applyRim(grid);
-  return grid.rows.map((row) => row.join(''));
-}
-
-function eye(grid, x, y) {
-  for (let dx = 0; dx < 2; dx += 1) {
-    const px = x + dx;
-    if (y < 0 || px < 0 || y >= grid.height || px >= grid.width) continue;
-    if (grid.rows[y][px] === '.') continue;
-    grid.put(px, y, 'e');
-  }
-}
-
-function over(grid, x, y, ink) {
-  if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
-  if (grid.rows[y][x] === '.' || grid.rows[y][x] === 'e' || grid.rows[y][x] === 'r') return;
-  grid.put(x, y, ink);
-}
-
-function seam(grid, x, y, length) {
-  if (y < 0 || y >= grid.height) return;
-  for (let i = 0; i < length; i += 1) {
-    const px = x + i;
-    if (px < 0 || px >= grid.width) continue;
-    const prev = grid.rows[y][px];
-    if (prev === '.' || prev === 'e' || prev === 'r') continue;
-    grid.put(px, y, '#');
-  }
-}
-
-function shambler(step, attack) {
-  return sprite(22, 26, (grid) => {
-    fillEllipse(grid, 8, 7, 6, 8, 'o');
-    fillEllipse(grid, 14, 15, 3, 3, 'o');
-    glaze(grid, 7, 4, 3, 2, 'h');
-    over(grid, 8, 3, 'h');
-    over(grid, 8, 6, '#');
-    eye(grid, 12, 15);
-    eye(grid, 14, 15);
-    seam(grid, 12, 14, 4);
-    if (attack) {
-      over(grid, 13, 17, '#');
-      over(grid, 14, 17, '#');
-      over(grid, 15, 17, '#');
-    } else {
-      seam(grid, 13, 17, 3);
-    }
-    fillEllipse(grid, 10, 19, 3, 3, 'o');
-    const lift = attack ? 12 : 19;
-    limb(grid, 4, 12, 2, lift, 1, 1, 'o');
-    limb(grid, 13, 14, 19, 19, 1, 1, 'o');
-    fillEllipse(grid, 1, lift, 2, 2, 'o');
-    fillEllipse(grid, 20, 19, 2, 2, 'o');
-    glaze(grid, 1, lift - 1, 1, 0, 'h');
-    glaze(grid, 20, 18, 1, 0, 'h');
-    const spread = step ? 2 : 0;
-    limb(grid, 8, 21, 7 - spread, 24, 1, 1, 'o');
-    limb(grid, 13, 21, 14 + spread, 24, 1, 1, 'o');
-    fillEllipse(grid, 7 - spread, 24, 2, 1, 'o');
-    fillEllipse(grid, 14 + spread, 24, 2, 1, 'o');
-    eraseEllipse(grid, 11, 23, 1, 2);
-  });
-}
-
-function runner(step, attack) {
-  return sprite(18, 24, (grid) => {
-    limb(grid, 8, 0, 8, 4, 0, 0, 'h');
-    fillEllipse(grid, 8, 6, 2, 2, 'o');
-    fillEllipse(grid, 9, 10, 1, 2, 'o');
-    fillEllipse(grid, 9, 13, 2, 1, 'o');
-    glaze(grid, 8, 5, 1, 1, 'h');
-    eye(grid, 7, 6);
-    if (attack) {
-      over(grid, 7, 8, '#');
-      over(grid, 8, 8, '#');
-      over(grid, 9, 8, '#');
-    } else {
-      over(grid, 8, 7, '#');
-    }
-    const leftY = attack ? 6 : (step ? 5 : 11);
-    const rightY = attack ? 13 : (step ? 12 : 6);
-    limb(grid, 8, 9, 0, leftY, 0, 0, 'o');
-    limb(grid, 10, 9, 17, rightY, 0, 0, 'o');
-    fillEllipse(grid, 0, leftY, 1, 1, 'h');
-    fillEllipse(grid, 17, rightY, 1, 1, 'h');
-    seam(grid, 8, 11, 3);
-    // Walk frames open and close the stride. Attack keeps the shorter plant.
-    const knee = attack ? -2 : (step ? 2 : -4);
-    const plant = attack ? 0 : (step ? -1 : 1);
-    limb(grid, 7, 14, 6 + knee, 18, 1, 1, 'o');
-    limb(grid, 6 + knee, 18, 6 + plant, 22, 1, 0, 'o');
-    limb(grid, 11, 14, 12 - knee, 18, 1, 1, 'o');
-    limb(grid, 12 - knee, 18, 12 - plant, 22, 1, 0, 'o');
-    fillEllipse(grid, 6 + plant, 22, 1, 1, 'o');
-    fillEllipse(grid, 12 - plant, 22, 1, 1, 'o');
-    eraseEllipse(grid, 9, 20, 1, 3);
-  });
-}
-
-function brute(step, attack) {
-  return sprite(32, 34, (grid) => {
-    fillEllipse(grid, 16, 4, 5, 5, 'o');
-    fillEllipse(grid, 16, 15, 9, 6, 'o');
-    fillEllipse(grid, 16, 23, 7, 4, 'o');
-    glaze(grid, 14, 3, 2, 1, 'h');
-    seam(grid, 13, 3, 6);
-    eye(grid, 13, 5);
-    eye(grid, 17, 5);
-    over(grid, 15, 7, '#');
-    over(grid, 17, 7, '#');
-    if (attack) {
-      over(grid, 15, 8, '#');
-      over(grid, 16, 8, '#');
-      over(grid, 17, 8, '#');
-    } else {
-      seam(grid, 15, 8, 3);
-    }
-    const fistY = attack ? 11 : 16;
-    limb(grid, 11, 14, 6, fistY, 2, 1, 'o');
-    limb(grid, 21, 14, 25, 16, 2, 1, 'o');
-    fillEllipse(grid, 3, fistY, 3, 4, 'o');
-    fillEllipse(grid, 28, 16, 3, 4, 'o');
-    glaze(grid, 3, fistY - 2, 2, 1, 'h');
-    glaze(grid, 28, 14, 2, 1, 'h');
-    seam(grid, 2, fistY - 1, 3);
-    seam(grid, 27, 15, 3);
-    const spread = step ? 2 : 0;
-    limb(grid, 12, 26, 10 - spread, 32, 2, 2, 'o');
-    limb(grid, 20, 26, 22 + spread, 32, 2, 2, 'o');
-    fillEllipse(grid, 10 - spread, 32, 3, 1, 'o');
-    fillEllipse(grid, 22 + spread, 32, 3, 1, 'o');
-    eraseEllipse(grid, 16, 31, 2, 2);
-  });
-}
-
-function armored(step, attack) {
-  return sprite(26, 30, (grid) => {
-    fillEllipse(grid, 13, 6, 5, 7, 'o');
-    fillEllipse(grid, 3, 12, 3, 3, 'o');
-    fillEllipse(grid, 22, 12, 3, 3, 'o');
-    limb(grid, 8, 11, 5, 12, 1, 1, 'o');
-    limb(grid, 18, 11, 20, 12, 1, 1, 'o');
-    fillEllipse(grid, 13, 18, 4, 5, 'o');
-    fillEllipse(grid, 13, 22, 5, 2, 'o');
-    glaze(grid, 12, 3, 2, 1, 'h');
-    glaze(grid, 2, 11, 1, 1, 'h');
-    glaze(grid, 23, 11, 1, 1, 'h');
-    seam(grid, 10, 16, 6);
-    seam(grid, 11, 19, 4);
-    over(grid, 12, 17, 'h');
-    over(grid, 13, 20, 'h');
-    seam(grid, 10, 7, 6);
-    const slit = attack ? 'h' : 'e';
-    for (let x = 10; x <= 15; x += 1) over(grid, x, 8, slit);
-    if (attack) {
-      for (let x = 11; x <= 14; x += 1) over(grid, x, 9, 'e');
-    }
-    seam(grid, 10, 9, 6);
-    const punch = attack ? 22 : 18;
-    limb(grid, 3, 14, 2, punch, 1, 1, 'o');
-    limb(grid, 22, 14, 23, 18, 1, 1, 'o');
-    fillEllipse(grid, 2, punch, 2, 2, 'o');
-    fillEllipse(grid, 23, 18, 2, 2, 'o');
-    glaze(grid, 2, punch - 1, 1, 0, 'h');
-    glaze(grid, 23, 17, 1, 0, 'h');
-    const spread = step ? 1 : 0;
-    limb(grid, 11, 23, 9 - spread, 28, 2, 1, 'o');
-    limb(grid, 15, 23, 17 + spread, 28, 2, 1, 'o');
-    fillEllipse(grid, 9 - spread, 28, 2, 1, 'o');
-    fillEllipse(grid, 17 + spread, 28, 2, 1, 'o');
-    eraseEllipse(grid, 13, 27, 1, 2);
-  });
-}
-
-function spitter(step, attack) {
-  return sprite(22, 26, (grid) => {
-    fillEllipse(grid, 11, 4, 3, 4, 'o');
-    fillEllipse(grid, 11, 12, 8, 6, 'h');
-    fillEllipse(grid, 2, 12, 2, 3, 'h');
-    fillEllipse(grid, 19, 12, 2, 3, 'h');
-    if (!attack) {
-      glaze(grid, 11, 11, 3, 2, 'e');
-      seam(grid, 9, 12, 2);
-      seam(grid, 13, 14, 2);
-    }
-    eye(grid, 9, 4);
-    eye(grid, 12, 4);
-    if (attack) {
-      over(grid, 10, 6, '#');
-      over(grid, 11, 6, 'e');
-      over(grid, 12, 6, 'e');
-      over(grid, 13, 6, '#');
-    } else {
-      seam(grid, 10, 6, 3);
-    }
-    fillEllipse(grid, 11, 18, 3, 2, 'o');
-    const spread = step ? 2 : 0;
-    limb(grid, 9, 19, 7 - spread, 24, 1, 0, 'o');
-    limb(grid, 13, 19, 15 + spread, 24, 1, 0, 'o');
-    fillEllipse(grid, 7 - spread, 24, 1, 1, 'o');
-    fillEllipse(grid, 15 + spread, 24, 1, 1, 'o');
-    eraseEllipse(grid, 11, 23, 1, 2);
-    if (attack) {
-      const mark = (x, y, ink) => {
-        if (y < 0 || x < 0 || y >= grid.height || x >= grid.width) return;
-        if (grid.rows[y][x] === '.') return;
-        grid.put(x, y, ink);
-      };
-      // Open sac: dark cavity in the belly, sap in the throat, drip toward the fence.
-      const cavity = [[10, 1], [11, 2], [12, 3], [13, 4], [14, 3], [15, 2], [16, 1]];
-      for (const [y, mid] of cavity) {
-        for (let dx = -mid; dx <= mid; dx += 1) mark(11 + dx, y, '#');
-      }
-      for (let y = 12; y <= 14; y += 1) {
-        mark(10, y, 'e');
-        mark(11, y, 'e');
-        mark(12, y, 'e');
-      }
-      for (let y = 15; y <= 19; y += 1) mark(11, y, 'e');
-    }
-  });
-}
-
-function swarm(step, attack) {
-  return sprite(12, 14, (grid) => {
-    const lift = attack ? 4 : (step ? 6 : 1);
-    fillPoly(grid, [
-      [3, 4], [0, lift], [0, lift + 3], [3, 8]
-    ], 'h');
-    fillPoly(grid, [
-      [8, 4], [11, lift], [11, lift + 3], [8, 8]
-    ], 'h');
-    fillEllipse(grid, 5, 5, 2, 2, 'o');
-    fillEllipse(grid, 5, 8, 2, 2, '#');
-    limb(grid, 4, 4, 4, 0, 0, 0, 'o');
-    limb(grid, 7, 4, 7, 0, 0, 0, 'o');
-    eye(grid, 4, 5);
-    if (attack) {
-      over(grid, 5, 7, '#');
-      over(grid, 6, 7, 'e');
-    }
-    limb(grid, 4, 9, 4, 13, 0, 0, 'o');
-    limb(grid, 6, 9, 6, 13, 0, 0, 'o');
-    if (step) {
-      limb(grid, 4, 12, 3, 13, 0, 0, 'o');
-      limb(grid, 6, 12, 8, 13, 0, 0, 'o');
-    }
-  });
-}
-
-function claw(grid, side, y, ink) {
-  const x = side < 0 ? 0 : 47;
-  const dir = side < 0 ? 1 : -1;
-  fillPoly(grid, [
-    [x, y],
-    [x + dir * 2, y - 6],
-    [x + dir * 4, y - 1],
-    [x + dir * 6, y - 7],
-    [x + dir * 8, y],
-    [x + dir * 8, y + 4],
-    [x, y + 4]
-  ], ink);
-}
-
-function boss(step, attack, enraged = false) {
-  const horn = enraged ? 'f' : '#';
-  const crown = enraged ? 'c' : 'h';
-  const coreShell = enraged ? 'f' : '#';
-  const coreInk = enraged ? 'w' : 'r';
-  const glint = enraged ? 'c' : 'h';
-  return sprite(48, 52, (grid) => {
-    fillPoly(grid, [
-      [18, 20], [12, 28], [14, 34], [11, 42],
-      [18, 44], [24, 42], [30, 44], [37, 42],
-      [34, 34], [36, 28], [30, 20]
-    ], 'o');
-    fillEllipse(grid, 24, 18, 8, 8, 'o');
-    fillPoly(grid, [
-      [16, 20], [12, 14], [9, 8], [7, 3], [8, 0],
-      [12, 2], [13, 8], [16, 14], [19, 18]
-    ], horn);
-    fillPoly(grid, [
-      [31, 20], [35, 14], [38, 8], [40, 3], [39, 0],
-      [35, 2], [34, 8], [31, 14], [28, 18]
-    ], horn);
-    fillPoly(grid, [[24, 0], [21, 14], [27, 14]], crown);
-    fillPoly(grid, [[18, 4], [16, 14], [22, 13]], crown);
-    fillPoly(grid, [[30, 4], [26, 13], [32, 14]], crown);
-    seam(grid, 19, 15, 10);
-    eye(grid, 19, 17);
-    eye(grid, 26, 17);
-    if (attack) {
-      over(grid, 22, 21, '#');
-      over(grid, 23, 21, '#');
-      over(grid, 24, 21, '#');
-      over(grid, 25, 21, '#');
-    } else {
-      seam(grid, 22, 21, 4);
-    }
-    const core = attack ? 6 : 4;
-    fillEllipse(grid, 24, 31, core + 2, core + 3, coreShell);
-    fillEllipse(grid, 24, 31, core, core + 1, coreInk);
-    grid.put(22, 30, glint);
-    grid.put(23, 29, glint);
-    const clawY = attack ? 24 : 30;
-    limb(grid, 14, 28, 8, clawY, 2, 2, 'o');
-    limb(grid, 34, 28, 39, 30, 2, 2, 'o');
-    claw(grid, -1, clawY, 'o');
-    claw(grid, 1, 30, 'o');
-    glaze(grid, 4, clawY, 2, 1, 'h');
-    glaze(grid, 43, 29, 2, 1, 'h');
-    const spread = step ? 2 : 0;
-    limb(grid, 18, 42, 15 - spread, 50, 3, 3, 'o');
-    limb(grid, 30, 42, 32 + spread, 50, 3, 3, 'o');
-    fillEllipse(grid, 15 - spread, 50, 4, 1, 'o');
-    fillEllipse(grid, 32 + spread, 50, 4, 1, 'o');
-    eraseEllipse(grid, 24, 49, 2, 3);
-  });
-}
-
-function leaper(step, attack) {
-  return sprite(20, 28, (grid) => {
-    fillPoly(grid, [
-      [6, 24], [11, 24], [12, 26], [9, 27], [0, 27], [0, 25], [3, 24]
-    ], 'o');
-    over(grid, 2, 26, '#');
-    over(grid, 5, 26, '#');
-    over(grid, 8, 26, '#');
-    glaze(grid, 5, 25, 3, 0, 'h');
-
-    const coils = attack ? [17, 19, 21] : (step ? [16, 19, 22] : [14, 18, 22]);
-    for (let i = 0; i < coils.length; i += 1) {
-      const y = coils[i];
-      const x0 = i % 2 === 0 ? 3 : 6;
-      limb(grid, x0, y, x0 + 5, y, 1, 1, i % 2 ? '#' : 'o');
-      if (i + 1 < coils.length) {
-        const joint = i % 2 === 0 ? x0 + 5 : x0;
-        limb(grid, joint, y, joint, coils[i + 1], 0, 0, 'h');
-      }
-    }
-    limb(grid, 6, 14, 5, coils[0], 1, 0, 'o');
-    limb(grid, 8, coils[coils.length - 1], 8, 25, 0, 0, 'o');
-
-    fillPoly(grid, [
-      [3, 11], [9, 10], [10, 13], [6, 15], [2, 13]
-    ], 'o');
-    fillPoly(grid, [
-      [7, 9], [13, 10], [12, 14], [6, 14], [4, 11]
-    ], 'o');
-    glaze(grid, 8, 11, 2, 1, 'h');
-    seam(grid, 6, 12, 4);
-    over(grid, 7, 13, 's');
-
-    fillEllipse(grid, 11, 6, 3, 3, 'o');
-    fillPoly(grid, [
-      [12, 4], [19, 6], [19, 8], [13, 9], [12, 7]
-    ], 'o');
-    fillPoly(grid, [[10, 0], [8, 3], [12, 3]], '#');
-    glaze(grid, 10, 4, 2, 1, 'h');
-    glaze(grid, 16, 5, 2, 0, 'h');
-    over(grid, 9, 5, '#');
-    over(grid, 10, 5, '#');
-    eye(grid, 10, 6);
-    if (attack) {
-      eraseEllipse(grid, 16, 7, 2, 0);
-      over(grid, 15, 6, '#');
-      over(grid, 16, 6, '#');
-      over(grid, 17, 6, '#');
-      over(grid, 15, 8, '#');
-      over(grid, 16, 8, '#');
-      over(grid, 17, 8, '#');
-      limb(grid, 12, 11, 16, 12, 1, 0, 'o');
-      limb(grid, 16, 12, 18, 11, 0, 0, '#');
-      fillEllipse(grid, 18, 11, 1, 1, '#');
-    } else if (step) {
-      over(grid, 16, 7, '#');
-      limb(grid, 12, 11, 15, 16, 1, 0, 'o');
-      limb(grid, 15, 16, 17, 18, 0, 0, '#');
-      fillEllipse(grid, 17, 18, 1, 1, '#');
-    } else {
-      over(grid, 15, 7, '#');
-      limb(grid, 12, 11, 14, 14, 1, 0, 'o');
-      limb(grid, 14, 14, 16, 13, 0, 0, '#');
-      fillEllipse(grid, 16, 13, 1, 1, '#');
-    }
-
-    grid.put(10, 0, '#');
-    grid.put(19, 6, 'o');
-    grid.put(19, 8, 'o');
-    grid.put(0, 27, 'o');
-    grid.put(4, 27, 'o');
-  });
-}
-
-function splitter(step, attack) {
-  return sprite(24, 22, (grid) => {
-    fillPoly(grid, [
-      [0, 12], [2, 9], [6, 8], [9, 9], [11, 7], [13, 7],
-      [15, 9], [18, 8], [22, 9], [23, 12], [23, 17],
-      [20, 19], [16, 18], [12, 20], [8, 18], [4, 19], [0, 17]
-    ], 'o');
-    glaze(grid, 6, 11, 3, 2, 'h');
-    glaze(grid, 17, 11, 3, 2, 'h');
-    over(grid, 5, 15, 's');
-    over(grid, 7, 16, 's');
-    over(grid, 16, 16, 's');
-    over(grid, 18, 15, 's');
-    over(grid, 5, 13, '#');
-    over(grid, 8, 14, '#');
-    over(grid, 18, 13, '#');
-    over(grid, 16, 12, '#');
-
-    fillPoly(grid, [[12, 0], [10, 6], [14, 6]], '#');
-    if (attack) {
-      limb(grid, 12, 3, 11, 10, 1, 0, '#');
-      limb(grid, 11, 10, 13, 16, 1, 0, '#');
-      limb(grid, 13, 16, 12, 19, 0, 0, '#');
-      over(grid, 12, 8, 'e');
-      over(grid, 12, 11, 'e');
-      over(grid, 12, 14, 'e');
-      over(grid, 11, 12, 'e');
-    } else {
-      limb(grid, 12, 2, 11, 8, 0, 0, '#');
-      limb(grid, 11, 8, 13, 13, 0, 0, '#');
-      limb(grid, 13, 13, 11, 19, 0, 0, '#');
-      if (step) {
-        over(grid, 10, 11, '#');
-        over(grid, 14, 15, '#');
-      } else {
-        over(grid, 14, 10, '#');
-        over(grid, 10, 16, '#');
-      }
-    }
-
-    const ly = attack ? 5 : (step ? 6 : 7);
-    const ry = attack ? 5 : (step ? 8 : 7);
-    const lx = attack ? 3 : 4;
-    const rx = attack ? 20 : 19;
-    fillEllipse(grid, lx, ly, 2, 2, 'o');
-    fillEllipse(grid, rx, ry, 2, 2, 'o');
-    glaze(grid, lx, ly - 1, 1, 1, 'h');
-    glaze(grid, rx, ry - 1, 1, 1, 'h');
-    over(grid, lx, ly, '#');
-    over(grid, rx, ry, '#');
-    limb(grid, lx, ly + 2, lx + 1, 11, 1, 0, 'o');
-    limb(grid, rx, ry + 2, rx - 1, 11, 1, 0, 'o');
-
-    eye(grid, 6, 13);
-    eye(grid, 16, 13);
-    if (attack) {
-      over(grid, 7, 14, '#');
-      over(grid, 17, 14, '#');
-    }
-
-    const shift = attack ? 0 : (step ? 2 : -1);
-    limb(grid, 7, 18, 7 + shift, 21, 1, 1, 'o');
-    limb(grid, 16, 18, 16 - shift, 21, 1, 1, 'o');
-
-    grid.put(12, 0, '#');
-    grid.put(0, 12, 'o');
-    grid.put(23, 12, 'o');
-    grid.put(8, 21, 'o');
-    grid.put(15, 21, 'o');
-  });
-}
-
-function mender(step, attack) {
-  return sprite(22, 28, (grid) => {
-    fillPoly(grid, [
-      [9, 10], [13, 10], [15, 18], [14, 25], [8, 25], [7, 18]
-    ], 'o');
-    glaze(grid, 10, 13, 2, 2, 'h');
-    for (let y = 12; y <= 23; y += 2) over(grid, 11, y, 'h');
-    over(grid, 13, 18, 's');
-    over(grid, 13, 20, 's');
-    over(grid, 12, 22, 's');
-    seam(grid, 8, 24, 6);
-
-    fillEllipse(grid, 11, 8, 3, 3, 'o');
-    fillPoly(grid, [[11, 0], [7, 6], [15, 6]], 'o');
-    glaze(grid, 10, 2, 1, 1, 'h');
-    eye(grid, 9, 8);
-    eye(grid, 12, 8);
-    if (attack) {
-      over(grid, 10, 10, '#');
-      over(grid, 11, 10, '#');
-      over(grid, 12, 10, '#');
-    } else {
-      over(grid, 11, 10, '#');
-    }
-
-    fillPoly(grid, [[0, 16], [5, 15], [5, 21], [0, 22]], 'h');
-    seam(grid, 1, 17, 4);
-    over(grid, 2, 19, '#');
-    over(grid, 1, 20, 's');
-    limb(grid, 5, 15, 10, 11, 0, 0, '#');
-
-    if (attack) {
-      limb(grid, 14, 16, 18, 14, 1, 0, '#');
-      limb(grid, 18, 14, 21, 12, 1, 0, '#');
-      limb(grid, 21, 12, 19, 10, 0, 0, 'h');
-      limb(grid, 19, 10, 18, 12, 0, 0, 'h');
-      over(grid, 20, 12, 'e');
-    } else if (step) {
-      limb(grid, 14, 17, 17, 16, 1, 1, '#');
-      limb(grid, 17, 16, 21, 15, 1, 0, '#');
-      limb(grid, 21, 15, 20, 13, 0, 0, 'h');
-      limb(grid, 20, 13, 18, 14, 0, 0, 'h');
-    } else {
-      limb(grid, 14, 16, 18, 13, 1, 1, '#');
-      limb(grid, 18, 13, 21, 11, 1, 0, '#');
-      limb(grid, 21, 11, 19, 9, 0, 0, 'h');
-      limb(grid, 19, 9, 17, 11, 0, 0, 'h');
-    }
-
-    const left = attack ? 8 : (step ? 6 : 8);
-    const right = attack ? 14 : (step ? 15 : 13);
-    limb(grid, 9, 24, left, 27, 1, 0, 'o');
-    limb(grid, 13, 24, right, 27, 1, 0, 'o');
-    fillEllipse(grid, left, 27, 1, 0, '#');
-    fillEllipse(grid, right, 27, 1, 0, '#');
-    eraseEllipse(grid, 11, 26, 0, 1);
-
-    grid.put(11, 0, 'o');
-    grid.put(0, 18, 'h');
-    grid.put(left, 27, '#');
-    grid.put(right, 27, '#');
-  });
-}
-
-function shade(step, attack) {
-  return sprite(16, 30, (grid) => {
-    const lean = attack ? 0 : (step ? 1 : -1);
-    fillPoly(grid, [
-      [7, 0], [8, 0], [8, 4],
-      [10, 6], [10, 11], [8, 13],
-      [8 + lean, 18], [7, 24],
-      [8, 29], [7, 29], [6, 24],
-      [5 + lean, 18], [5, 13],
-      [4, 11], [4, 6], [6, 4]
-    ], 'o');
-    glaze(grid, 7, 4, 1, 2, 'h');
-    over(grid, 7, 16, 's');
-    over(grid, 6, 20, 's');
-    const vein = 7 + (attack ? 0 : lean);
-    for (let y = 15; y <= 22; y += 2) over(grid, vein, y, 'e');
-
-    const eyeY = step && !attack ? 9 : 8;
-    over(grid, 6, eyeY - 1, 'e');
-    over(grid, 8, eyeY - 1, 'e');
-    over(grid, 6, eyeY, 's');
-    over(grid, 8, eyeY, 's');
-    over(grid, 6, eyeY + 1, 's');
-    over(grid, 8, eyeY + 1, 's');
-    if (attack) {
-      over(grid, 6, 10, '#');
-      over(grid, 7, 10, '#');
-      over(grid, 8, 10, '#');
-    }
-
-    if (attack) {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 1, 22, 0, 0, 'e');
-      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 13, 24, 0, 0, 'e');
-      limb(grid, 8, 14, 15, 13, 0, 0, 'e');
-    } else if (step) {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 3, 23, 0, 0, 'e');
-      limb(grid, 8, 13, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 11, 22, 0, 0, 'e');
-    } else {
-      limb(grid, 5, 13, 0, 15, 0, 0, 'e');
-      limb(grid, 0, 15, 2, 21, 0, 0, 'e');
-      limb(grid, 10, 11, 15, 16, 0, 0, 'e');
-      limb(grid, 15, 16, 12, 23, 0, 0, 'e');
-    }
-
-    grid.put(7, 0, 'o');
-    grid.put(8, 0, 'o');
-    grid.put(0, 15, 'e');
-    grid.put(15, 16, 'e');
-    grid.put(7, 29, 'o');
-    grid.put(8, 29, 'o');
-  });
-}
-
-function banner(step, attack) {
-  return sprite(26, 32, (grid) => {
-    limb(grid, 9, 0, 9, 31, 1, 1, '#');
-    fillEllipse(grid, 9, 1, 1, 1, 'h');
-    over(grid, 9, 11, 'h');
-    over(grid, 9, 12, 'h');
-
-    fillPoly(grid, [[11, 3], [18, 3], [18, 8], [11, 8]], 'h');
-    const tuck = attack ? 1 : 0;
-    fillPoly(grid, [[18, 3], [25, 4], [25, 5], [18, 4 + tuck]], 'h');
-    fillPoly(grid, [[18, 7], [25, 8], [25, 9], [18, 8]], 'h');
-    if (step && !attack) eraseEllipse(grid, 15, 8, 1, 0);
-    const markX = attack ? 14 : (step ? 13 : 12);
-    for (let x = markX; x < markX + 3; x += 1) {
-      over(grid, x, 5, 'o');
-      over(grid, x, 6, 'o');
-    }
-    grid.put(25, 4, 'h');
-    grid.put(25, 5, 'h');
-    grid.put(25, 8, 'h');
-    grid.put(25, 9, 'h');
-
-    fillPoly(grid, [[0, 17], [4, 15], [5, 22], [0, 24]], 'o');
-    over(grid, 1, 19, '#');
-    over(grid, 1, 21, '#');
-    fillEllipse(grid, 6, 16, 3, 3, 'o');
-    glaze(grid, 5, 14, 2, 1, 'h');
-    eye(grid, 4, 16);
-    eye(grid, 7, 16);
-    if (attack) {
-      over(grid, 5, 18, '#');
-      over(grid, 6, 18, '#');
-      over(grid, 7, 18, '#');
-    } else {
-      over(grid, 6, 18, '#');
-    }
-    fillPoly(grid, [[4, 19], [10, 19], [11, 26], [3, 26]], 'o');
-    over(grid, 5, 20, 'h');
-    over(grid, 6, 20, 'h');
-    over(grid, 7, 20, 'h');
-    over(grid, 9, 23, 's');
-    over(grid, 9, 25, 's');
-    seam(grid, 4, 23, 5);
-
-    if (attack) limb(grid, 8, 20, 10, 14, 1, 0, 'o');
-    else if (step) limb(grid, 8, 21, 10, 17, 1, 0, 'o');
-    else limb(grid, 7, 20, 10, 15, 1, 0, 'o');
-
-    const reach = attack ? 16 : (step ? 14 : 11);
-    limb(grid, 8, 22, reach, 24, 1, 0, 'o');
-
-    const lift = attack ? 0 : (step ? 2 : 0);
-    const other = attack ? 0 : (step ? 0 : 2);
-    limb(grid, 5, 26, 4, 31 - lift, 1, 0, 'o');
-    limb(grid, 8, 26, 9, 31 - other, 1, 0, 'o');
-    fillEllipse(grid, 4, 31 - lift, 1, 0, '#');
-    fillEllipse(grid, 9, 31 - other, 1, 0, '#');
-
-    grid.put(0, 20, 'o');
-    grid.put(25, 4, 'h');
-    grid.put(25, 9, 'h');
-    grid.put(9, 0, '#');
-    grid.put(9, 31, '#');
-  });
-}
-
-function warden(step, attack) {
-  return sprite(22, 30, (grid) => {
-    const dy = attack ? -3 : (step ? 1 : 0);
-    const spread = attack ? 0 : (step ? 2 : -1);
-
-    // Thin ash tatters own the side edges. The shield stays the front silhouette.
-    fillPoly(grid, [
-      [8, 14],
-      [2, 16],
-      [0, 17],
-      [0, 19],
-      [3, 18],
-      [7, 16]
-    ], 's');
-    fillPoly(grid, [
-      [13, 14],
-      [19, 16],
-      [21, 17],
-      [21, 19],
-      [18, 18],
-      [14, 16]
-    ], 's');
-
-    fillPoly(grid, [
-      [9, 12],
-      [13, 12],
-      [13, 19],
-      [12, 21],
-      [10, 21],
-      [9, 19]
-    ], 'o');
-    fillPoly(grid, [
-      [8, 5],
-      [14, 5],
-      [15, 8],
-      [13, 11],
-      [9, 11],
-      [7, 8]
-    ], 'o');
-    fillPoly(grid, [
-      [10, 0],
-      [12, 0],
-      [12, 5],
-      [10, 5]
-    ], '#');
-    over(grid, 10, 5, 'h');
-    over(grid, 11, 5, 'h');
-    over(grid, 12, 5, 'h');
-    over(grid, 9, 7, 'e');
-    over(grid, 10, 7, 'e');
-    over(grid, 12, 7, 'e');
-    over(grid, 13, 7, 'e');
-    over(grid, 10, 8, '#');
-    over(grid, 11, 8, '#');
-    over(grid, 12, 8, '#');
-
-    const lx = 8 - spread;
-    const rx = 14 + spread;
-    limb(grid, 10, 21, lx, 29, 1, 0, 'o');
-    limb(grid, 12, 21, rx, 29, 1, 0, 'o');
-    fillEllipse(grid, lx, 29, 1, 0, '#');
-    fillEllipse(grid, rx, 29, 1, 0, '#');
-
-    // Small heater in front of the torso. Attack lifts it; the box does not grow.
-    fillPoly(grid, [
-      [5, 12 + dy],
-      [16, 12 + dy],
-      [16, 16 + dy],
-      [11, 23 + dy],
-      [10, 23 + dy],
-      [5, 16 + dy]
-    ], 'h');
-    over(grid, 7, 13 + dy, 'e');
-    over(grid, 8, 13 + dy, 'e');
-    over(grid, 7, 15 + dy, '#');
-    over(grid, 14, 15 + dy, '#');
-    for (let i = 0; i < 6; i += 1) over(grid, 11, 14 + dy + i, '#');
-    over(grid, 10, 16 + dy, 'e');
-    over(grid, 11, 16 + dy, 'e');
-    over(grid, 10, 17 + dy, 'e');
-    over(grid, 11, 17 + dy, 'e');
-
-    grid.put(10, 0, '#');
-    grid.put(11, 0, '#');
-    grid.put(12, 0, '#');
-    grid.put(0, 17, 's');
-    grid.put(0, 18, 's');
-    grid.put(0, 19, 's');
-    grid.put(21, 17, 's');
-    grid.put(21, 18, 's');
-    grid.put(21, 19, 's');
-    grid.put(lx, 29, '#');
-    grid.put(rx, 29, '#');
-  });
-}
-
-function cinder(step, attack) {
-  return sprite(18, 26, (grid) => {
-    const bob = attack ? -1 : (step ? 1 : 0);
-    fillEllipse(grid, 9, 14 + bob, 5, 6, 'o');
-    fillEllipse(grid, 9, 8 + bob, 3, 3, 'o');
-    eye(grid, 8, 7 + bob);
-    limb(grid, 9, 6 + bob, 9, 1, 0, 0, 'h');
-    fillEllipse(grid, 9, 1, 1, 1, 'e');
-    const left = attack ? 6 : (step ? 5 : 7);
-    const right = attack ? 12 : (step ? 13 : 11);
-    limb(grid, 7, 19, left, 25, 1, 0, '#');
-    limb(grid, 11, 19, right, 25, 1, 0, '#');
-    grid.put(0, 14, 'o');
-    grid.put(17, 14, 'o');
-    grid.put(9, 0, 'e');
-    grid.put(9, 25, '#');
-  });
-}
-
-function hush(step, attack) {
-  return sprite(20, 26, (grid) => {
-    const bob = attack ? 0 : (step ? 1 : -1);
-    fillEllipse(grid, 10, 12 + bob, 5, 6, 'o');
-    fillEllipse(grid, 10, 6, 4, 3, 'h');
-    over(grid, 8, 6, '#');
-    over(grid, 11, 6, '#');
-    eye(grid, 8, 11 + bob);
-    const left = attack ? 7 : (step ? 6 : 8);
-    const right = attack ? 13 : (step ? 14 : 12);
-    limb(grid, 8, 18, left, 25, 1, 0, '#');
-    limb(grid, 12, 18, right, 25, 1, 0, '#');
-    grid.put(0, 12, 'h');
-    grid.put(19, 12, 'h');
-    grid.put(10, 0, 'h');
-    grid.put(10, 25, '#');
-  });
-}
-
-const SPRITES = {
-  shambler: [shambler(0, false), shambler(1, false), shambler(0, true)],
-  runner: [runner(0, false), runner(1, false), runner(0, true)],
-  brute: [brute(0, false), brute(1, false), brute(0, true)],
-  armored: [armored(0, false), armored(1, false), armored(0, true)],
-  spitter: [spitter(0, false), spitter(1, false), spitter(0, true)],
-  swarm: [swarm(0, false), swarm(1, false), swarm(0, true)],
-  boss: [boss(0, false), boss(1, false), boss(0, true)],
-  leaper: [leaper(0, false), leaper(1, false), leaper(0, true)],
-  splitter: [splitter(0, false), splitter(1, false), splitter(0, true)],
-  mender: [mender(0, false), mender(1, false), mender(0, true)],
-  shade: [shade(0, false), shade(1, false), shade(0, true)],
-  banner: [banner(0, false), banner(1, false), banner(0, true)],
-  warden: [warden(0, false), warden(1, false), warden(0, true)],
-  charge: [cinder(0, false), cinder(1, false), cinder(0, true)],
-  hush: [hush(0, false), hush(1, false), hush(0, true)]
-};
-
-const BOSS_ENRAGED = [boss(0, false, true), boss(1, false, true), boss(0, true, true)];
-
-function rowsFor(enemy, time) {
-  const kind = SPRITES[enemy?.kind] ? enemy.kind : 'shambler';
-  const frames = kind === 'boss' && enemy?.enraged === true ? BOSS_ENRAGED : SPRITES[kind];
-  const last = frames.length - 1;
-  const attacking = enemy?.attacking === true;
-  const frame = attacking || last === 0
-    ? last
-    : Math.floor((time || 0) * 6) % last;
-  return {kind, rows: frames[frame] || frames[0]};
-}
+const SIZES = Object.freeze({
+  shambler: Object.freeze({width: 24, height: 30}),
+  runner: Object.freeze({width: 18, height: 24}),
+  brute: Object.freeze({width: 38, height: 44}),
+  armored: Object.freeze({width: 28, height: 34}),
+  spitter: Object.freeze({width: 26, height: 30}),
+  swarm: Object.freeze({width: 16, height: 18}),
+  boss: Object.freeze({width: 56, height: 62}),
+  leaper: Object.freeze({width: 24, height: 30}),
+  splitter: Object.freeze({width: 28, height: 28}),
+  mender: Object.freeze({width: 26, height: 32}),
+  shade: Object.freeze({width: 22, height: 32}),
+  banner: Object.freeze({width: 30, height: 38}),
+  warden: Object.freeze({width: 28, height: 34}),
+  charge: Object.freeze({width: 24, height: 30}),
+  hush: Object.freeze({width: 24, height: 32}),
+});
 
 export function enemySize(enemy) {
-  const {rows} = rowsFor(enemy, 0);
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < rows.length; y += 1) {
-    const line = rows[y];
-    for (let x = 0; x < line.length; x += 1) {
-      const ink = line[x];
-      if (ink === '.' || ink === ' ') continue;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+  const kind = enemy && typeof enemy.kind === 'string' ? enemy.kind : 'shambler';
+  return SIZES[kind] || SIZES.shambler;
+}
+
+function isRichCtx(ctx) {
+  return Boolean(
+    ctx
+    && typeof ctx.beginPath === 'function'
+    && typeof ctx.arc === 'function'
+    && typeof ctx.ellipse === 'function'
+    && typeof ctx.createLinearGradient === 'function'
+  );
+}
+
+function seedFrom(enemy) {
+  if (Number.isFinite(enemy?.driftPhase)) return enemy.driftPhase * 3.1;
+  const id = String(enemy?.id || '0');
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return (Math.abs(h) % 628) / 100;
+}
+
+function rRect(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+function drawShadow(ctx, rx, ry, lift = 0) {
+  ctx.fillStyle = 'rgba(8, 12, 16, 0.44)';
+  ctx.beginPath();
+  ctx.ellipse(0, -1.5, Math.max(3, rx - lift * 0.2), Math.max(1.5, ry - lift * 0.1), 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Expressive PvZ2 mismatched cartoon eyes + optional teeth jaw. */
+function drawZombieFace(ctx, hx, hy, r, opts = {}) {
+  const eyeColor = opts.eyeColor || '#fff7b8';
+  const pupilColor = opts.pupilColor || '#151218';
+  const bigLeft = opts.asymmetric !== false;
+  const angry = opts.angry === true;
+  const biting = opts.biting === true;
+  const eyeSpread = r * 0.42;
+  const ey = hy + r * 0.02;
+  const rL = r * (bigLeft ? 0.3 : 0.25);
+  const rR = r * 0.24;
+
+  // Left & Right eyes
+  for (const [ex, er] of [[hx - eyeSpread, rL], [hx + eyeSpread, rR]]) {
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    ctx.arc(ex, ey, er, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = Math.max(1.1, r * 0.14);
+    ctx.stroke();
+
+    // Pupil looking down toward the wall!
+    ctx.fillStyle = pupilColor;
+    ctx.beginPath();
+    ctx.arc(ex, ey + er * 0.22, Math.max(0.9, er * 0.42), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Heavy angry brows
+  if (angry || biting) {
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = Math.max(1.4, r * 0.2);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx - eyeSpread - rL, ey - rL * 0.9);
+    ctx.lineTo(hx - 1, ey - rL * 0.25);
+    ctx.moveTo(hx + eyeSpread + rR, ey - rR * 0.9);
+    ctx.lineTo(hx + 1, ey - rR * 0.25);
+    ctx.stroke();
+  }
+
+  // Mouth / Chomp jaw
+  const my = hy + r * 0.5;
+  const mw = r * (biting ? 0.72 : 0.56);
+  const mh = r * (biting ? 0.42 : 0.22);
+  ctx.fillStyle = '#3c141c';
+  ctx.beginPath();
+  ctx.ellipse(hx, my, mw, mh, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Jagged ivory PvZ2 teeth
+  ctx.fillStyle = '#fff5d6';
+  const teeth = biting ? 3 : 2;
+  for (let i = 0; i < teeth; i++) {
+    const tx = hx - mw * 0.55 + (mw * 1.1 * i) / Math.max(1, teeth - 1);
+    ctx.fillRect(tx - 1.1, my - mh * 0.8, 2.2, Math.max(1.6, mh * 0.85));
+  }
+}
+
+/** Shared articulated cartoon zombie body helper for humanoid species. */
+function drawHumanoidZombie(ctx, cfg) {
+  const {
+    stride, bob, lean, attacking,
+    skinLight, skinDark, coatLight, coatDark, pantsColor,
+    tieColor, headR = 7.5, torsoW = 12, torsoH = 11, armLen = 9, legH = 7.5,
+    eyeColor, angry, hatFn, propBackFn, propFrontFn, headOffsetY = 0
+  } = cfg;
+
+  const biteSwing = attacking ? Math.sin(stride * 2.1) * 3.5 : 0;
+  const footL = Math.sin(stride) * 3.2;
+  const footR = -Math.sin(stride) * 3.2;
+
+  drawShadow(ctx, torsoW * 0.72, 4.2);
+
+  if (propBackFn) propBackFn();
+
+  // Legs
+  for (const [side, fy] of [[-1, footL], [1, footR]]) {
+    const lx = side * (torsoW * 0.27);
+    ctx.fillStyle = pantsColor;
+    rRect(ctx, lx - 2.6, -legH - 1.5 + Math.min(0, fy * 0.5), 5.2, legH + 1, 2.2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Shoe
+    ctx.fillStyle = '#242220';
+    ctx.beginPath();
+    ctx.ellipse(lx + side * 0.6, -2.0 + Math.min(0, fy * 0.45), 3.3, 2.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Torso + Coat with bob & sway
+  ctx.save();
+  ctx.translate(lean, bob + (attacking ? Math.abs(biteSwing) * 0.45 : 0));
+
+  const ty = -legH - torsoH + 1;
+  const coatGrad = ctx.createLinearGradient(-torsoW / 2, ty, torsoW / 2, ty + torsoH);
+  coatGrad.addColorStop(0, coatLight);
+  coatGrad.addColorStop(1, coatDark);
+  rRect(ctx, -torsoW / 2, ty, torsoW, torsoH, 4.2);
+  ctx.fillStyle = coatGrad;
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Coat lapel highlight + tattered tie
+  if (tieColor) {
+    ctx.fillStyle = '#d9d4c4';
+    ctx.beginPath();
+    ctx.moveTo(-2.6, ty + 1);
+    ctx.lineTo(2.6, ty + 1);
+    ctx.lineTo(0, ty + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = tieColor;
+    ctx.beginPath();
+    ctx.moveTo(-1.3, ty + 2);
+    ctx.lineTo(1.3, ty + 2);
+    ctx.lineTo(1.7, ty + 8.5);
+    ctx.lineTo(0, ty + 10.5);
+    ctx.lineTo(-1.7, ty + 8.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Outstretched Reaching Arms (pointing forward/down toward wall!)
+  for (const side of [-1, 1]) {
+    const ax = side * (torsoW * 0.52);
+    const ay = ty + 3.2;
+    const armBob = attacking ? biteSwing * side : Math.sin(stride + side * 1.1) * 2.2;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(side * 0.28 + armBob * 0.08);
+    // Sleeve
+    rRect(ctx, -2.2, -1, 4.4, armLen * 0.62, 2);
+    ctx.fillStyle = coatLight;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    // Zombie green hand claw
+    ctx.fillStyle = skinLight;
+    ctx.beginPath();
+    ctx.arc(0, armLen * 0.68, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Oversized PvZ2 Cartoon Zombie Head
+  const hy = ty - headR * 0.78 + headOffsetY + (attacking ? Math.abs(biteSwing) * 0.35 : 0);
+  const headGrad = ctx.createRadialGradient(-headR * 0.3, hy - headR * 0.35, 1.5, 0, hy, headR * 1.15);
+  headGrad.addColorStop(0, skinLight);
+  headGrad.addColorStop(1, skinDark);
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, hy, headR * 0.96, headR * 1.04, lean * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.9;
+  ctx.stroke();
+
+  // Upper-left glossy rim highlight
+  ctx.fillStyle = 'rgba(240, 255, 224, 0.42)';
+  ctx.beginPath();
+  ctx.ellipse(-headR * 0.38, hy - headR * 0.45, headR * 0.32, headR * 0.16, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawZombieFace(ctx, 0, hy, headR, {eyeColor, angry, biting: attacking});
+
+  if (hatFn) hatFn(0, hy, headR);
+  if (propFrontFn) propFrontFn(ty, hy, headR);
+
+  ctx.restore();
+}
+
+// =========================================================================
+// INDIVIDUAL ZOMBIE PAINTERS (ALL 15 SPECIES)
+// =========================================================================
+function drawShambler(ctx, t, attacking) {
+  const stride = t * 5.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.8,
+    lean: Math.sin(stride) * 1.2,
+    attacking,
+    skinLight: '#9fd078',
+    skinDark: '#5b8a44',
+    coatLight: '#6b5748',
+    coatDark: '#3f322a',
+    pantsColor: '#364454',
+    tieColor: '#d93d3d',
+    headR: 7.4,
+    torsoW: 12.5,
+    torsoH: 10.5,
+    armLen: 9.5,
+    legH: 7.5,
+    hatFn: (hx, hy, r) => {
+      // Messy tufts of zombie hair
+      ctx.strokeStyle = '#2b2420';
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hx - 2, hy - r);
+      ctx.lineTo(hx - 4, hy - r - 3);
+      ctx.moveTo(hx + 1, hy - r);
+      ctx.lineTo(hx + 3, hy - r - 3.5);
+      ctx.stroke();
+    }
+  });
+}
+
+function drawRunner(ctx, t, attacking) {
+  const stride = t * 11.5;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -2.6,
+    lean: Math.sin(stride) * 1.8,
+    attacking,
+    skinLight: '#b4dc78',
+    skinDark: '#6c9240',
+    coatLight: '#f07c2e',
+    coatDark: '#a63e14',
+    pantsColor: '#2a2e38',
+    tieColor: null,
+    headR: 6.2,
+    torsoW: 10,
+    torsoH: 8.8,
+    armLen: 8.2,
+    legH: 6.8,
+    eyeColor: '#fff699',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Bright crimson runner headband with fluttering tails
+      ctx.fillStyle = '#e83838';
+      rRect(ctx, hx - r * 0.95, hy - r * 0.55, r * 1.9, 2.8, 1.2);
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      const tailW = Math.sin(t * 14) * 2.5;
+      ctx.strokeStyle = '#ff5448';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(hx + r * 0.8, hy - r * 0.45);
+      ctx.lineTo(hx + r + 4.5, hy - r * 0.85 + tailW);
+      ctx.stroke();
+    }
+  });
+}
+
+function drawSwarm(ctx, t, attacking) {
+  const hop = Math.abs(Math.sin(t * 10.5)) * 3.4;
+  drawShadow(ctx, 6.2, 2.8, hop);
+  ctx.save();
+  ctx.translate(0, -hop);
+  // Tiny energetic PvZ2 Imp body
+  const g = ctx.createRadialGradient(-2, -9, 1, 0, -8, 8.5);
+  g.addColorStop(0, '#c2e874');
+  g.addColorStop(1, '#689836');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, -8.5, 6.4, 6.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // Pointy imp ears
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#92c452';
+    ctx.beginPath();
+    ctx.moveTo(s * 5.2, -10);
+    ctx.lineTo(s * 8.6, -12.8);
+    ctx.lineTo(s * 5.8, -6.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Torn tunic diaper/wrap
+  ctx.fillStyle = '#8b5e3c';
+  rRect(ctx, -4.5, -5.2, 9, 4.2, 1.8);
+  ctx.fill();
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, -9.2, 5.4, {eyeColor: '#fff696', angry: true, biting: attacking});
+  ctx.restore();
+}
+
+function drawSpitter(ctx, t, attacking) {
+  const stride = t * 5.0;
+  const pulse = 1 + Math.sin(t * 6.5) * 0.08 + (attacking ? 0.14 : 0);
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.6,
+    lean: Math.sin(stride) * 1.0,
+    attacking,
+    skinLight: '#82cc64',
+    skinDark: '#3c7a36',
+    coatLight: '#36583e',
+    coatDark: '#1d3424',
+    pantsColor: '#243028',
+    headR: 7.4,
+    torsoW: 13.5,
+    torsoH: 10.5,
+    eyeColor: '#d8ff64',
+    angry: true,
+    propBackFn: () => {
+      // Glowing swollen toxic acid sacs bulging behind shoulders
+      ctx.save();
+      ctx.scale(pulse, pulse);
+      for (const s of [-1, 1]) {
+        const sg = ctx.createRadialGradient(s * 8, -16, 1, s * 8, -15, 6);
+        sg.addColorStop(0, '#e8ff82');
+        sg.addColorStop(0.55, '#86e034');
+        sg.addColorStop(1, '#367418');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(s * 7.8, -15.5, 5.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+    propFrontFn: (_ty, hy, r) => {
+      if (attacking) {
+        // Glowing acid orb charging in mouth!
+        ctx.fillStyle = '#d4ff56';
+        ctx.beginPath();
+        ctx.arc(0, hy + r * 0.55, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#3c8816';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+  });
+}
+
+function drawArmored(ctx, t, attacking) {
+  const stride = t * 4.4;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#8eb872',
+    skinDark: '#4f7442',
+    coatLight: '#7b8c9a',
+    coatDark: '#3f4c58',
+    pantsColor: '#36424c',
+    headR: 8.0,
+    torsoW: 15,
+    torsoH: 12,
+    armLen: 10,
+    legH: 8,
+    eyeColor: '#88e8ff',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Iconic PvZ2 Glossy Steel Bucket-Helm with visor slit & metallic sheen!
+      const bg = ctx.createLinearGradient(hx - r, hy - r, hx + r, hy + r * 0.3);
+      bg.addColorStop(0, '#eef6fc');
+      bg.addColorStop(0.45, '#9cb0be');
+      bg.addColorStop(1, '#4c5e6c');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.92, hy - r * 1.15);
+      ctx.lineTo(hx + r * 0.92, hy - r * 1.15);
+      ctx.lineTo(hx + r * 1.12, hy + r * 0.25);
+      ctx.lineTo(hx - r * 1.12, hy + r * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.0;
+      ctx.stroke();
+
+      // Bucket top rim
+      ctx.fillStyle = '#dce8f0';
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - r * 1.15, r * 0.92, 2.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing eye slit cut into bucket front
+      rRect(ctx, hx - 5.2, hy - 2.2, 10.4, 3.4, 1.4);
+      ctx.fillStyle = '#121a20';
+      ctx.fill();
+      ctx.fillStyle = attacking ? '#ffe878' : '#7ae8ff';
+      ctx.fillRect(hx - 3.6, hy - 1.1, 2.6, 1.4);
+      ctx.fillRect(hx + 1.0, hy - 1.1, 2.6, 1.4);
+    },
+    propFrontFn: (ty) => {
+      // Twin riveted steel shoulder pauldrons
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#b4c6d4';
+        ctx.beginPath();
+        ctx.ellipse(s * 8.6, ty + 3, 4.2, 4.8, s * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.7;
+        ctx.stroke();
+      }
+    }
+  });
+}
+
+function drawBrute(ctx, t, attacking) {
+  const stride = t * 3.6;
+  const stomp = Math.abs(Math.sin(stride)) * -2.2;
+  const slam = attacking ? Math.sin(t * 7.5) * 6 : 0;
+
+  drawShadow(ctx, 16.5, 6.2);
+
+  // Huge stumpy legs
+  for (const s of [-1, 1]) {
+    const stepY = s * Math.sin(stride) * 2.5;
+    ctx.fillStyle = '#382a34';
+    rRect(ctx, s * 6.8 - 4.4, -12 + Math.min(0, stepY), 8.8, 10.5, 3);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.1;
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(Math.sin(stride) * 1.3, stomp);
+
+  // Hulking Gargantuar-style upper torso
+  const tg = ctx.createRadialGradient(-5, -26, 3, 0, -22, 18);
+  tg.addColorStop(0, '#c86452');
+  tg.addColorStop(0.6, '#8c342e');
+  tg.addColorStop(1, '#4d1a1a');
+  ctx.fillStyle = tg;
+  ctx.beginPath();
+  ctx.ellipse(0, -22, 15.5, 13.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  // Ragged iron chain strap across chest
+  ctx.strokeStyle = '#9aa8b4';
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.moveTo(-11, -30);
+  ctx.lineTo(10, -13);
+  ctx.stroke();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  // Massive boulder fists slamming downward
+  for (const s of [-1, 1]) {
+    const fy = -18 + (s < 0 ? slam : -slam * 0.4);
+    ctx.fillStyle = '#a4483e';
+    ctx.beginPath();
+    ctx.ellipse(s * 16.5, fy, 5.4, 6.8, s * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.1;
+    ctx.stroke();
+    // Iron knuckle studs
+    ctx.fillStyle = '#d6e2ea';
+    ctx.beginPath();
+    ctx.arc(s * 16.5, fy + 3.2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Brutish small head sunk between shoulders
+  const hy = -34.5;
+  const hg = ctx.createRadialGradient(-2, hy - 2, 1, 0, hy, 8);
+  hg.addColorStop(0, '#d88672');
+  hg.addColorStop(1, '#843a32');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.arc(0, hy, 7.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, hy, 7.4, {eyeColor: '#ffea7a', angry: true, biting: attacking});
+  ctx.restore();
+}
+
+function drawLeaper(ctx, t, attacking, enemy) {
+  const windup = Number.isFinite(enemy?.leapTimer) && enemy.leapTimer > 0;
+  const crouch = windup ? 4.5 : 0;
+  const stride = t * 8.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: crouch + Math.abs(Math.sin(stride)) * -2.2,
+    lean: Math.sin(stride) * 1.4,
+    attacking: attacking || windup,
+    skinLight: '#b6d86e',
+    skinDark: '#6a8e38',
+    coatLight: '#e69832',
+    coatDark: '#924c14',
+    pantsColor: '#3a2c1e',
+    headR: 7.0,
+    torsoW: 11.5,
+    torsoH: 10,
+    eyeColor: '#fff588',
+    angry: true,
+    hatFn: (hx, hy, r) => {
+      // Pointed amber hunter hood
+      ctx.fillStyle = '#f2a838';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy - r - 6);
+      ctx.lineTo(hx + r * 0.95, hy - r * 0.25);
+      ctx.lineTo(hx - r * 0.95, hy - r * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.7;
+      ctx.stroke();
+    }
+  });
+}
+
+function drawSplitter(ctx, t, attacking) {
+  const wobble = Math.sin(t * 5.8) * 1.4;
+  const pulse = 1 + Math.sin(t * 7.2) * 0.06;
+  drawShadow(ctx, 12.5, 4.8);
+  ctx.save();
+  ctx.translate(wobble, -Math.abs(Math.sin(t * 5.8)) * 1.5);
+  ctx.scale(pulse, 2 - pulse);
+
+  // Wide bulbous purple brood sac
+  const g = ctx.createRadialGradient(-4, -15, 2, 0, -13, 14);
+  g.addColorStop(0, '#c88ce0');
+  g.addColorStop(0.55, '#7e4898');
+  g.addColorStop(1, '#3e1e52');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, -13, 12.8, 11.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+
+  // Glowing jagged split-line crack down center!
+  ctx.strokeStyle = attacking ? '#ffe872' : '#ff98d4';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.moveTo(0, -23.5);
+  ctx.lineTo(-2.5, -16);
+  ctx.lineTo(2.4, -10.5);
+  ctx.lineTo(-1.0, -3.5);
+  ctx.stroke();
+
+  // Twin twin-imp eyes peeking out of each half
+  drawZombieFace(ctx, -5.2, -13, 4.0, {eyeColor: '#fff4a6', asymmetric: false, biting: attacking});
+  drawZombieFace(ctx, 5.2, -13, 4.0, {eyeColor: '#fff4a6', asymmetric: false, biting: attacking});
+  ctx.restore();
+}
+
+function drawMender(ctx, t, attacking) {
+  const stride = t * 4.5;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#9ed68c',
+    skinDark: '#4f8854',
+    coatLight: '#4fa876',
+    coatDark: '#245842',
+    pantsColor: '#253c34',
+    headR: 7.0,
+    torsoW: 12,
+    torsoH: 11.5,
+    eyeColor: '#e8ffbe',
+    hatFn: (hx, hy, r) => {
+      // Field-medic cap with bright mint cross
+      rRect(ctx, hx - r * 0.88, hy - r * 1.15, r * 1.76, r * 0.72, 2.8);
+      ctx.fillStyle = '#e8f4ea';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.fillStyle = '#2dc474';
+      ctx.fillRect(hx - 1.2, hy - r * 1.02, 2.4, 5.2);
+      ctx.fillRect(hx - 2.6, hy - r * 0.82, 5.2, 2.2);
+    },
+    propFrontFn: (ty) => {
+      // Glowing mint healing staff in right hand
+      const glow = 0.75 + 0.25 * Math.sin(t * 7);
+      ctx.strokeStyle = '#5c4228';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(9.5, ty + 14);
+      ctx.lineTo(10.5, ty - 9);
+      ctx.stroke();
+      ctx.save();
+      ctx.globalAlpha = glow;
+      ctx.fillStyle = '#7effc4';
+      ctx.beginPath();
+      ctx.arc(10.5, ty - 10, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#186844';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function drawShade(ctx, t, attacking) {
+  const floatY = Math.sin(t * 4.8) * 3.0;
+  const sway = Math.cos(t * 3.6) * 2.0;
+  drawShadow(ctx, 7.5, 3.0, 4 + floatY);
+
+  ctx.save();
+  ctx.translate(sway, -4 + floatY);
+  // Billowing translucent spectral ghost body
+  const g = ctx.createLinearGradient(0, -26, 0, 2);
+  g.addColorStop(0, '#96f2ff');
+  g.addColorStop(0.55, '#4688b4');
+  g.addColorStop(1, 'rgba(34, 58, 92, 0.25)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -26);
+  ctx.bezierCurveTo(10, -24, 11, -10, 9, -1);
+  ctx.lineTo(4, -4 + Math.sin(t * 8) * 2);
+  ctx.lineTo(0, 1);
+  ctx.lineTo(-4, -4 - Math.sin(t * 8) * 2);
+  ctx.lineTo(-9, -1);
+  ctx.bezierCurveTo(-11, -10, -10, -24, 0, -26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#142636';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Twin piercing neon-cyan ghost eyes
+  ctx.fillStyle = attacking ? '#ffffff' : '#c8ffff';
+  ctx.beginPath();
+  ctx.ellipse(-3.2, -16, 2.2, 2.8, -0.15, 0, Math.PI * 2);
+  ctx.ellipse(3.2, -16, 2.2, 2.8, 0.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBanner(ctx, t, attacking) {
+  const stride = t * 5.2;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.6,
+    lean: Math.sin(stride) * 1.0,
+    attacking,
+    skinLight: '#9ac874',
+    skinDark: '#527c3e',
+    coatLight: '#a62e36',
+    coatDark: '#5c141c',
+    pantsColor: '#2c2428',
+    tieColor: '#f4c854',
+    headR: 7.2,
+    torsoW: 12.5,
+    torsoH: 11,
+    angry: true,
+    propFrontFn: (ty) => {
+      // Tall flagpole + Smooth Sine-Wave Fluttering Crimson War Flag!
+      const px = -9.5;
+      ctx.strokeStyle = '#3c2a1c';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(px, ty + 14);
+      ctx.lineTo(px, ty - 18);
+      ctx.stroke();
+      ctx.fillStyle = '#f6cf64';
+      ctx.beginPath();
+      ctx.arc(px, ty - 19, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      const w1 = Math.sin(t * 9.5) * 2.2;
+      const w2 = Math.cos(t * 9.5) * 2.6;
+      const fg = ctx.createLinearGradient(px, ty - 17, px + 18, ty - 8);
+      fg.addColorStop(0, '#ff4c44');
+      fg.addColorStop(1, '#a81c24');
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.moveTo(px + 1, ty - 17);
+      ctx.quadraticCurveTo(px + 9, ty - 18 + w1, px + 18, ty - 15 + w2);
+      ctx.lineTo(px + 14.5, ty - 11.5 + w2 * 0.8);
+      ctx.lineTo(px + 18, ty - 8 + w2);
+      ctx.quadraticCurveTo(px + 9, ty - 9 + w1, px + 1, ty - 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      // Gold skull dot on flag
+      ctx.fillStyle = '#ffe278';
+      ctx.beginPath();
+      ctx.arc(px + 7.5, ty - 12.5 + w1 * 0.4, 2.0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+function drawWarden(ctx, t, attacking) {
+  const stride = t * 4.4;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.7,
+    attacking,
+    skinLight: '#8cb878',
+    skinDark: '#486c44',
+    coatLight: '#4c6684',
+    coatDark: '#26384c',
+    pantsColor: '#24303e',
+    headR: 7.4,
+    torsoW: 13.5,
+    torsoH: 11.5,
+    angry: true,
+    propFrontFn: (ty) => {
+      // Gleaming Kite Tower Shield with golden emblem in front!
+      const sx = -9;
+      const sy = ty + 2;
+      const sg = ctx.createLinearGradient(sx - 6, sy - 6, sx + 6, sy + 10);
+      sg.addColorStop(0, '#c8dce8');
+      sg.addColorStop(0.5, '#648096');
+      sg.addColorStop(1, '#2c3d4c');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - 6);
+      ctx.lineTo(sx + 7.5, sy - 2);
+      ctx.lineTo(sx + 6, sy + 7.5);
+      ctx.lineTo(sx, sy + 12.5);
+      ctx.lineTo(sx - 6, sy + 7.5);
+      ctx.lineTo(sx - 7.5, sy - 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.9;
+      ctx.stroke();
+
+      // Golden Aegis Cross on shield
+      ctx.fillStyle = '#f6cc5c';
+      ctx.fillRect(sx - 1.3, sy - 3, 2.6, 11);
+      ctx.fillRect(sx - 4.2, sy + 0.5, 8.4, 2.4);
+    }
+  });
+}
+
+function drawCharge(ctx, t, attacking, enemy) {
+  const lit = Number.isFinite(enemy?.chargeTimer) && enemy.chargeTimer > 0;
+  const stride = t * 8.6;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -2.0,
+    lean: Math.sin(stride) * 1.4,
+    attacking: attacking || lit,
+    skinLight: '#c48c68',
+    skinDark: '#74422c',
+    coatLight: '#583830',
+    coatDark: '#2c1a18',
+    pantsColor: '#262022',
+    headR: 6.8,
+    torsoW: 11.5,
+    torsoH: 10,
+    eyeColor: '#ffe868',
+    angry: true,
+    propFrontFn: (ty) => {
+      // Bright Red-and-Gold Striped TNT / Cinder Barrel hugged in front!
+      const blink = lit && Math.floor(t * 16) % 2 === 0;
+      rRect(ctx, -6.5, ty + 2, 13, 10.5, 3);
+      ctx.fillStyle = blink ? '#ffea68' : '#e63628';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.fillStyle = '#f8d24c';
+      ctx.fillRect(-5.6, ty + 5.8, 11.2, 2.8);
+
+      // Sputtering Glowing Fuse Spark!
+      ctx.strokeStyle = '#d4b888';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, ty + 2);
+      ctx.quadraticCurveTo(3, ty - 3, 5.5, ty - 5);
+      ctx.stroke();
+      const sr = (lit ? 4.4 : 2.8) + Math.sin(t * 28) * 1.1;
+      ctx.fillStyle = '#fff598';
+      ctx.beginPath();
+      ctx.arc(5.5, ty - 5, sr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff6a1a';
+      ctx.beginPath();
+      ctx.arc(5.5, ty - 5, sr * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+function drawHush(ctx, t, attacking) {
+  const stride = t * 5.8;
+  drawHumanoidZombie(ctx, {
+    stride,
+    bob: Math.abs(Math.sin(stride)) * -1.4,
+    lean: Math.sin(stride) * 0.8,
+    attacking,
+    skinLight: '#8cc2c6',
+    skinDark: '#446c74',
+    coatLight: '#365c6c',
+    coatDark: '#1a323e',
+    pantsColor: '#1a2832',
+    headR: 7.0,
+    torsoW: 12,
+    torsoH: 11,
+    eyeColor: '#b8ffff',
+    hatFn: (hx, hy, r) => {
+      // Sleek curved teal hood
+      ctx.fillStyle = '#2d5866';
+      ctx.beginPath();
+      ctx.arc(hx, hy - 1, r * 1.06, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.lineTo(hx + r * 0.8, hy + 2);
+      ctx.lineTo(hx - r * 0.8, hy + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    },
+    propFrontFn: (ty) => {
+      // Pulsing cryo-jammer ring aura around staff
+      const pulse = 5.5 + Math.sin(t * 8) * 1.8;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(130, 240, 255, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, ty + 5, pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+function drawBoss(ctx, t, attacking, enemy) {
+  const enraged = enemy?.enraged === true;
+  const stride = t * (enraged ? 4.8 : 3.2);
+  const stomp = Math.abs(Math.sin(stride)) * -3.0;
+  const slam = attacking ? Math.sin(t * 8.5) * 7.5 : 0;
+
+  // Dramatic ground shadow + blazing boss aura ring
+  drawShadow(ctx, 25, 9.5);
+  ctx.save();
+  const auraPulse = 0.25 + 0.14 * Math.sin(t * (enraged ? 9 : 4));
+  ctx.strokeStyle = enraged ? `rgba(255, 72, 34, ${auraPulse + 0.22})` : `rgba(218, 92, 168, ${auraPulse})`;
+  ctx.lineWidth = enraged ? 3.5 : 2.4;
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 27, 10.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Heavy armored legs
+  for (const s of [-1, 1]) {
+    const sy = s * Math.sin(stride) * 3.5;
+    ctx.fillStyle = enraged ? '#46161c' : '#2e1a2c';
+    rRect(ctx, s * 10 - 6, -16 + Math.min(0, sy), 12, 14, 4);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+    // Gold/molten knee guard
+    ctx.fillStyle = enraged ? '#ff7428' : '#e8bd58';
+    rRect(ctx, s * 10 - 4, -14 + Math.min(0, sy), 8, 4.5, 1.5);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(Math.sin(stride) * 1.5, stomp);
+
+  // Colossal Armored Boss Torso
+  const bodyGrad = ctx.createRadialGradient(-6, -34, 4, 0, -29, 25);
+  if (enraged) {
+    bodyGrad.addColorStop(0, '#c83438');
+    bodyGrad.addColorStop(0.6, '#7a1624');
+    bodyGrad.addColorStop(1, '#320810');
+  } else {
+    bodyGrad.addColorStop(0, '#964478');
+    bodyGrad.addColorStop(0.6, '#5c244c');
+    bodyGrad.addColorStop(1, '#260c22');
+  }
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(-20, -39);
+  ctx.quadraticCurveTo(0, -45, 20, -39);
+  ctx.lineTo(17, -14);
+  ctx.quadraticCurveTo(0, -10, -17, -14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Throbbing Molten Chest Core!
+  const corePulse = 1 + Math.sin(t * (enraged ? 12 : 5.5)) * 0.14;
+  ctx.save();
+  ctx.translate(0, -26);
+  ctx.scale(corePulse, corePulse);
+  const cg = ctx.createRadialGradient(0, 0, 1, 0, 0, 9.5);
+  cg.addColorStop(0, '#ffffff');
+  cg.addColorStop(0.45, enraged ? '#ffea48' : '#ff8642');
+  cg.addColorStop(1, enraged ? '#ff2414' : '#c42432');
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 7.6, 9.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.0;
+  ctx.stroke();
+  ctx.restore();
+
+  // Giant Clawed Gauntlet Arms
+  for (const s of [-1, 1]) {
+    const cy = -24 + (s < 0 ? slam : -slam * 0.5);
+    ctx.fillStyle = enraged ? '#8a1e28' : '#6c2c56';
+    ctx.beginPath();
+    ctx.ellipse(s * 22, cy, 7.2, 9.2, s * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.3;
+    ctx.stroke();
+    // 3 razor claws
+    ctx.fillStyle = enraged ? '#ffe062' : '#f0e2c8';
+    for (const c of [-3.5, 0, 3.5]) {
+      ctx.beginPath();
+      ctx.moveTo(s * 22 + c - 1.5, cy + 7);
+      ctx.lineTo(s * 22 + c + 1.5, cy + 7);
+      ctx.lineTo(s * 22 + c, cy + 13.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
   }
-  if (maxX < 0) return {width: 0, height: 0};
-  return {width: maxX - minX + 1, height: maxY - minY + 1};
+
+  // Boss Head + Curved Sweeping Horns + Jagged Crown!
+  const hy = -44;
+  // Sweeping Obsidian/Blazing Horns
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = enraged ? '#ff4a18' : '#2a1828';
+    ctx.beginPath();
+    ctx.moveTo(s * 9, hy - 3);
+    ctx.quadraticCurveTo(s * 22, hy - 8, s * 20, hy - 20);
+    ctx.quadraticCurveTo(s * 14, hy - 12, s * 6, hy - 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+  }
+
+  // Head
+  const hg = ctx.createRadialGradient(-3, hy - 3, 2, 0, hy, 12.5);
+  hg.addColorStop(0, enraged ? '#d64848' : '#a85686');
+  hg.addColorStop(1, enraged ? '#5e121a' : '#421636');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.ellipse(0, hy, 11.5, 10.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.3;
+  ctx.stroke();
+
+  // Jagged Golden Crown
+  ctx.fillStyle = enraged ? '#ffdc32' : '#f4c85a';
+  ctx.beginPath();
+  ctx.moveTo(-9, hy - 7);
+  ctx.lineTo(-10, hy - 16);
+  ctx.lineTo(-4, hy - 11);
+  ctx.lineTo(0, hy - 19);
+  ctx.lineTo(4, hy - 11);
+  ctx.lineTo(10, hy - 16);
+  ctx.lineTo(9, hy - 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  drawZombieFace(ctx, 0, hy + 1, 10.2, {
+    eyeColor: enraged ? '#ffffff' : '#ffe668',
+    pupilColor: enraged ? '#ff1e00' : '#180812',
+    angry: true,
+    biting: attacking || enraged
+  });
+
+  ctx.restore();
+}
+
+const PAINTERS = {
+  shambler: drawShambler,
+  runner: drawRunner,
+  brute: drawBrute,
+  armored: drawArmored,
+  spitter: drawSpitter,
+  swarm: drawSwarm,
+  boss: drawBoss,
+  leaper: drawLeaper,
+  splitter: drawSplitter,
+  mender: drawMender,
+  shade: drawShade,
+  banner: drawBanner,
+  warden: drawWarden,
+  charge: drawCharge,
+  hush: drawHush,
+};
+
+/** Bounded fallback for minimal Node mock contexts that only expose fillRect. */
+function drawMinimalFallback(ctx, enemy, x, y, time, scale) {
+  const sz = enemySize(enemy);
+  const w = Math.max(4, Math.round(sz.width * scale));
+  const h = Math.max(4, Math.round(sz.height * scale));
+  const left = Math.round(x - w / 2);
+  const top = Math.round(y - h);
+  const step = Math.floor((Number.isFinite(time) ? time : 0) * 6) % 2;
+  const atk = enemy?.attacking === true;
+  ctx.save?.();
+  ctx.fillStyle = enemy?.enraged ? '#ff4422' : '#86b86a';
+  ctx.fillRect(left + 1, top + 1, Math.max(2, w - 2), Math.max(2, h - 5));
+  const legOff = atk ? 2 : (step ? 1 : 3);
+  ctx.fillRect(left + legOff, top + h - 4, 3, 4);
+  ctx.fillRect(left + Math.max(legOff, w - legOff - 3), top + h - 4, 3, 4);
+  if (atk) ctx.fillRect(left + Math.floor(w / 2) - 1, top, 2, 2);
+  ctx.restore?.();
 }
 
 export function drawEnemy(ctx, enemy, x, y, {time = 0, scale = 1, flash = 0} = {}) {
-  if (!ctx) return;
-  const {kind, rows} = rowsFor(enemy, time);
-  const palette = PALETTES[kind] || PALETTES.shambler;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -1;
-  let maxY = -1;
-  for (let row = 0; row < rows.length; row += 1) {
-    const line = rows[row];
-    for (let col = 0; col < line.length; col += 1) {
-      const ink = line[col];
-      if (ink === '.' || ink === ' ') continue;
-      if (col < minX) minX = col;
-      if (row < minY) minY = row;
-      if (col > maxX) maxX = col;
-      if (row > maxY) maxY = row;
-    }
+  if (!ctx || !enemy || typeof enemy !== 'object') return;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const sc = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const fl = Number.isFinite(flash) && flash > 0 ? Math.min(1, flash) : 0;
+
+  if (!isRichCtx(ctx)) {
+    drawMinimalFallback(ctx, enemy, x, y, time, sc);
+    return;
   }
-  if (maxX < 0) return;
-  const width = maxX - minX + 1;
-  const height = maxY - minY + 1;
-  const pixel = Math.max(1, Math.round(scale) || 1);
-  const left = Math.round(x - (width * pixel) / 2);
-  const top = Math.round(y - height * pixel);
+
+  const kind = typeof enemy.kind === 'string' && PAINTERS[enemy.kind] ? enemy.kind : 'shambler';
+  const t = (Number.isFinite(time) ? time : 0) + seedFrom(enemy);
+  const attacking = enemy.attacking === true;
+
+  // Impact squash-and-stretch on hit!
+  const sx = sc * (1 + fl * 0.14);
+  const sy = sc * (1 - fl * 0.12);
+
   ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  for (let row = minY; row <= maxY; row += 1) {
-    const line = rows[row];
-    for (let col = minX; col <= maxX; col += 1) {
-      const ink = line[col];
-      if (ink === '.' || ink === ' ') continue;
-      ctx.fillStyle = flash > 0.4 ? '#fff6d8' : (palette[ink] || palette['.']);
-      ctx.fillRect(left + (col - minX) * pixel, top + (row - minY) * pixel, pixel, pixel);
+  try {
+    ctx.translate(x, y);
+    ctx.scale(sx, sy);
+    PAINTERS[kind](ctx, t, attacking, enemy);
+
+    // Soft radial impact flash gleam (keeps cel-shaded face crisp on hit)
+    if (fl > 0.05) {
+      const sz = enemySize(enemy);
+      const rad = Math.max(sz.width, sz.height) * 0.56;
+      const gleam = ctx.createRadialGradient(0, -sz.height * 0.52, 1, 0, -sz.height * 0.52, rad);
+      gleam.addColorStop(0, `rgba(255, 255, 255, ${(fl * 0.48).toFixed(3)})`);
+      gleam.addColorStop(0.65, `rgba(255, 246, 214, ${(fl * 0.16).toFixed(3)})`);
+      gleam.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = gleam;
+      ctx.beginPath();
+      ctx.arc(0, -sz.height * 0.52, rad, 0, Math.PI * 2);
+      ctx.fill();
     }
+  } finally {
+    ctx.restore();
   }
-  ctx.restore();
 }

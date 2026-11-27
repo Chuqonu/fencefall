@@ -9,7 +9,7 @@ import {chooseDraft, updateDrafts} from '../src/systems/drafts.js';
 
 const FRAME = 1 / 60;
 const SEEDS = [11, 42, 16016, 123456];
-const PLAYING_SIM = 16;
+const PLAYING_SIM = 12;
 const DRAFT_BUDGET = 30;
 const HELD_WALL = 45;
 
@@ -181,9 +181,9 @@ test('pause and draft wall time are not fight time and do not raise the settleme
     assert.equal(held.state.xp, draftXp, speed);
     assert.equal(held.state.accumulator, 0, speed);
 
-    const tower = held.state.draft.options.findIndex(card => card.kind === 'tower');
-    assert.ok(tower >= 0, speed);
-    const chosen = chooseDraft(held.state, tower);
+    const pick = held.state.draft.options.findIndex(card => card.kind === 'hero_upgrade');
+    assert.ok(pick >= 0, speed);
+    const chosen = chooseDraft(held.state, pick);
     assert.equal(chosen.ok, true, speed);
     assert.equal(held.state.phase, 'playing', speed);
     assert.equal(held.state.time, fightTime, `draft choice counted at ${speed}x`);

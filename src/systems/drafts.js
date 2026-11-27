@@ -1,19 +1,14 @@
 /**
- * Three-choice roguelike drafts (Fencefall v4).
+ * Three-choice roguelike drafts (Fencefall v5 — Pure Solo Gunner).
  *
  * One tap resolves immediately:
- * - Hero weapon & auto super-weapon evolutions level up directly.
- * - Base bastion turrets auto-deploy to the best open wall slot on 1st pick,
- *   and directly level up (Lv.1 -> Lv.4) on repeat picks — zero merge puzzle,
- *   zero separate placement phase.
- * - Draft rerolls use simple `rerollsLeft` charges (no secondary energy currency).
+ * - Every 3-of-1 draft offers ONLY Hero Gun Mods (枪械强化) and Auto Skills (自动技能).
+ * - Side turrets & 2×5 slot grid are removed; the Gunner holds the center wall position.
+ * - Draft rerolls spend `rerollsLeft` charges.
  */
-import {HERO_UPGRADES, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
-import {TOWERS, RANK_SCALE} from '../data/towers.js';
+import {HERO_UPGRADES, isAutoSkill, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
 import {EXPEDITIONS} from '../data/expeditions.js';
-import {AUTO_DEPLOY_ORDER, BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
-
-const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
+import {clone, emit, random} from '../shared.js';
 
 /** XP required to open the next draft after `opened` drafts have already been granted. */
 export function draftXpCost(opened) {
@@ -21,36 +16,17 @@ export function draftXpCost(opened) {
   return 6 + 4 * n;
 }
 
-export function findTowerOnBoard(state, type) {
-  if (!state || !Array.isArray(state.slots)) return null;
-  for (const slot of state.slots) {
-    if (slot?.unit && slot.unit.kind === 'tower' && slot.unit.type === type) return slot;
-  }
-  return null;
-}
-
-export function findAutoDeploySlot(state) {
-  if (!state || !Array.isArray(state.slots)) return -1;
-  for (const idx of AUTO_DEPLOY_ORDER) {
-    if (state.slots[idx] && !state.slots[idx].unit) return idx;
-  }
-  for (let i = 0; i < state.slots.length; i++) {
-    if (state.slots[i] && !state.slots[i].unit) return i;
-  }
-  return -1;
-}
-
 export function generateDraft(state) {
   if (!state || !Array.isArray(state.slots)) {
-    return BASE_TYPES.slice(0, 3).map((type) => towerCard(state, type));
+    return ['volley', 'napalm', 'cadence'].map((id) => heroCard(state, id));
   }
   const heroIds = new Set(availableUpgradeIds(state));
   const cards = allValidCards(state, heroIds);
-  let picked = uniqueCards(selectThree(state, cards)).filter((card) => cardValid(state, card, heroIds));
+  let picked = uniqueCards(selectThree(state, cards)).filter((card) => cardValid(card, heroIds));
   if (picked.length < 3) {
     const used = new Set(picked.map((card) => card.id));
     for (const card of cards) {
-      if (used.has(card.id) || !cardValid(state, card, heroIds)) continue;
+      if (used.has(card.id) || !cardValid(card, heroIds)) continue;
       picked.push(card);
       used.add(card.id);
       if (picked.length === 3) break;
@@ -99,7 +75,7 @@ export function updateDrafts(state) {
     const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
     state.draftLevel = opened + 1;
     const stagePace = EXPEDITIONS[state.expedition]?.xpPace;
-    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.6);
+    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.72);
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;
@@ -156,54 +132,6 @@ export function chooseDraft(state, index) {
     return ok();
   }
 
-  if (option.kind === 'tower') {
-    if (typeof option.type !== 'string' || !BASE_TYPES.includes(option.type)) return fail('unknown_tower');
-    const existing = findTowerOnBoard(state, option.type);
-    if (existing?.unit) {
-      if (existing.unit.rank >= RANK_SCALE.maxRank) return fail('max_rank');
-      existing.unit.rank += 1;
-      state.draft = null;
-      state.phase = 'playing';
-      if (!Array.isArray(state.events)) state.events = [];
-      emit(state, 'upgrade_tower', {
-        towerType: existing.unit.type,
-        rank: existing.unit.rank,
-        slot: existing.index,
-        x: existing.x,
-        y: existing.y,
-        id: existing.unit.id
-      });
-      emit(state, 'ui', {
-        action: 'upgrade_tower',
-        towerType: existing.unit.type,
-        rank: existing.unit.rank,
-        slot: existing.index,
-        x: existing.x,
-        y: existing.y,
-        id: existing.unit.id
-      });
-      return ok();
-    }
-    const slotIndex = findAutoDeploySlot(state);
-    if (slotIndex < 0) return fail('no_slot');
-    const slot = state.slots[slotIndex];
-    const unit = createUnit(state, option.type, 1, 'tower');
-    slot.unit = unit;
-    state.draft = null;
-    state.phase = 'playing';
-    if (!Array.isArray(state.events)) state.events = [];
-    emit(state, 'ui', {
-      action: 'place',
-      towerType: unit.type,
-      rank: 1,
-      x: slot.x,
-      y: slot.y,
-      slot: slotIndex,
-      id: unit.id
-    });
-    return ok();
-  }
-
   return fail('bad_option');
 }
 
@@ -252,12 +180,6 @@ function findHero(state) {
   return null;
 }
 
-function countEmpty(state) {
-  let count = 0;
-  for (const slot of state.slots || []) if (slot && !slot.unit) count += 1;
-  return count;
-}
-
 function defeatPending(state) {
   return !!(state.fence && Number.isFinite(state.fence.hp) && state.fence.hp <= 0);
 }
@@ -269,10 +191,6 @@ function victoryPending(state) {
     if (enemy && enemy.dead !== true && Number.isFinite(enemy.hp) && enemy.hp > 0) return false;
   }
   return true;
-}
-
-function catalogTowerTypes() {
-  return BASE_TYPES.filter((type) => TOWERS && TOWERS[type]);
 }
 
 function upgradeSpec(id) {
@@ -296,21 +214,6 @@ function availableUpgradeIds(state) {
   return hero ? availableHeroUpgradeIds(hero) : [];
 }
 
-function towerCard(state, type) {
-  const existing = state ? findTowerOnBoard(state, type)?.unit : null;
-  const currentRank = existing ? existing.rank : 0;
-  const nextRank = currentRank + 1;
-  return {
-    id: `tower:${type}`,
-    kind: 'tower',
-    type,
-    action: existing ? 'upgrade' : 'deploy',
-    rank: currentRank,
-    nextRank,
-    cap: RANK_SCALE.maxRank
-  };
-}
-
 function heroCard(state, id) {
   const spec = upgradeSpec(id);
   const cap = readCap(spec);
@@ -319,7 +222,7 @@ function heroCard(state, id) {
     id: `hero_upgrade:${id}`,
     kind: 'hero_upgrade',
     upgradeId: id,
-    superweapon: SUPERWEAPON_IDS.has(id)
+    superweapon: isAutoSkill(id)
   };
   if (cap != null) card.cap = cap;
   card.nextLevel = level + 1;
@@ -328,29 +231,20 @@ function heroCard(state, id) {
 }
 
 function allValidCards(state, heroIds) {
-  const cards = [];
-  const hasEmpty = countEmpty(state) > 0;
-  for (const type of catalogTowerTypes()) {
-    const existing = findTowerOnBoard(state, type)?.unit;
-    if (existing) {
-      if (existing.rank < RANK_SCALE.maxRank) cards.push(towerCard(state, type));
-    } else if (hasEmpty) {
-      cards.push(towerCard(state, type));
-    }
+  const mainIds = [];
+  for (const id of heroIds) {
+    if (id !== 'overclock') mainIds.push(id);
   }
-  for (const id of heroIds) cards.push(heroCard(state, id));
+  const cards = mainIds.map((id) => heroCard(state, id));
+  if (cards.length < 3 && heroIds.has('overclock')) {
+    cards.push(heroCard(state, 'overclock'));
+  }
   return uniqueCards(cards);
 }
 
-function cardValid(state, card, heroIds) {
+function cardValid(card, heroIds) {
   if (!card || typeof card !== 'object' || typeof card.id !== 'string' || !card.id) return false;
-  if (card.kind === 'hero_upgrade') {
-    return typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
-  }
-  if (card.kind !== 'tower' || typeof card.type !== 'string' || !BASE_TYPES.includes(card.type)) return false;
-  const existing = findTowerOnBoard(state, card.type)?.unit;
-  if (existing) return existing.rank < RANK_SCALE.maxRank;
-  return countEmpty(state) > 0;
+  return card.kind === 'hero_upgrade' && typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
 }
 
 function uniqueCards(cards) {
@@ -365,9 +259,9 @@ function uniqueCards(cards) {
 }
 
 function selectThree(state, cards) {
-  const towers = shuffle(state, cards.filter((c) => c.kind === 'tower'));
-  const superweapons = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && c.superweapon));
-  const coreHero = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && !c.superweapon));
+  const skills = shuffle(state, cards.filter((c) => c.superweapon));
+  const gunMods = shuffle(state, cards.filter((c) => !c.superweapon && c.upgradeId !== 'overclock'));
+  const fallback = cards.filter((c) => c.upgradeId === 'overclock');
   const picked = [];
   const take = (pool) => {
     while (pool.length) {
@@ -379,12 +273,12 @@ function selectThree(state, cards) {
     }
     return false;
   };
-  // BangBang-first mix: 1 Super-Weapon/Evolution + 1 Core Hero or Super-Weapon + 1 Bastion Turret (deploy/level-up)
-  take(superweapons);
-  if (!take(coreHero)) take(superweapons);
-  take(towers);
-  const rest = shuffle(state, [...superweapons, ...coreHero, ...towers]);
+  // Always mix Auto Skills (自动技能) and Gun Mods (枪械强化): 1–2 of each whenever available
+  take(skills);
+  take(gunMods);
+  const rest = shuffle(state, [...skills, ...gunMods]);
   while (picked.length < 3 && rest.length) take(rest);
+  while (picked.length < 3 && fallback.length) take(fallback);
   return picked.slice(0, 3);
 }
 
