@@ -75,7 +75,7 @@ export function updateDrafts(state) {
     const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
     state.draftLevel = opened + 1;
     const stagePace = EXPEDITIONS[state.expedition]?.xpPace;
-    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.72);
+    const pace = Number.isFinite(stagePace) ? stagePace * 0.78 : (state.expedition === 'watch' ? 1 : 0.68);
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;

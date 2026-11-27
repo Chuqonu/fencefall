@@ -342,7 +342,9 @@ export function spawnEnemy(state, kind, overrides = {}) {
     hp = maxHp;
   }
 
-  const speed = Math.max(0, Number.isFinite(opts.speed) ? opts.speed : baseSpeed * speedMul);
+  let speedScale = finite(opts.speedScale, 1);
+  if (!(speedScale > 0)) speedScale = 1;
+  const speed = Math.max(0, Number.isFinite(opts.speed) ? opts.speed : baseSpeed * speedMul * speedScale);
   const damage = Math.max(0, Number.isFinite(opts.damage) ? opts.damage : baseDamage * damageMul);
   let radius = Number.isFinite(opts.radius) ? opts.radius : baseRadius;
   if (!(radius > 0)) radius = FALLBACK.radius;

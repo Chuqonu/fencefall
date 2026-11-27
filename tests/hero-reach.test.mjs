@@ -10,6 +10,6 @@ test('split volley increases targets within the solo gunner range', () => {
   const stats=getHeroStats(hero,state);
   assert.equal(stats.range,390);
   assert.equal(stats.multishot,1);
-  assert.equal(HERO_UPGRADES.strike.effect.damageAdd,6);
-  assert.equal(HERO_UPGRADES.cadence.effect.haste,0.16);
+  assert.equal(HERO_UPGRADES.strike.effect.damageAdd,10);
+  assert.equal(HERO_UPGRADES.cadence.effect.haste,0.32);
 });

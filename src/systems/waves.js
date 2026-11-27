@@ -218,22 +218,25 @@ export function updateWaves(state, dt = 0) {
   if (state.endless && director.done) director.done = false;
   const waves = activeSchedule(state);
 
-  // Continuous-flow early pull-in: if the player shreds the current wave fast
-  // (only a few zombies left on the road and at most 2 queued), pull the next
-  // wave forward immediately so the next wave enters BEFORE the previous wave dies!
+  // Continuous-flow early pull-in:
+  // - Wave 1 stays calm & unhurried until down to the last zombie (creating strong early-vs-late contrast).
+  // - From Wave 2 onward, pull the next wave forward as soon as <= 4 living & <= 2 queued remain!
   if (director.nextWave > 0 && director.nextWave < waves.length && sys.waveStartedAt != null) {
     const waveAge = state.time - sys.waveStartedAt;
     const nextWave = waves[director.nextWave];
     const nextAt = effectiveStart(nextWave, sys.timeShift);
-    if (waveAge >= EARLY_PULL_MIN_AGE && state.time + 1e-6 < nextAt) {
-      if (director.queue.length <= EARLY_PULL_QUEUED && countAllLiving(state) <= EARLY_PULL_LIVING) {
-        if (nextWave.boss) {
-          if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
-            sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
-          }
-        } else {
-          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
+    const livingNow = countAllLiving(state);
+    const livingCap = director.nextWave === 1 ? 1 : EARLY_PULL_LIVING;
+    const queueCap = director.nextWave === 1 ? 0 : EARLY_PULL_QUEUED;
+    const roadCleared = director.nextWave > 1 && waveAge >= 1.5 && livingNow === 0;
+    const waveThinning = waveAge >= EARLY_PULL_MIN_AGE && director.queue.length <= queueCap && livingNow <= livingCap;
+    if (state.time + 1e-6 < nextAt && (roadCleared || waveThinning)) {
+      if (nextWave.boss) {
+        if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
+          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
         }
+      } else {
+        sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
       }
     }
   }
@@ -443,6 +446,7 @@ function cloneGroups(groups) {
       exact: !!group.exact,
     };
     if (Number.isFinite(group.healthScale)) copy.healthScale = group.healthScale;
+    if (Number.isFinite(group.speedScale)) copy.speedScale = group.speedScale;
     return copy;
   });
 }
@@ -482,7 +486,8 @@ function enqueueWave(state, sys, wave, startAt = wave.start) {
     const delay = Math.max(0, Number(group.delay) || 0);
     for (let i = 0; i < count; i++) {
       const item = {time: quantize(origin + delay + i * interval), kind: group.kind};
-      item.overrides={healthScale:(group.healthScale || 1)*pressure};
+      item.overrides = {healthScale: (group.healthScale || 1) * pressure};
+      if (Number.isFinite(group.speedScale) && group.speedScale > 0) item.overrides.speedScale = group.speedScale;
       items.push(item);
     }
   }

@@ -4503,7 +4503,14 @@ const CHAPTERS = Object.freeze([
 __ff_exports["CHAPTERS"] = CHAPTERS;
 
 
-const pack = (kind, count, interval, healthScale = 1, delay = 0) => ({ kind, count, interval, healthScale, delay });
+const pack = (kind, count, interval, healthScale = 1, delay = 0, speedScale = 1) => ({
+  kind,
+  count,
+  interval,
+  healthScale,
+  delay,
+  speedScale,
+});
 const phase = (id, from, until, every, name, groups, horde = false) => ({ id, from, until, every, name, groups, horde });
 
 // Stage blueprint tuples:
@@ -4525,47 +4532,47 @@ function makeStandardPhases(s, hp, opts) {
   const n = (en, zh) => ({ en, zh });
   const h = (mult) => roundScale(hp * mult);
   const phases = [
-    // 1. Opening wave at 0.5s: immediate mowing action, streams through ~4.5s right into Wave 2 at 4.0s
+    // Act 1 · Quiet Opening (0.5s, Wave 1): ONLY a few slow shamblers — calm deliberate rifle pace
     phase(
       `s${s}-open`, 0.5, 1.5, 1,
-      n(`Stage ${s} · Vanguard`, `第 ${s} 关 · 前锋尸潮`),
+      n(`Stage ${s} · Quiet Line`, `第 ${s} 关 · 零星试探`),
       [
-        pack('swarm', Math.round(swarmCount * 0.7), 0.42, h(0.42), 0),
-        pack('shambler', 5, 0.85, h(0.38), 0.4),
+        pack('shambler', 4, 1.2, h(0.28), 0, 0.7),
+        pack('swarm', 2, 1.1, h(0.24), 2.4, 0.72),
       ]
     ),
-    // 2. Early wave (4s - 60s, every 8s): starts BEFORE Wave 1 clears; each wave streams ~8.6s so waves overlap continuously
+    // Act 2 · Slow Skirmish (6s - 62s, every 8s -> 7 waves): sparse, calm trickle while early buffs stack
     phase(
-      `s${s}-rush`, 4, 60, 8,
+      `s${s}-rush`, 6, 62, 8,
+      n('First Wave', '初潮逼近'),
+      [
+        pack('swarm', Math.max(4, Math.round(swarmCount * 0.34)), 1.45, h(0.35), 0, 0.78),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.32) : 2, primary === 'swarm' ? 1.4 : 2.8, h(0.4), 1.6, 0.8),
+        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 2 : 1, 3.0, h(0.44), 4.0, 0.82),
+      ],
+      false
+    ),
+    // Act 3 · Rising Tide (62s - 134s, every 8s -> 9 waves): elites join, tempo picks up as first Auto Skills unlock
+    phase(
+      `s${s}-surge`, 62, 134, 8,
       n('Rising Tide', '尸潮涌动'),
       [
-        pack('swarm', Math.max(8, Math.round(swarmCount * 0.82)), 0.72, h(0.56), 0),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.8) : primary === 'runner' ? 4 : 3, primary === 'swarm' ? 0.65 : 2.1, h(0.62), 1.3),
-        pack(secondary, secondary === 'runner' || secondary === 'swarm' ? 3 : 2, 2.6, h(0.68), 3.2),
-      ],
-      s >= 4
-    ),
-    // 3. First Horde Surge (60s - 124s, every 8s): zero phase gap, dense overlapping mowing action
-    phase(
-      `s${s}-surge`, 60, 124, 8,
-      n('First Surge', '第一波尸潮'),
-      [
-        pack('swarm', Math.round(swarmCount * 1.05), 0.56, h(0.72), 0),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.95) : 4, primary === 'swarm' ? 0.55 : 1.9, h(0.78), 1.1),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.82), 2.7),
-        ...(support ? [pack(support, support === 'banner' || support === 'hush' ? 1 : 2, 2.8, h(0.8), 4.0)] : []),
+        pack('swarm', Math.round(swarmCount * 0.95), 0.56, h(0.75), 0, 0.94),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 0.9) : 4, primary === 'swarm' ? 0.56 : 1.8, h(0.85), 1.0, 0.96),
+        pack(elite, elite === 'brute' ? 1 : 2, 2.8, h(0.95), 2.6, 0.95),
+        ...(support ? [pack(support, 1, 0, h(0.88), 4.0, 0.96)] : []),
       ],
       true
     ),
-    // 4. Mid-Stage Steel Clash (124s - 188s, every 8s): seamless handover from Surge
+    // Act 4 · Steel Clash (134s - 214s, every 8s -> 10 waves): dense mixed lines, faster march, growing HP
     phase(
-      `s${s}-clash`, 124, 188, 8,
-      n('Steel Clash', '中段激战'),
+      `s${s}-clash`, 134, 214, 8,
+      n('Steel Clash', '正面激战'),
       [
-        pack('swarm', Math.round(swarmCount * 1.15), 0.52, h(0.86), 0),
-        pack(secondary, secondary === 'runner' ? 5 : 3, secondary === 'runner' ? 1.6 : 2.3, h(0.92), 1.0),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.5, h(0.96), 2.5),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.7, h(0.94), 3.9)] : []),
+        pack('swarm', Math.round(swarmCount * 1.55), 0.34, h(1.45), 0, 1.08),
+        pack(secondary, secondary === 'runner' ? 5 : 3, secondary === 'runner' ? 1.4 : 2.1, h(1.62), 0.7, 1.1),
+        pack(elite, elite === 'brute' ? 2 : 3, 2.2, h(1.8), 2.0, 1.06),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.6, h(1.65), 3.4, 1.08)] : []),
       ],
       false
     ),
@@ -4575,59 +4582,74 @@ function makeStandardPhases(s, hp, opts) {
   if (vanguardScale > 0) {
     phases.push(
       phase(
-        `s${s}-vanguard`, 152, 153, 1,
+        `s${s}-vanguard`, 154, 155, 1,
         n('Vanguard Boss', '先锋巨兽'),
         [
-          pack('boss', 1, 0, roundScale(vanguardScale), 0),
-          pack('swarm', Math.round(swarmCount * 1.0), 0.46, h(0.9), 0.4),
-          pack(secondary, 4, 1.5, h(0.96), 1.2),
+          pack('boss', 1, 0, roundScale(vanguardScale * 1.6), 0, 1.05),
+          pack('swarm', Math.round(swarmCount * 1.5), 0.32, h(1.5), 0.3, 1.08),
+          pack(secondary, 4, 1.25, h(1.6), 1.1, 1.1),
         ],
         true
       )
     );
   }
 
-  // 5. Crimson Storm (188s - 244s, every 8s): intense nonstop bullet-storm spectacle
+  // Act 5 · Crimson Storm (214s - 294s, every 8s -> 10 waves): intense high-speed horde vs multi-skill barrage
   phases.push(
     phase(
-      `s${s}-storm`, 188, 244, 8,
+      `s${s}-storm`, 214, 294, 8,
       n('Crimson Storm', '赤潮狂攻'),
       [
-        pack('swarm', Math.round(swarmCount * 1.28), 0.46, h(0.98), 0),
-        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.1) : 5, primary === 'swarm' ? 0.48 : 1.65, h(1.04), 0.8),
-        pack(elite, elite === 'brute' ? 2 : 3, 2.3, h(1.1), 2.3),
-        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.6, h(1.05), 3.7)] : []),
+        pack('swarm', Math.round(swarmCount * 2.35), 0.21, h(2.6), 0, 1.2),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 1.8) : 6, primary === 'swarm' ? 0.26 : 1.15, h(2.9), 0.4, 1.22),
+        pack(elite, elite === 'brute' ? 3 : 4, 1.7, h(3.25), 1.5, 1.18),
+        ...(support ? [pack(support, support === 'hush' ? 1 : 2, 2.3, h(2.85), 2.8, 1.22)] : []),
       ],
       true
     )
   );
 
-  // 6. Final Siege Buildup (244s - 284s, every 8s): unbroken pressure right into Boss / Finale
+  // Act 6 · Apocalyptic Overdrive (294s - 366s, every 8s -> 9 waves): massive screen-filling zombie tidal waves!
   phases.push(
     phase(
-      `s${s}-siege`, 244, 284, 8,
-      n('Last Stand', '死守防线'),
+      `s${s}-overdrive`, 294, 366, 8,
+      n('Apocalypse Surge', '末日狂潮'),
       [
-        pack('swarm', Math.round(swarmCount * 1.4), 0.42, h(1.02), 0),
-        pack(secondary, secondary === 'runner' ? 6 : 4, secondary === 'runner' ? 1.35 : 2.0, h(1.06), 0.8),
-        pack(elite, elite === 'brute' ? 3 : 4, 2.0, h(1.12), 1.8),
-        ...(support ? [pack(support, 2, 2.5, h(1.06), 3.5)] : []),
+        pack('swarm', Math.round(swarmCount * 3.3), 0.12, h(4.4), 0, 1.3),
+        pack(secondary, secondary === 'runner' ? 9 : 6, secondary === 'runner' ? 0.72 : 1.15, h(4.8), 0.3, 1.32),
+        pack(elite, elite === 'brute' ? 4 : 6, 1.25, h(5.2), 1.1, 1.28),
+        ...(support ? [pack(support, 2, 2.1, h(4.6), 2.4, 1.3)] : []),
       ],
       true
     )
   );
 
-  // 7. Stage Finale (Boss or Final Assault at 284s -> overlaps Siege tail, ~5 min total clear)
+  // Act 7 · Cataclysm Buildup (366s - 382s, 2 massive waves right into Finale)
+  phases.push(
+    phase(
+      `s${s}-siege`, 366, 382, 8,
+      n('Last Stand', '死守防线'),
+      [
+        pack('swarm', Math.round(swarmCount * 4.0), 0.1, h(5.8), 0, 1.36),
+        pack(primary, primary === 'swarm' ? Math.round(swarmCount * 2.8) : 9, primary === 'swarm' ? 0.15 : 0.85, h(6.2), 0.2, 1.36),
+        pack(elite, elite === 'brute' ? 5 : 7, 1.05, h(6.6), 0.9, 1.32),
+        ...(support ? [pack(support, 2, 1.9, h(5.8), 2.1, 1.35)] : []),
+      ],
+      true
+    )
+  );
+
+  // Finale · Boss Siege or Cataclysm Assault at 382s (~49-50 total waves, ~6.3 min full arc!)
   if (bossScale > 0) {
     phases.push(
       phase(
-        `s${s}-boss`, 284, 285, 1,
+        `s${s}-boss`, 382, 383, 1,
         n('Boss Siege', '首领压境'),
         [
-          pack('boss', 1, 0, roundScale(bossScale), 0),
-          pack('swarm', Math.round(swarmCount * 1.7), 0.42, h(0.96), 0.3),
-          pack(elite, 3, 2.2, h(1.08), 1.5),
-          ...(support ? [pack(support, 2, 2.4, h(1.02), 2.5)] : []),
+          pack('boss', 1, 0, roundScale(bossScale * 2.85), 0, 1.16),
+          pack('swarm', Math.round(swarmCount * 4.4), 0.1, h(6.0), 0.2, 1.38),
+          pack(elite, 6, 1.2, h(6.8), 0.8, 1.34),
+          ...(support ? [pack(support, 3, 1.7, h(6.0), 1.8, 1.36)] : []),
         ],
         true
       )
@@ -4635,13 +4657,13 @@ function makeStandardPhases(s, hp, opts) {
   } else {
     phases.push(
       phase(
-        `s${s}-finale`, 284, 285, 1,
+        `s${s}-finale`, 382, 383, 1,
         n('Final Assault', '终局总攻'),
         [
-          pack('swarm', Math.round(swarmCount * 1.9), 0.38, h(1.04), 0),
-          pack(elite, elite === 'brute' ? 4 : 5, 1.8, h(1.15), 0.9),
-          pack(secondary, secondary === 'runner' ? 8 : 4, 1.25, h(1.08), 0.5),
-          ...(support ? [pack(support, 2, 2.2, h(1.06), 2.2)] : []),
+          pack('swarm', Math.round(swarmCount * 4.6), 0.09, h(6.2), 0, 1.4),
+          pack(elite, elite === 'brute' ? 6 : 8, 1.0, h(7.0), 0.5, 1.34),
+          pack(secondary, secondary === 'runner' ? 12 : 8, 0.7, h(6.4), 0.2, 1.4),
+          ...(support ? [pack(support, 3, 1.6, h(6.2), 1.6, 1.38)] : []),
         ],
         true
       )
@@ -14764,7 +14786,7 @@ const DEFAULT_PROJECTILE_SPEED = 300;
 const BRITTLE_FALLBACK = {power: 0.2, duration: 3};
 const STUN_FALLBACK = 0.45;
 const SPLIT_CHILD_CAP = 4;
-const SPLIT_ENEMY_CAP = 90;
+const SPLIT_ENEMY_CAP = 120;
 const SPLIT_SPREAD = 14;
 const DEFAULT_SPLIT_HEALTH_SCALE = 0.55;
 
@@ -15244,7 +15266,7 @@ function applySplash(state, projectile, primary) {
 }
 
 function spawnSplitShrapnel(state, projectile, point, hitEnemyId) {
-  const count = Math.min(5, Math.floor(finite(projectile.effects?.split, 0)));
+  const count = Math.min(7, Math.floor(finite(projectile.effects?.split, 0)));
   if (count <= 0 || projectile.isSplitChild) return;
   const subDmg = Math.max(2, finite(projectile.damage, 0) * 0.58);
   const spreadStep = count > 1 ? (Math.PI * 0.62) / (count - 1) : 0;
@@ -15934,11 +15956,11 @@ function combatStats(unit,state) {
   return stats;
 }
 const SW_BASE_CD = Object.freeze({
-  napalm: [7.0, 5.6, 4.4, 3.5],
-  armored_car: [9.0, 7.2, 5.8, 4.6],
-  cryo_barrage: [7.4, 6.0, 4.8, 3.8],
-  orbital_beam: [8.0, 6.5, 5.2, 4.1],
-  ricochet: [7.2, 5.8, 4.6, 3.6],
+  napalm: [7.8, 5.8, 4.2, 2.9],
+  armored_car: [9.5, 7.2, 5.2, 3.6],
+  cryo_barrage: [8.0, 6.0, 4.3, 3.0],
+  orbital_beam: [8.5, 6.4, 4.6, 3.2],
+  ricochet: [7.6, 5.6, 4.1, 2.8],
 });
 
 function superweaponCooldown(id, rank, haste = 0) {
@@ -15964,11 +15986,11 @@ function ensureArsenal(state) {
   return state.arsenal;
 }
 
-function densestEnemy(state, minY = 30) {
+function densestEnemy(state, minY = 30, ignoreId = null) {
   let best = null;
   let bestScore = -1;
   for (const e of state.enemies) {
-    if (!isTargetable(e) || e.y < minY) continue;
+    if (!isTargetable(e) || e.y < minY || (ignoreId && e.id === ignoreId)) continue;
     let score = 1;
     for (const o of state.enemies) {
       if (!isTargetable(o) || o.id === e.id) continue;
@@ -15983,11 +16005,12 @@ function densestEnemy(state, minY = 30) {
   return best;
 }
 
-function densestLaneX(state) {
+function densestLaneX(state, excludeX = null) {
   const lanes = [54, 117, 180, 243, 306];
   let bestX = 180;
   let bestScore = 0;
   for (const lx of lanes) {
+    if (excludeX != null && Math.abs(lx - excludeX) < 40) continue;
     let score = 0;
     for (const e of state.enemies) {
       if (!isLiving(e) || e.y < 16) continue;
@@ -16001,11 +16024,12 @@ function densestLaneX(state) {
   return bestScore > 0 ? bestX : null;
 }
 
-function priorityColumnTarget(state) {
+function priorityColumnTarget(state, excludeX = null) {
   let best = null;
   let bestScore = -1;
   for (const e of state.enemies) {
     if (!isTargetable(e) || e.y < 24) continue;
+    if (excludeX != null && Math.abs(e.x - excludeX) < 38) continue;
     const score = (e.kind === 'boss' ? 5000 : 0) + (ENEMIES[e.kind]?.priority ? 800 : 0) + finite(e.hp, 0) + e.y * 0.6;
     if (score > bestScore) {
       bestScore = score;
@@ -16044,10 +16068,10 @@ function updateSuperweapons(state, dt, heroEntry) {
       const rad = finite(enemy.radius, 12);
       if (Math.abs(enemy.x - sw.x) <= sw.halfWidth + rad && Math.abs(enemy.y - sw.y) <= 24 + rad) {
         sw.hitIds.push(enemy.id);
-        damageEnemy(state, enemy, sw.damage, {sourceId: heroId, towerType: 'armored_car', type: 'armored_car', crit: true, armorPen: 0.4});
+        damageEnemy(state, enemy, sw.damage, {sourceId: heroId, towerType: 'armored_car', type: 'armored_car', crit: true, armorPen: 0.45});
         if (isLiving(enemy)) {
           pushEnemy(state, enemy, enemy.kind === 'boss' ? 24 : sw.knockback);
-          if (enemy.kind !== 'boss') applyStatus(enemy, {type: 'stun', power: 1, remaining: 0.75, sourceId: heroId});
+          if (enemy.kind !== 'boss') applyStatus(enemy, {type: 'stun', power: 1, remaining: 0.85, sourceId: heroId});
         }
       }
     }
@@ -16059,72 +16083,87 @@ function updateSuperweapons(state, dt, heroEntry) {
   for (const beam of arsenal.beams) beam.life -= dt;
   arsenal.beams = arsenal.beams.filter(b => b.life > 1e-6);
 
-  // 1. Napalm Airstrike (Fire Sea)
+  // 1. Napalm Airstrike (Fire Sea — Lv.4 drops twin fire-sea bombs!)
   if (napalmRank > 0) {
     arsenal.timers.napalm = finite(arsenal.timers.napalm, 1.6) - dt * recharge;
     if (arsenal.timers.napalm <= 1e-9) {
       const target = densestEnemy(state, 40);
       if (target) {
         arsenal.timers.napalm = superweaponCooldown('napalm', napalmRank, haste);
-        const cx = clamp(target.x, 26, ARENA.width - 26);
-        const cy = clamp(target.y, 44, ARENA.fenceY - 22);
-        const blastRadius = 58 + 10 * napalmRank;
-        const blastDmg = heroDmg * (2.0 + 0.75 * napalmRank);
-        emitEvent(state, 'napalm_blast', {x: cx, y: cy, radius: blastRadius, damage: blastDmg, rank: napalmRank});
-        for (const e of state.enemies) {
-          if (!isLiving(e) || distance(e, {x: cx, y: cy}) > blastRadius) continue;
-          damageEnemy(state, e, blastDmg, {sourceId: heroId, towerType: 'napalm', type: 'napalm_blast', crit: napalmRank >= 2, armorPen: 0.25});
-          applyStatus(e, {type: 'burn', power: 6 * napalmRank, remaining: 3.4, sourceId: heroId, tickTimer: 0});
+        const dropTargets = [target];
+        if (napalmRank >= 4) {
+          const second = densestEnemy(state, 40, target.id);
+          if (second && distance(second, target) > 48) dropTargets.push(second);
         }
-        addCloud(state, {
-          id: uid(state, 'c'), kind: 'napalm', sourceId: heroId,
-          x: cx, y: cy, radius: 62 + 10 * napalmRank,
-          duration: 4.5, remaining: 4.5, tick: 0.4, tickTimer: 0,
-          dps: heroDmg * (0.55 + 0.22 * napalmRank),
-          burn: {dps: 6 * napalmRank, duration: 2.8}
-        });
+        const blastRadius = 60 + 12 * napalmRank;
+        const blastDmg = heroDmg * (2.2 + 0.95 * napalmRank);
+        for (const drop of dropTargets) {
+          const cx = clamp(drop.x, 26, ARENA.width - 26);
+          const cy = clamp(drop.y, 44, ARENA.fenceY - 22);
+          emitEvent(state, 'napalm_blast', {x: cx, y: cy, radius: blastRadius, damage: blastDmg, rank: napalmRank});
+          for (const e of state.enemies) {
+            if (!isLiving(e) || distance(e, {x: cx, y: cy}) > blastRadius) continue;
+            damageEnemy(state, e, blastDmg, {sourceId: heroId, towerType: 'napalm', type: 'napalm_blast', crit: napalmRank >= 2, armorPen: 0.3});
+            applyStatus(e, {type: 'burn', power: 8 * napalmRank, remaining: 3.6, sourceId: heroId, tickTimer: 0});
+          }
+          addCloud(state, {
+            id: uid(state, 'c'), kind: 'napalm', sourceId: heroId,
+            x: cx, y: cy, radius: 64 + 12 * napalmRank,
+            duration: 4.8, remaining: 4.8, tick: 0.4, tickTimer: 0,
+            dps: heroDmg * (0.65 + 0.3 * napalmRank),
+            burn: {dps: 8 * napalmRank, duration: 3.0}
+          });
+        }
       } else {
         arsenal.timers.napalm = 0.2;
       }
     }
   }
 
-  // 2. Armored Sweeper Truck
+  // 2. Armored Sweeper Truck (Lv.3+ dispatches twin parallel sweepers!)
   if (carRank > 0) {
     arsenal.timers.armored_car = finite(arsenal.timers.armored_car, 2.4) - dt * recharge;
     if (arsenal.timers.armored_car <= 1e-9) {
       const laneX = densestLaneX(state);
       if (laneX != null) {
         arsenal.timers.armored_car = superweaponCooldown('armored_car', carRank, haste);
-        const sweeper = {
-          id: uid(state, 'sw'),
-          x: laneX,
-          y: ARENA.fenceY - 6,
-          speed: 255,
-          halfWidth: 34,
-          damage: heroDmg * (2.6 + 1.0 * carRank),
-          knockback: 68 + 10 * carRank,
-          rank: carRank,
-          hitIds: [],
-        };
-        arsenal.sweepers.push(sweeper);
-        emitEvent(state, 'armored_car', {x: laneX, y: ARENA.fenceY - 12, rank: carRank});
+        const lanes = [laneX];
+        if (carRank >= 3) {
+          const secondLane = densestLaneX(state, laneX);
+          if (secondLane != null) lanes.push(secondLane);
+        }
+        for (const lx of lanes) {
+          const sweeper = {
+            id: uid(state, 'sw'),
+            x: lx,
+            y: ARENA.fenceY - 6,
+            speed: 265,
+            halfWidth: 34 + 3 * carRank,
+            damage: heroDmg * (2.8 + 1.25 * carRank),
+            knockback: 72 + 12 * carRank,
+            rank: carRank,
+            hitIds: [],
+          };
+          arsenal.sweepers.push(sweeper);
+          emitEvent(state, 'armored_car', {x: lx, y: ARENA.fenceY - 12, rank: carRank});
+        }
       } else {
         arsenal.timers.armored_car = 0.25;
       }
     }
   }
 
-  // 3. Glacial Barrage Fan (Cryo Shards)
+  // 3. Glacial Barrage Fan (5 / 8 / 11 / 15 piercing glacial spears!)
   if (cryoRank > 0) {
     arsenal.timers.cryo_barrage = finite(arsenal.timers.cryo_barrage, 2.0) - dt * recharge;
     if (arsenal.timers.cryo_barrage <= 1e-9) {
       const anyFoe = state.enemies.some(e => isTargetable(e) && e.y >= 20);
       if (anyFoe) {
         arsenal.timers.cryo_barrage = superweaponCooldown('cryo_barrage', cryoRank, haste);
-        const count = 3 + 2 * cryoRank;
-        const spread = Math.PI * 0.68;
-        const dmg = heroDmg * (1.15 + 0.38 * cryoRank);
+        const countTable = [0, 5, 8, 11, 15];
+        const count = countTable[clamp(cryoRank, 1, 4)] || (3 + 3 * cryoRank);
+        const spread = Math.PI * (0.64 + 0.04 * cryoRank);
+        const dmg = heroDmg * (1.25 + 0.5 * cryoRank);
         for (let i = 0; i < count; i++) {
           const angle = -Math.PI / 2 - spread / 2 + (spread * i) / (count - 1);
           const dx = Math.cos(angle);
@@ -16135,18 +16174,18 @@ function updateSuperweapons(state, dt, heroEntry) {
             targetId: null,
             x: heroSlot.x + dx * 12,
             y: ARENA.fenceY - 8,
-            speed: 480,
+            speed: 500,
             damage: dmg,
-            crit: false,
-            critMultiplier: 1,
+            crit: cryoRank >= 3,
+            critMultiplier: 1.4,
             critChance: 0,
             tags: ['frost', 'cryo_barrage', 'pierce'],
             splash: 0,
             chain: 0,
             chainRange: 70,
-            pierce: 4 + cryoRank,
+            pierce: 4 + cryoRank * 2,
             visited: [],
-            life: 1.4,
+            life: 1.45,
             dirx: dx,
             diry: dy,
             aimx: null,
@@ -16154,10 +16193,10 @@ function updateSuperweapons(state, dt, heroEntry) {
             towerType: 'frost',
             rank: cryoRank,
             effects: {
-              slow: {factor: 0.46, duration: 2.8},
-              brittle: {power: 0.14 * cryoRank, duration: 3.0},
-              knockback: 22,
-              armorPen: 0.25,
+              slow: {factor: 0.44, duration: 3.0},
+              brittle: {power: 0.16 * cryoRank, duration: 3.2},
+              knockback: 24,
+              armorPen: 0.3,
             },
             mechanics: [],
             impactType: null,
@@ -16171,23 +16210,30 @@ function updateSuperweapons(state, dt, heroEntry) {
     }
   }
 
-  // 4. Orbital Laser Beam
+  // 4. Orbital Laser Beam (Lv.3+ fires twin orbital laser columns!)
   if (beamRank > 0) {
     arsenal.timers.orbital_beam = finite(arsenal.timers.orbital_beam, 2.6) - dt * recharge;
     if (arsenal.timers.orbital_beam <= 1e-9) {
       const target = priorityColumnTarget(state);
       if (target) {
         arsenal.timers.orbital_beam = superweaponCooldown('orbital_beam', beamRank, haste);
-        const bx = clamp(target.x, 22, ARENA.width - 22);
-        const width = 30 + 8 * beamRank;
-        const dmg = heroDmg * (2.5 + 0.95 * beamRank) * (1 + 0.25 * beamRank);
-        arsenal.beams.push({id: uid(state, 'bm'), x: bx, width, life: 0.65, maxLife: 0.65, rank: beamRank});
-        emitEvent(state, 'orbital_beam', {x: bx, y: target.y, width, damage: dmg, rank: beamRank});
-        for (const e of state.enemies) {
-          if (!isTargetable(e) || e.y < -12) continue;
-          if (Math.abs(e.x - bx) <= width / 2 + finite(e.radius, 12)) {
-            damageEnemy(state, e, dmg, {sourceId: heroId, towerType: 'orbital_beam', type: 'orbital_beam', crit: true, armorPen: 0.65});
-            applyStatus(e, {type: 'burn', power: 5 * beamRank, remaining: 2.2, sourceId: heroId, tickTimer: 0});
+        const targets = [target];
+        if (beamRank >= 3) {
+          const second = priorityColumnTarget(state, target.x);
+          if (second) targets.push(second);
+        }
+        const width = 32 + 9 * beamRank;
+        const dmg = heroDmg * (2.8 + 1.2 * beamRank) * (1 + 0.28 * beamRank);
+        for (const t of targets) {
+          const bx = clamp(t.x, 22, ARENA.width - 22);
+          arsenal.beams.push({id: uid(state, 'bm'), x: bx, width, life: 0.7, maxLife: 0.7, rank: beamRank});
+          emitEvent(state, 'orbital_beam', {x: bx, y: t.y, width, damage: dmg, rank: beamRank});
+          for (const e of state.enemies) {
+            if (!isTargetable(e) || e.y < -12) continue;
+            if (Math.abs(e.x - bx) <= width / 2 + finite(e.radius, 12)) {
+              damageEnemy(state, e, dmg, {sourceId: heroId, towerType: 'orbital_beam', type: 'orbital_beam', crit: true, armorPen: 0.7});
+              applyStatus(e, {type: 'burn', power: 7 * beamRank, remaining: 2.5, sourceId: heroId, tickTimer: 0});
+            }
           }
         }
       } else {
@@ -16196,26 +16242,27 @@ function updateSuperweapons(state, dt, heroEntry) {
     }
   }
 
-  // 5. EM Sky-Strike (from EM Ricochet)
+  // 5. EM Sky-Strike (chains 4 / 6 / 8 / 11 stunning lightning strikes!)
   if (emRank > 0) {
     arsenal.timers.ricochet = finite(arsenal.timers.ricochet, 2.2) - dt * recharge;
     if (arsenal.timers.ricochet <= 1e-9) {
       const first = selectTarget(state, {x: ARENA.width / 2, y: ARENA.fenceY}, 520, 'priority');
       if (first) {
         arsenal.timers.ricochet = superweaponCooldown('ricochet', emRank, haste);
-        const maxTargets = 3 + emRank;
-        const dmg = heroDmg * (1.45 + 0.45 * emRank);
+        const targetTable = [0, 4, 6, 8, 11];
+        const maxTargets = targetTable[clamp(emRank, 1, 4)] || (3 + 2 * emRank);
+        const dmg = heroDmg * (1.6 + 0.65 * emRank);
         const hitIds = [];
         const points = [];
         let curr = first;
         for (let step = 0; step < maxTargets && curr; step++) {
           hitIds.push(curr.id);
           points.push({x: curr.x, y: curr.y});
-          damageEnemy(state, curr, dmg, {sourceId: heroId, towerType: 'lightning', type: 'em_strike', crit: step === 0, armorPen: 0.35});
+          damageEnemy(state, curr, dmg, {sourceId: heroId, towerType: 'lightning', type: 'em_strike', crit: step < 2, armorPen: 0.4});
           if (isLiving(curr) && curr.kind !== 'boss') {
-            applyStatus(curr, {type: 'stun', power: 1, remaining: 0.55, sourceId: heroId});
+            applyStatus(curr, {type: 'stun', power: 1, remaining: 0.65, sourceId: heroId});
           }
-          curr = nearestEnemy(state, curr, 130, hitIds);
+          curr = nearestEnemy(state, curr, 142, hitIds);
         }
         emitEvent(state, 'em_strike', {x: points[0].x, y: points[0].y, points, rank: emRank});
       } else {
@@ -16357,7 +16404,7 @@ function updateDrafts(state) {
     const opened = Number.isFinite(state.draftLevel) ? Math.max(0, Math.floor(state.draftLevel)) : 0;
     state.draftLevel = opened + 1;
     const stagePace = EXPEDITIONS[state.expedition]?.xpPace;
-    const pace = Number.isFinite(stagePace) ? stagePace : (state.expedition === 'watch' ? 1 : 0.72);
+    const pace = Number.isFinite(stagePace) ? stagePace * 0.78 : (state.expedition === 'watch' ? 1 : 0.68);
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;
@@ -16591,7 +16638,7 @@ const getProfileBonuses = __ff_m1["getProfileBonuses"];
 
 const HERO_BASE = Object.freeze({
   damage: 18,
-  interval: 0.5,
+  interval: 0.78,
   range: 390,
   critChance: 0.1,
   critMultiplier: 1.75,
@@ -16624,7 +16671,7 @@ function isAutoSkill(id) {
 
 const BONUS_LIMITS = Object.freeze({
   damage: [-0.5, 2.5],
-  haste: [-0.4, 1.25],
+  haste: [-0.4, 1.5],
   range: [-40, 160],
   critChance: [-0.2, 0.5],
 });
@@ -16649,25 +16696,25 @@ function upgrade(id, cap, category, en, zh, info, detail, effect) {
 const HERO_UPGRADES = deepFreeze({
   // --- 枪械强化 (Gun Mods) ---
   volley: upgrade(
-    'volley', 3, 'gun',
+    'volley', 4, 'gun',
     'Multi-Volley', '齐射弹道',
-    'Fire at +1 additional zombie every shot.',
-    '每次开火额外多打 1 个目标，弹幕铺满全屏。',
+    'Fire at +1 additional zombie every shot (up to 5 simultaneous streams).',
+    '每次开火额外多射 1 发弹道（最高 5 连齐射），后期弹幕铺满全屏。',
     {multishot: 1}
   ),
   strike: upgrade(
     'strike', 5, 'gun',
     'Heavy Rounds', '重膛高爆弹',
-    'Gun damage +6. Crits knock back non-boss zombies.',
-    '子弹伤害 +6，暴击时将普通僵尸震退 18 像素。',
-    {damageAdd: 6}
+    'Gun damage +10 per rank. Crits knock back non-boss zombies.',
+    '每级子弹伤害 +10，暴击强力击退普通僵尸。',
+    {damageAdd: 10}
   ),
   cadence: upgrade(
     'cadence', 5, 'gun',
     'Rapid Fire', '极速连射',
-    'Fire rate +16% for faster bullet streams.',
-    '枪械攻速 +16%，弹幕倾泻更密集。',
-    {haste: 0.16}
+    'Fire rate +32% per rank — turns your slow rifle into a blazing minigun.',
+    '每级射速 +32%，从慢速单发蜕变为狂暴机枪连射！',
+    {haste: 0.32}
   ),
   pierce: upgrade(
     'pierce', 4, 'gun',
@@ -16679,23 +16726,23 @@ const HERO_UPGRADES = deepFreeze({
   shrapnel: upgrade(
     'shrapnel', 4, 'gun',
     'Flame Rounds', '烈焰爆裂弹',
-    'Explosive hits burn zombies for 2.6s. Lv.2+ leaves burning patches.',
-    '子弹命中爆炸溅射并灼烧 2.6 秒，2 级起留下地面火坑。',
-    {splash: 30, burn: {dps: 5, duration: 2.6}}
+    'Explosive hits burn zombies for 2.6s. Lv.2+ leaves burning patches and ramps burn DPS.',
+    '子弹命中爆炸溅射并灼烧 2.6 秒，2 级起留下地面火坑且灼烧大幅增强。',
+    {splash: 32, burn: {dps: 5, duration: 2.6}}
   ),
   frostbite: upgrade(
     'frostbite', 4, 'gun',
     'Frost Rounds', '急冻减速弹',
     'Slows zombies and boosts damage taken. Lv.2+ shatters on kill.',
-    '减速僵尸并附加易伤，2 级起击杀触发范围冰爆。',
-    {brittle: {power: 0.1, duration: 2.6}}
+    '强力减速僵尸并附加易伤，2 级起击杀触发范围冰爆。',
+    {brittle: {power: 0.12, duration: 2.8}}
   ),
   focus: upgrade(
     'focus', 4, 'gun',
     'Deadeye Crit', '致命暴击',
-    'Crit chance +10% & crit damage +30%. Lv.2+ executes low-HP foes.',
-    '暴击率 +10%、暴击伤害 +30%，2 级起解锁残血斩杀。',
-    {critChance: 0.1, critMultiplier: 0.3}
+    'Crit chance +12% & crit damage +40%. Lv.2+ executes low-HP foes.',
+    '暴击率 +12%、暴击伤害 +40%，2 级起解锁残血斩杀。',
+    {critChance: 0.12, critMultiplier: 0.4}
   ),
   bastion: upgrade(
     'bastion', 3, 'gun',
@@ -16709,53 +16756,53 @@ const HERO_UPGRADES = deepFreeze({
   split_shot: upgrade(
     'split_shot', 4, 'skill',
     'Split Shrapnel', '子母分裂弹',
-    'Damage +3. Hits auto-burst into 2/3/4/5 piercing shrapnel shots.',
-    '子弹伤害 +3，命中后自动向四周分裂出 2/3/4/5 发贯穿弹片。',
-    {damageAdd: 3}
+    'Damage +4. Hits auto-burst into 2/3/5/7 piercing shrapnel shots.',
+    '子弹伤害 +4，命中后自动四散分裂出 2/3/5/7 发贯穿弹片。',
+    {damageAdd: 4}
   ),
   ricochet: upgrade(
     'ricochet', 4, 'skill',
     'EM Chain Strike', '电磁连锁雷',
-    'Bullets arc to 2/3/4/5 zombies and auto-call stunning sky lightning.',
-    '子弹电弧弹射 2/3/4/5 名僵尸，并定时自动降下麻痹天雷。',
-    {damageAdd: 2}
+    'Bullets arc to 2/4/6/8 zombies and auto-call stunning sky lightning.',
+    '子弹电弧弹射 2/4/6/8 名僵尸，并高频降下连锁麻痹天雷。',
+    {damageAdd: 3}
   ),
   napalm: upgrade(
     'napalm', 4, 'skill',
     'Napalm Fire Sea', '燃油弹火海',
-    'Blast radius +24. Periodically auto-drops Napalm creating a burning sea.',
-    '溅射范围 +24，定时自动空投燃油弹形成大范围持续火海。',
-    {splash: 24}
+    'Blast radius +26. Auto-drops Napalm Fire Seas (Lv.4 drops twin bombs!).',
+    '溅射范围 +26，定时空投大范围燃油火海（4 级双倍空投！）。',
+    {splash: 26}
   ),
   armored_car: upgrade(
     'armored_car', 4, 'skill',
     'Armored Sweeper', '重装装甲车',
-    'Wall HP +80. Periodically auto-sends an armored truck crushing a lane.',
-    '城墙血量 +80，定时自动派出装甲车碾压并击退整列尸潮。',
+    'Wall HP +80. Auto-sends armored trucks crushing lanes (Lv.3+ twin trucks!).',
+    '城墙血量 +80，定时派出重装战车碾压尸潮（3 级起双车齐发！）。',
     {fence: 80}
   ),
   cryo_barrage: upgrade(
     'cryo_barrage', 4, 'skill',
     'Glacial Barrage', '干冰齐射柱',
-    'Adds brittle. Periodically auto-fires a fan of 5/7/9/11 piercing ice spears.',
-    '附加易伤，定时自动齐射 5/7/9/11 道贯穿冰柱横扫减速尸潮。',
-    {brittle: {power: 0.1, duration: 2.6}}
+    'Adds brittle. Auto-fires a massive fan of 5/8/11/15 piercing ice spears.',
+    '附加易伤，定时扇形齐射 5/8/11/15 道贯穿冰柱冰封全场。',
+    {brittle: {power: 0.12, duration: 2.8}}
   ),
   orbital_beam: upgrade(
     'orbital_beam', 4, 'skill',
     'Orbital Laser', '高能激光柱',
-    'Crit damage +25%. Periodically auto-fires a vertical beam melting elites & bosses.',
-    '暴击伤害 +25%，定时自动发射纵贯战场的激光柱重创精英与首领。',
-    {critMultiplier: 0.25}
+    'Crit damage +30%. Auto-fires orbital beams (Lv.3+ twin beams!).',
+    '暴击伤害 +30%，定时降下高能激光柱蒸发精英（3 级起双柱齐射！）。',
+    {critMultiplier: 0.3}
   ),
 
   // --- Repeatable Late-Game Fallback ---
   overclock: upgrade(
     'overclock', 20, 'gun',
     'Firepower Overclock', '火力超频',
-    'Gun and auto-skill damage +12% per rank.',
-    '枪械与所有自动技能伤害额外 +12%，持续叠加火力。',
-    {damage: 0.12}
+    'Gun and auto-skill damage +18% per rank.',
+    '枪械与所有自动技能伤害额外 +18%，后期火力无限飙升！',
+    {damage: 0.18}
   ),
 });
 __ff_exports["HERO_UPGRADES"] = HERO_UPGRADES;
@@ -16834,22 +16881,24 @@ function getHeroStats(unit, state) {
   const bonus = readBonuses(state);
   const rawBonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot) || {};
   const extraPierce = Math.max(0, Math.floor(finiteOr(rawBonus.heroPierce, 0)));
+  const splitTable = [0, 2, 3, 5, 7];
+  const chainTable = [0, 2, 4, 6, 8];
   const stats = {
     ...HERO_BASE,
     mechanics: [],
-    damage: round4((HERO_BASE.damage + 6 * strike + 3 * split_shot + 2 * ricochet) * (1 + bonus.damage + 0.12 * overclock)),
-    interval: round4(HERO_BASE.interval / (1 + 0.16 * cadence + bonus.haste)),
+    damage: round4((HERO_BASE.damage + 10 * strike + 4 * split_shot + 3 * ricochet) * (1 + bonus.damage + 0.18 * overclock)),
+    interval: round4(HERO_BASE.interval / (1 + 0.32 * cadence + bonus.haste)),
     range: HERO_BASE.range + bonus.range,
-    critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
-    critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
+    critChance: round4(HERO_BASE.critChance + 0.12 * focus + bonus.critChance),
+    critMultiplier: round4(HERO_BASE.critMultiplier + 0.4 * focus + 0.3 * orbital_beam),
     fence: levels.bastion * 120 + armored_car * 80,
     pierce: pierce + extraPierce,
     armorPen: Math.min(0.95, pierce * 0.25),
-    critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
+    critKnockback: (strike ? 16 + 4 * strike : 0) + finiteOr(rawBonus.critKnockback, 0),
     multishot: volley,
-    chain: ricochet ? 1 + ricochet : 0,
-    chainRange: ricochet ? 112 : HERO_BASE.chainRange,
-    split: split_shot ? 1 + split_shot : 0,
+    chain: chainTable[ricochet] || 0,
+    chainRange: ricochet ? 120 : HERO_BASE.chainRange,
+    split: splitTable[split_shot] || 0,
     shrapnelRank: shrapnel,
     frostbiteRank: frostbite,
     shredPercent: Math.max(0, finiteOr(rawBonus.shredPercent, 0)),
@@ -16860,16 +16909,16 @@ function getHeroStats(unit, state) {
   if (split_shot) stats.mechanics.push('split_shot');
   if (ricochet) stats.mechanics.push('chain');
   if (shrapnel || napalm) {
-    stats.splash = (shrapnel ? 20 + 10 * shrapnel : 0) + 24 * napalm;
+    stats.splash = (shrapnel ? 22 + 10 * shrapnel : 0) + 26 * napalm;
   }
   if (shrapnel) {
-    stats.burn = {dps: 5 * shrapnel, duration: 2.6};
+    stats.burn = {dps: shrapnel === 1 ? 5 : 5 + 7 * (shrapnel - 1), duration: 2.6};
   }
   if (frostbite) {
-    stats.slow = {factor: round4(Math.max(0.5, 0.82 - 0.06 * frostbite)), duration: 2.2};
+    stats.slow = {factor: round4(Math.max(0.46, 0.8 - 0.07 * frostbite)), duration: 2.4};
   }
   if (frostbite || cryo_barrage) {
-    stats.brittle = {power: round4(0.1 * frostbite + 0.1 * cryo_barrage), duration: 2.6};
+    stats.brittle = {power: round4(0.12 * frostbite + 0.12 * cryo_barrage), duration: 2.8};
   }
   return stats;
 }
@@ -17280,7 +17329,9 @@ function spawnEnemy(state, kind, overrides = {}) {
     hp = maxHp;
   }
 
-  const speed = Math.max(0, Number.isFinite(opts.speed) ? opts.speed : baseSpeed * speedMul);
+  let speedScale = finite(opts.speedScale, 1);
+  if (!(speedScale > 0)) speedScale = 1;
+  const speed = Math.max(0, Number.isFinite(opts.speed) ? opts.speed : baseSpeed * speedMul * speedScale);
   const damage = Math.max(0, Number.isFinite(opts.damage) ? opts.damage : baseDamage * damageMul);
   let radius = Number.isFinite(opts.radius) ? opts.radius : baseRadius;
   if (!(radius > 0)) radius = FALLBACK.radius;
@@ -19008,22 +19059,25 @@ function updateWaves(state, dt = 0) {
   if (state.endless && director.done) director.done = false;
   const waves = activeSchedule(state);
 
-  // Continuous-flow early pull-in: if the player shreds the current wave fast
-  // (only a few zombies left on the road and at most 2 queued), pull the next
-  // wave forward immediately so the next wave enters BEFORE the previous wave dies!
+  // Continuous-flow early pull-in:
+  // - Wave 1 stays calm & unhurried until down to the last zombie (creating strong early-vs-late contrast).
+  // - From Wave 2 onward, pull the next wave forward as soon as <= 4 living & <= 2 queued remain!
   if (director.nextWave > 0 && director.nextWave < waves.length && sys.waveStartedAt != null) {
     const waveAge = state.time - sys.waveStartedAt;
     const nextWave = waves[director.nextWave];
     const nextAt = effectiveStart(nextWave, sys.timeShift);
-    if (waveAge >= EARLY_PULL_MIN_AGE && state.time + 1e-6 < nextAt) {
-      if (director.queue.length <= EARLY_PULL_QUEUED && countAllLiving(state) <= EARLY_PULL_LIVING) {
-        if (nextWave.boss) {
-          if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
-            sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
-          }
-        } else {
-          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
+    const livingNow = countAllLiving(state);
+    const livingCap = director.nextWave === 1 ? 1 : EARLY_PULL_LIVING;
+    const queueCap = director.nextWave === 1 ? 0 : EARLY_PULL_QUEUED;
+    const roadCleared = director.nextWave > 1 && waveAge >= 1.5 && livingNow === 0;
+    const waveThinning = waveAge >= EARLY_PULL_MIN_AGE && director.queue.length <= queueCap && livingNow <= livingCap;
+    if (state.time + 1e-6 < nextAt && (roadCleared || waveThinning)) {
+      if (nextWave.boss) {
+        if (nextAt - state.time > EARLY_BOSS_LEAD + 0.3) {
+          sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - (state.time + EARLY_BOSS_LEAD)));
         }
+      } else {
+        sys.timeShift = quantize(Math.max(sys.timeShift, nextWave.start - state.time));
       }
     }
   }
@@ -19233,6 +19287,7 @@ function cloneGroups(groups) {
       exact: !!group.exact,
     };
     if (Number.isFinite(group.healthScale)) copy.healthScale = group.healthScale;
+    if (Number.isFinite(group.speedScale)) copy.speedScale = group.speedScale;
     return copy;
   });
 }
@@ -19272,7 +19327,8 @@ function enqueueWave(state, sys, wave, startAt = wave.start) {
     const delay = Math.max(0, Number(group.delay) || 0);
     for (let i = 0; i < count; i++) {
       const item = {time: quantize(origin + delay + i * interval), kind: group.kind};
-      item.overrides={healthScale:(group.healthScale || 1)*pressure};
+      item.overrides = {healthScale: (group.healthScale || 1) * pressure};
+      if (Number.isFinite(group.speedScale) && group.speedScale > 0) item.overrides.speedScale = group.speedScale;
       items.push(item);
     }
   }
