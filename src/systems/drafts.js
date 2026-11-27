@@ -1,60 +1,53 @@
 /**
- * Three-choice drafts (contract worker 08).
+ * Three-choice roguelike drafts (Fencefall v4).
  *
- * Combat owns kill XP (`state.xp`). This module only watches the bar.
- * `updateDrafts` runs while `phase === 'playing'` (engine already skips
- * paused / hidden steps). When `xp >= nextDraftXp` it opens `phase: 'draft'`,
- * subtracts that threshold from `xp` once, increments `draftLevel`, and sets
- * `nextDraftXp` to `draftXpCost(draftLevel)`. `draftXpCost(0) === 8`, matching
- * `createRun`. The sequence is 8, 12, 16, 21, 26, … and always increases.
- * Leftover XP stays in the bar, so a large kill can open another draft after
- * the current choice returns to play. Cancellation does not refund XP, roll a
- * new offer, or leave a unit on the board.
- *
- * `generateDraft` advances `state.rng` and must be called once per opening
- * (updateDrafts does that). Rendering and UI read `state.draft.options`.
- *
- * Cards are plain data: `{id, kind, type?, upgradeId?, replace, rank?, cap?, nextLevel?, description?}`.
- * A hero card's `description` is the catalog `{en, zh}` sentence for that upgrade.
- * Hero levels live at `hero.upgrades[upgradeId]` (finite number) with `spec.cap`.
- * A card is offered only when a cloned `applyHeroUpgrade` would succeed.
- * Empty board slots produce placeable tower cards. When empty slots remain, a
- * base type is still absent from the board, and two placeable tower cards are
- * offered, one of those cards is a missing base type. When every base type is
- * already on the board, empty slots remain, and a hero upgrade can still be
- * offered, one of the three cards is a hero upgrade. Neither swap rolls RNG
- * again, so the same seed and board stay stable. A full board offers three
- * uncapped hero upgrades, or those upgrades plus `replace: true` tower cards
- * when fewer than three upgrades remain — never a surprise tower. Replacement
- * never targets the hero and `placePending` requires `{replace: true}` for an
- * occupied slot.
- * Phase `draft` / `placing` freezes simulation. Explicit `paused` and
- * `hiddenPaused` are left unchanged.
- *
- * Reason codes: not_playing, not_ready, busy, no_options, no_draft, bad_index,
- * bad_option, already_placing, no_slot, unknown_tower, not_placing, bad_slot,
- * hero_protected, occupied, replace_not_offered, draft_missing, plus any
- * reason returned by applyHeroUpgrade.
+ * One tap resolves immediately:
+ * - Hero weapon & auto super-weapon evolutions level up directly.
+ * - Base bastion turrets auto-deploy to the best open wall slot on 1st pick,
+ *   and directly level up (Lv.1 -> Lv.4) on repeat picks — zero merge puzzle,
+ *   zero separate placement phase.
+ * - Draft rerolls use simple `rerollsLeft` charges (no secondary energy currency).
  */
 import {HERO_UPGRADES, availableHeroUpgradeIds, applyHeroUpgrade} from './hero.js';
-import {TOWERS} from '../data/towers.js';
-import {BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
+import {TOWERS, RANK_SCALE} from '../data/towers.js';
+import {AUTO_DEPLOY_ORDER, BASE_TYPES, clone, createUnit, emit, random} from '../shared.js';
+
+const SUPERWEAPON_IDS = new Set(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 /** XP required to open the next draft after `opened` drafts have already been granted. */
 export function draftXpCost(opened) {
   const n = Number.isFinite(opened) ? Math.max(0, Math.floor(opened)) : 0;
-  return 6 + 4*n;
+  return 6 + 4 * n;
+}
+
+export function findTowerOnBoard(state, type) {
+  if (!state || !Array.isArray(state.slots)) return null;
+  for (const slot of state.slots) {
+    if (slot?.unit && slot.unit.kind === 'tower' && slot.unit.type === type) return slot;
+  }
+  return null;
+}
+
+export function findAutoDeploySlot(state) {
+  if (!state || !Array.isArray(state.slots)) return -1;
+  for (const idx of AUTO_DEPLOY_ORDER) {
+    if (state.slots[idx] && !state.slots[idx].unit) return idx;
+  }
+  for (let i = 0; i < state.slots.length; i++) {
+    if (state.slots[i] && !state.slots[i].unit) return i;
+  }
+  return -1;
 }
 
 export function generateDraft(state) {
   if (!state || !Array.isArray(state.slots)) {
-    return BASE_TYPES.slice(0, 3).map(type => towerCard(type, false));
+    return BASE_TYPES.slice(0, 3).map((type) => towerCard(state, type));
   }
   const heroIds = new Set(availableUpgradeIds(state));
   const cards = allValidCards(state, heroIds);
-  let picked = uniqueCards(selectThree(state, cards)).filter(card => cardValid(state, card, heroIds));
+  let picked = uniqueCards(selectThree(state, cards)).filter((card) => cardValid(state, card, heroIds));
   if (picked.length < 3) {
-    const used = new Set(picked.map(card => card.id));
+    const used = new Set(picked.map((card) => card.id));
     for (const card of cards) {
       if (used.has(card.id) || !cardValid(state, card, heroIds)) continue;
       picked.push(card);
@@ -62,46 +55,24 @@ export function generateDraft(state) {
       if (picked.length === 3) break;
     }
   }
-  if (picked.length < 3) {
-    const empty = countEmpty(state) > 0;
-    const canReplace = countReplaceable(state) > 0;
-    for (const type of catalogTowerTypes()) {
-      const card = towerCard(type, !empty && canReplace);
-      if (!cardValid(state, card, heroIds)) continue;
-      if (picked.some(item => item.id === card.id)) continue;
-      picked.push(card);
-      if (picked.length === 3) break;
-    }
-  }
-  picked = picked.slice(0, 3);
-  if (picked.length !== 3) return picked;
-  picked=preferHeroWhenCovered(state,preferMissingType(state,picked),heroIds);
-  if (state.draftLevel<4 && countEmpty(state) && !state.slots.some(s=>s.unit?.type==='harvest') &&
-      !picked.some(c=>c.type==='harvest') && random(state)<0.35) {
-    const i=picked.findIndex(c=>c.kind==='tower');
-    if (i>=0) picked[i]=towerCard('harvest',false);
-  }
-  return shuffle(state,picked);
+  return shuffle(state, picked.slice(0, 3));
 }
 
-export function rerollCost(state) {
-  return state.freeRerollsLeft>0 ? 0 : Math.ceil((20+15*state.draftRerollsUsed)*(1-(state.systems.integration?.bonuses?.rerollDiscount||0)));
-}
 export function rerollDraft(state) {
-  if (state?.phase!=='draft' || !state.draft || state.draftRerollsUsed>=3) return fail('unavailable');
-  const cost=rerollCost(state);
-  if (state.energy<cost) return fail('unavailable');
-  const before=state.draft.options.map(c=>c.id).sort().join('|');
-  let cards;
-  for (let i=0;i<8;i++) {
-    cards=generateDraft(state);
-    if (cards.map(c=>c.id).sort().join('|')!==before) break;
+  if (state?.phase !== 'draft' || !state.draft || (state.draftRerollsUsed || 0) >= 3) return fail('unavailable');
+  const left = Number.isFinite(state.rerollsLeft) ? Math.floor(state.rerollsLeft) : 0;
+  if (left <= 0) return fail('unavailable');
+  const before = state.draft.options.map((c) => c.id).sort().join('|');
+  let cards = state.draft.options;
+  for (let i = 0; i < 8; i++) {
+    const next = generateDraft(state);
+    if (next.length >= 1) cards = next;
+    if (next.map((c) => c.id).sort().join('|') !== before) break;
   }
-  state.draft.options=cards;
-  state.energy-=cost;
-  if (!cost) state.freeRerollsLeft--;
-  state.draftRerollsUsed++;
-  emit(state,'draft_reroll',{cost,rerollsUsed:state.draftRerollsUsed});
+  state.draft.options = cards;
+  state.rerollsLeft = left - 1;
+  state.draftRerollsUsed = (state.draftRerollsUsed || 0) + 1;
+  emit(state, 'draft_reroll', {rerollsLeft: state.rerollsLeft, rerollsUsed: state.draftRerollsUsed});
   return ok();
 }
 
@@ -110,14 +81,14 @@ export function updateDrafts(state) {
     return fail('not_playing');
   }
   if (state.settlement || defeatPending(state) || victoryPending(state)) return fail('not_playing');
-  if (state.draft || state.pendingUnit) return fail('busy');
+  if (state.draft) return fail('busy');
   const freeOpening = (state.openingDraftPending || 0) > 0 && state.time >= 0.35;
   const cost = state.nextDraftXp;
   if (!freeOpening && (!Number.isFinite(state.xp) || !Number.isFinite(cost) || cost <= 0 || state.xp < cost)) {
     return fail('not_ready');
   }
   const options = generateDraft(state);
-  if (!Array.isArray(options) || options.length !== 3 || new Set(options.map(card => card.id)).size !== 3) {
+  if (!Array.isArray(options) || options.length === 0) {
     return fail('no_options');
   }
   if (freeOpening) {
@@ -130,7 +101,6 @@ export function updateDrafts(state) {
     state.nextDraftXp = Math.max(4, Math.ceil(draftXpCost(state.draftLevel) * pace));
   }
   state.draftRerollsUsed = 0;
-  state.pendingUnit = null;
   state.draft = freeOpening ? {options, openingDrop: true} : {options};
   state.phase = 'draft';
   if (!Array.isArray(state.events)) state.events = [];
@@ -140,10 +110,8 @@ export function updateDrafts(state) {
 
 export function chooseDraft(state, index) {
   if (!state || state.phase !== 'draft' || !state.draft || !Array.isArray(state.draft.options)) {
-    if (state?.phase === 'placing' || state?.pendingUnit) return fail('already_placing');
     return fail('no_draft');
   }
-  if (state.pendingUnit) return fail('already_placing');
   if (!Number.isInteger(index) || index < 0 || index >= state.draft.options.length) return fail('bad_index');
   const option = state.draft.options[index];
   if (!option || typeof option !== 'object') return fail('bad_option');
@@ -179,7 +147,6 @@ export function chooseDraft(state, index) {
     state.paused = snap.paused;
     state.hiddenPaused = snap.hiddenPaused;
     state.kills = snap.kills;
-    state.pendingUnit = null;
     state.draft = null;
     state.phase = 'playing';
     if (!Array.isArray(state.events)) state.events = [];
@@ -189,68 +156,57 @@ export function chooseDraft(state, index) {
 
   if (option.kind === 'tower') {
     if (typeof option.type !== 'string' || !BASE_TYPES.includes(option.type)) return fail('unknown_tower');
-    const empty = countEmpty(state) > 0;
-    const replacing = option.replace === true && countReplaceable(state) > 0;
-    if (!empty && !replacing) return fail('no_slot');
+    const existing = findTowerOnBoard(state, option.type);
+    if (existing?.unit) {
+      if (existing.unit.rank >= RANK_SCALE.maxRank) return fail('max_rank');
+      existing.unit.rank += 1;
+      state.draft = null;
+      state.phase = 'playing';
+      if (!Array.isArray(state.events)) state.events = [];
+      emit(state, 'upgrade_tower', {
+        towerType: existing.unit.type,
+        rank: existing.unit.rank,
+        slot: existing.index,
+        x: existing.x,
+        y: existing.y,
+        id: existing.unit.id
+      });
+      emit(state, 'ui', {
+        action: 'upgrade_tower',
+        towerType: existing.unit.type,
+        rank: existing.unit.rank,
+        slot: existing.index,
+        x: existing.x,
+        y: existing.y,
+        id: existing.unit.id
+      });
+      return ok();
+    }
+    const slotIndex = findAutoDeploySlot(state);
+    if (slotIndex < 0) return fail('no_slot');
+    const slot = state.slots[slotIndex];
     const unit = createUnit(state, option.type, 1, 'tower');
-    unit.kind = 'tower';
-    unit.type = option.type;
-    unit.rank = 1;
-    if (!unit.upgrades || typeof unit.upgrades !== 'object' || Array.isArray(unit.upgrades)) unit.upgrades = {};
-    state.pendingUnit = {unit, replace: option.replace === true};
-    state.phase = 'placing';
+    slot.unit = unit;
+    state.draft = null;
+    state.phase = 'playing';
+    if (!Array.isArray(state.events)) state.events = [];
+    emit(state, 'ui', {
+      action: 'place',
+      towerType: unit.type,
+      rank: 1,
+      x: slot.x,
+      y: slot.y,
+      slot: slotIndex,
+      id: unit.id
+    });
     return ok();
   }
 
   return fail('bad_option');
 }
 
-export function placePending(state, slotIndex, options = {}) {
-  if (!state || state.phase !== 'placing' || !state.pendingUnit?.unit) return fail('not_placing');
-  if (!Number.isInteger(slotIndex) || !Array.isArray(state.slots) || slotIndex < 0 || slotIndex >= state.slots.length) {
-    return fail('bad_slot');
-  }
-  const replace = options?.replace === true;
-  const slot = state.slots[slotIndex];
-  const unit = state.pendingUnit.unit;
-  if (!slot || !unit || typeof unit !== 'object') return fail('bad_slot');
-  if (isHero(unit)) return fail('hero_protected');
-  if (slot.unit && isHero(slot.unit)) return fail('hero_protected');
-  if (slot.unit) {
-    if (!replace) return fail('occupied');
-    if (state.pendingUnit.replace !== true) return fail('replace_not_offered');
-  }
-  slot.unit = unit;
-  const towerType = unit.type;
-  const placedId = unit.id;
-  const x = slot.x;
-  const y = slot.y;
-  state.pendingUnit = null;
-  state.draft = null;
-  state.phase = 'playing';
-  if (!Array.isArray(state.events)) state.events = [];
-  emit(state, 'ui', {action: 'place', towerType, x, y, slot: slotIndex, replace, id: placedId});
-  return ok();
-}
-
-export function cancelPlacement(state) {
-  if (!state || state.phase !== 'placing') return fail('not_placing');
-  if (!state.pendingUnit) return fail('not_placing');
-  if (!state.draft || !Array.isArray(state.draft.options) || state.draft.options.length !== 3) return fail('draft_missing');
-  state.pendingUnit = null;
-  state.phase = 'draft';
-  if (!Array.isArray(state.events)) state.events = [];
-  emit(state, 'ui', {action: 'cancel_placement'});
-  return ok();
-}
-
-function ok() {
-  return {ok: true};
-}
-
-function fail(reason) {
-  return {ok: false, reason};
-}
+function ok() { return {ok: true}; }
+function fail(reason) { return {ok: false, reason}; }
 
 function normalizeXp(value) {
   if (!Number.isFinite(value) || value <= 0.000001) return 0;
@@ -300,12 +256,6 @@ function countEmpty(state) {
   return count;
 }
 
-function countReplaceable(state) {
-  let count = 0;
-  for (const slot of state.slots || []) if (slot?.unit && !isHero(slot.unit)) count += 1;
-  return count;
-}
-
 function defeatPending(state) {
   return !!(state.fence && Number.isFinite(state.fence.hp) && state.fence.hp <= 0);
 }
@@ -320,56 +270,23 @@ function victoryPending(state) {
 }
 
 function catalogTowerTypes() {
-  const listed = [];
-  for (const type of BASE_TYPES) {
-    if (TOWERS && typeof TOWERS === 'object' && TOWERS[type]) listed.push(type);
-  }
-  if (listed.length >= 3) return listed;
-  for (const type of BASE_TYPES) {
-    if (!listed.includes(type)) listed.push(type);
-  }
-  return listed;
-}
-
-function upgradeIds() {
-  if (!HERO_UPGRADES || typeof HERO_UPGRADES !== 'object') return [];
-  const raw = Array.isArray(HERO_UPGRADES)
-    ? HERO_UPGRADES.map(item => item?.id || item?.upgradeId)
-    : Object.keys(HERO_UPGRADES);
-  const ids = [];
-  const seen = new Set();
-  for (const id of raw) {
-    if (typeof id !== 'string' || !id || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-  }
-  ids.sort();
-  return ids;
+  return BASE_TYPES.filter((type) => TOWERS && TOWERS[type]);
 }
 
 function upgradeSpec(id) {
-  if (!HERO_UPGRADES || typeof HERO_UPGRADES !== 'object') return null;
-  if (Array.isArray(HERO_UPGRADES)) {
-    return HERO_UPGRADES.find(item => item && (item.id === id || item.upgradeId === id)) || null;
-  }
-  return HERO_UPGRADES[id] || null;
+  return HERO_UPGRADES?.[id] || null;
 }
 
 function readCap(spec) {
-  if (!spec || typeof spec !== 'object') return null;
-  const raw = spec.cap ?? spec.maxLevel ?? spec.max;
-  const cap = Number(raw);
-  if (!Number.isFinite(cap) || cap <= 0) return null;
-  return cap;
+  const cap = Number(spec?.cap);
+  return Number.isFinite(cap) && cap > 0 ? cap : null;
 }
 
 function readLevel(hero, id) {
   if (!hero?.upgrades || typeof hero.upgrades !== 'object') return 0;
-  if (!Object.prototype.hasOwnProperty.call(hero.upgrades, id)) return 0;
   const raw = hero.upgrades[id];
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (raw === true) return 1;
-  return null;
+  return 0;
 }
 
 function availableUpgradeIds(state) {
@@ -377,61 +294,60 @@ function availableUpgradeIds(state) {
   return hero ? availableHeroUpgradeIds(hero) : [];
 }
 
-function towerCard(type, replace) {
+function towerCard(state, type) {
+  const existing = state ? findTowerOnBoard(state, type)?.unit : null;
+  const currentRank = existing ? existing.rank : 0;
+  const nextRank = currentRank + 1;
   return {
-    id: replace ? `tower:${type}:replace` : `tower:${type}`,
+    id: `tower:${type}`,
     kind: 'tower',
     type,
-    replace: !!replace,
-    rank: 1
+    action: existing ? 'upgrade' : 'deploy',
+    rank: currentRank,
+    nextRank,
+    cap: RANK_SCALE.maxRank
   };
 }
 
 function heroCard(state, id) {
   const spec = upgradeSpec(id);
+  const cap = readCap(spec);
+  const level = readLevel(findHero(state), id);
   const card = {
     id: `hero_upgrade:${id}`,
     kind: 'hero_upgrade',
     upgradeId: id,
-    replace: false
+    superweapon: SUPERWEAPON_IDS.has(id)
   };
-  const cap = readCap(spec);
-  const level = readLevel(findHero(state), id);
   if (cap != null) card.cap = cap;
-  if (level != null) card.nextLevel = level + 1;
-  const description = catalogDescription(spec);
-  if (description) card.description = description;
+  card.nextLevel = level + 1;
+  if (spec?.description?.en && spec?.description?.zh) card.description = spec.description;
   return card;
-}
-
-function catalogDescription(spec) {
-  const text = spec?.description;
-  if (!text || typeof text !== 'object' || Array.isArray(text)) return null;
-  if (typeof text.en !== 'string' || !text.en || typeof text.zh !== 'string' || !text.zh) return null;
-  return text;
 }
 
 function allValidCards(state, heroIds) {
   const cards = [];
-  const empty = countEmpty(state) > 0;
-  const canReplace = countReplaceable(state) > 0;
-  if (empty) {
-    for (const type of catalogTowerTypes()) cards.push(towerCard(type, false));
+  const hasEmpty = countEmpty(state) > 0;
+  for (const type of catalogTowerTypes()) {
+    const existing = findTowerOnBoard(state, type)?.unit;
+    if (existing) {
+      if (existing.rank < RANK_SCALE.maxRank) cards.push(towerCard(state, type));
+    } else if (hasEmpty) {
+      cards.push(towerCard(state, type));
+    }
   }
   for (const id of heroIds) cards.push(heroCard(state, id));
-  if (!empty && canReplace) {
-    for (const type of catalogTowerTypes()) cards.push(towerCard(type, true));
-  }
   return uniqueCards(cards);
 }
 
 function cardValid(state, card, heroIds) {
   if (!card || typeof card !== 'object' || typeof card.id !== 'string' || !card.id) return false;
   if (card.kind === 'hero_upgrade') {
-    return card.replace !== true && typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
+    return typeof card.upgradeId === 'string' && heroIds.has(card.upgradeId);
   }
   if (card.kind !== 'tower' || typeof card.type !== 'string' || !BASE_TYPES.includes(card.type)) return false;
-  if (card.replace === true) return countReplaceable(state) > 0;
+  const existing = findTowerOnBoard(state, card.type)?.unit;
+  if (existing) return existing.rank < RANK_SCALE.maxRank;
   return countEmpty(state) > 0;
 }
 
@@ -446,104 +362,27 @@ function uniqueCards(cards) {
   return out;
 }
 
-function presentBaseTypes(state) {
-  const present = new Set();
-  for (const slot of state.slots || []) {
-    const type = slot?.unit?.type;
-    if (typeof type === 'string' && BASE_TYPES.includes(type)) present.add(type);
-  }
-  return present;
-}
-
-// Swap one owned tower for a missing base type. Reading the shuffled cards
-// only — no extra random() call — so later combat rolls stay on the same stream.
-function preferMissingType(state, picked) {
-  if (countEmpty(state) <= 0) return picked;
-  const present = presentBaseTypes(state);
-  const missing = catalogTowerTypes().filter(type => !present.has(type));
-  if (missing.length === 0) return picked;
-  const towerIndexes = [];
-  for (let i = 0; i < picked.length; i += 1) {
-    const card = picked[i];
-    if (card && card.kind === 'tower' && card.replace !== true) towerIndexes.push(i);
-  }
-  if (towerIndexes.length < 2) return picked;
-  if (towerIndexes.some(index => !present.has(picked[index].type))) return picked;
-  const used = new Set(picked.map(card => card && card.id));
-  const type = missing.find(candidate => !used.has(`tower:${candidate}`));
-  if (!type) return picked;
-  const next = picked.slice();
-  next[towerIndexes[towerIndexes.length - 1]] = towerCard(type, false);
-  return next;
-}
-
-function typesCovered(state) {
-  const present = presentBaseTypes(state);
-  const types = catalogTowerTypes();
-  return types.length > 0 && types.every(type => present.has(type));
-}
-
-// Covered board: keep one hero upgrade in the three cards. No random() call.
-function preferHeroWhenCovered(state, picked, heroIds) {
-  if (!Array.isArray(picked) || picked.length !== 3) return picked;
-  if (countEmpty(state) <= 0) return picked;
-  if (!typesCovered(state)) return picked;
-  if (picked.some(card => card && card.kind === 'hero_upgrade')) return picked;
-  if (!heroIds || heroIds.size === 0) return picked;
-  const used = new Set(picked.map(card => card && card.id));
-  let replacement = null;
-  for (const id of upgradeIds()) {
-    if (!heroIds.has(id) || used.has(`hero_upgrade:${id}`)) continue;
-    const card = heroCard(state, id);
-    if (!cardValid(state, card, heroIds)) continue;
-    replacement = card;
-    break;
-  }
-  if (!replacement) return picked;
-  let index = -1;
-  for (let i = 0; i < picked.length; i += 1) {
-    const card = picked[i];
-    if (card && card.kind === 'tower' && card.replace !== true) index = i;
-  }
-  if (index < 0) index = picked.length - 1;
-  const next = picked.slice();
-  next[index] = replacement;
-  return next;
-}
-
 function selectThree(state, cards) {
-  const empty = countEmpty(state) > 0;
-  const emptyCount = countEmpty(state);
-  const towers = cards.filter(card => card.kind === 'tower' && card.replace !== true);
-  const heroes = cards.filter(card => card.kind === 'hero_upgrade');
-  const replaces = cards.filter(card => card.kind === 'tower' && card.replace === true);
-  let picked = [];
-  if (empty && towers.length && heroes.length) {
-    const towerOrder = shuffle(state, towers);
-    const heroOrder = shuffle(state, heroes);
-    if (emptyCount >= 7 && towerOrder.length >= 2) {
-      picked = [towerOrder[0], heroOrder[0], towerOrder[1]];
-    } else {
-      picked = [towerOrder[0], heroOrder[0]];
-      const rest = shuffle(state, towerOrder.slice(1).concat(heroOrder.slice(1)));
-      if (rest.length) picked.push(rest[0]);
+  const towers = shuffle(state, cards.filter((c) => c.kind === 'tower'));
+  const superweapons = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && c.superweapon));
+  const coreHero = shuffle(state, cards.filter((c) => c.kind === 'hero_upgrade' && !c.superweapon));
+  const picked = [];
+  const take = (pool) => {
+    while (pool.length) {
+      const next = pool.shift();
+      if (!picked.some((p) => p.id === next.id)) {
+        picked.push(next);
+        return true;
+      }
     }
-  } else if (!empty && heroes.length >= 3) {
-    picked = shuffle(state, heroes).slice(0, 3);
-  } else if (!empty) {
-    picked = shuffle(state, heroes).concat(shuffle(state, replaces)).slice(0, 3);
-  } else {
-    picked = shuffle(state, towers.concat(heroes)).slice(0, 3);
-  }
-  if (picked.length < 3) {
-    const used = new Set(picked.map(card => card.id));
-    for (const card of shuffle(state, cards)) {
-      if (used.has(card.id)) continue;
-      picked.push(card);
-      used.add(card.id);
-      if (picked.length === 3) break;
-    }
-  }
+    return false;
+  };
+  // BangBang-first mix: 1 Super-Weapon/Evolution + 1 Core Hero or Super-Weapon + 1 Bastion Turret (deploy/level-up)
+  take(superweapons);
+  if (!take(coreHero)) take(superweapons);
+  take(towers);
+  const rest = shuffle(state, [...superweapons, ...coreHero, ...towers]);
+  while (picked.length < 3 && rest.length) take(rest);
   return picked.slice(0, 3);
 }
 

@@ -185,10 +185,8 @@ test('pause and draft wall time are not fight time and do not raise the settleme
     assert.ok(tower >= 0, speed);
     const chosen = chooseDraft(held.state, tower);
     assert.equal(chosen.ok, true, speed);
-    assert.equal(held.state.phase, 'placing', speed);
-    advanceWall(held.state, HELD_WALL);
-    assert.equal(held.state.phase, 'placing', speed);
-    assert.equal(held.state.time, fightTime, `placing counted at ${speed}x`);
+    assert.equal(held.state.phase, 'playing', speed);
+    assert.equal(held.state.time, fightTime, `draft choice counted at ${speed}x`);
     assert.equal(held.state.tick, fightTick, speed);
     assert.equal(held.state.kills, fightKills, speed);
     assert.equal(held.state.xp, draftXp, speed);

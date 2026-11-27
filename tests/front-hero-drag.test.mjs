@@ -14,10 +14,6 @@ function memoryStorage() {
   };
 }
 
-function ids(state) {
-  return state.slots.map(slot => slot.unit ? `${slot.unit.id}:${slot.unit.kind}:${slot.unit.type}:${slot.unit.rank}` : null);
-}
-
 test('a new run starts with one hero in the middle of the front row', () => {
   const state = createRun({seed: 2, runId: 'front-hero'});
   assert.equal(state.slots[2].unit.kind, 'hero');
@@ -42,7 +38,7 @@ test('a saved hero stays in its slot when that slot is not the new start', () =>
   assert.equal(imported.run.slots[2].unit, null);
 });
 
-test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal drops back', async () => {
+test('dragging moves onto an empty slot and swaps any two occupied slots cleanly without merge', async () => {
   const api = await createController({storage: memoryStorage()});
   assert.equal(api.act('start', {seed: 4, difficulty: 'normal', runId: 'drag-play'}).ok, true);
   const state = api.getState();
@@ -70,39 +66,30 @@ test('dragging moves onto an empty slot, merges a legal pair, and snaps illegal 
   assert.equal(state.slots[2].unit, hero);
   assert.equal(api.act('resume').paused, false);
 
-  state.slots[3].unit = createUnit(state, 'bolt', 1, 'tower');
-  state.slots[4].unit = createUnit(state, 'bolt', 1, 'tower');
-  state.slots[5].unit = createUnit(state, 'fire', 2, 'tower');
-  const board = ids(state);
-  const illegal = api.act('dragDrop', {from: 4, to: 5});
-  assert.equal(illegal.ok, false);
-  assert.equal(illegal.snapped, true);
-  assert.equal(state.paused, false);
-  assert.deepEqual(ids(state), board);
-  const heroDrop = api.act('dragDrop', {from: 2, to: 3});
-  assert.equal(heroDrop.ok, false);
-  assert.equal(heroDrop.reason, 'heroProtected');
-  assert.equal(heroDrop.snapped, true);
-  assert.equal(state.slots[2].unit, hero);
-  assert.equal(state.slots[3].unit.type, 'bolt');
+  const bolt = createUnit(state, 'bolt', 1, 'tower');
+  const fire = createUnit(state, 'fire', 2, 'tower');
+  state.slots[3].unit = bolt;
+  state.slots[5].unit = fire;
 
-  const beforeMerge = state.time;
-  const merged = api.act('dragDrop', {from: 3, to: 4});
-  assert.equal(merged.ok, true, merged.reason);
-  assert.deepEqual(ids(state),board);
-  assert.ok(api.getUI().mergePreview);
-  assert.equal(api.act('mergeConfirm',{from:3,to:4}).ok,true);
-  assert.equal(state.paused, false);
-  assert.equal(state.phase, 'playing');
-  assert.equal(state.slots[3].unit, null);
-  assert.equal(state.slots[4].unit.kind, 'tower');
-  assert.equal(state.slots[4].unit.type, 'bolt');
-  assert.equal(state.slots[4].unit.rank, 2);
+  // Swapping two turrets works without merging them
+  const swapped = api.act('dragDrop', {from: 3, to: 5});
+  assert.equal(swapped.ok, true);
+  assert.equal(swapped.swapped, true);
+  assert.equal(state.slots[5].unit, bolt);
+  assert.equal(state.slots[3].unit, fire);
+  assert.equal(state.slots[5].unit.rank, 1);
+  assert.equal(state.slots[3].unit.rank, 2);
+
+  // Swapping the hero with a turret keeps exactly one hero and both units intact
+  const heroSwap = api.act('dragDrop', {from: 2, to: 3});
+  assert.equal(heroSwap.ok, true);
+  assert.equal(heroSwap.swapped, true);
+  assert.equal(state.slots[3].unit, hero);
+  assert.equal(state.slots[2].unit, fire);
   assert.equal(state.slots.filter(slot => slot.unit && slot.unit.kind === 'hero').length, 1);
-  assert.match(api.getUI().message, /rank 2/);
-  assert.match(api.getUI().message, /become one/);
-  simulate(state, 0.5);
-  assert.equal(state.paused, false);
-  assert.ok(state.time > beforeMerge);
-  assert.equal(state.slots[4].unit.rank, 2);
+
+  // Dropping onto same slot snaps back safely
+  const same = api.act('dragDrop', {from: 3, to: 3});
+  assert.equal(same.ok, false);
+  assert.equal(same.snapped, true);
 });

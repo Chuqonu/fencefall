@@ -5,19 +5,13 @@
  * contact-shadow row — on (x, y). The cached image is 40×40, inside the
  * 24–40px art range, and that body stays inside the slot.
  *
- * Hybrid silhouettes follow a sorted parent pair (`bolt+fire`, …). Each
- * hybrid joins that pair's two parent shapes — bow, flame bowl, crystal,
- * spark coil, flask, banner — so it reads as a combination, not a recolor.
- * Parents come from RECIPES (id + parents), then unit.parents / ingredients /
- * components / sourceTypes, then the type id (`frost+support`, `firefrost`,
- * or a known flavor alias). Unknown ids still draw a ranked reliquary.
- * Rank 1–4 is a row of chevrons on the plinth, one mark per rank.
+ * Base turret silhouettes draw each defender's distinct weapon — bow, flame
+ * bowl, crystal, spark coil, flask, or banner. Rank 1–4 is shown as chevrons
+ * on the plinth, one mark per level.
  * A defender whose stats include an aura wears a teal ring around the sprite.
- * The ring sits outside the body, so chevrons and hybrid shapes stay put.
  * Nothing here reads or writes gameplay RNG or run state.
  */
 import {ARENA, BASE_TYPES, clamp} from '../shared.js';
-import {RECIPES} from '../data/recipes.js';
 import {getUnitStats} from '../data/towers.js';
 
 const W = 40;
@@ -79,7 +73,7 @@ const PALETTE = {
   m: '#d8c4a4'
 };
 
-const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't', harvest: 'b'};
+const ROLE = {bolt: 'n', fire: 'f', frost: 'L', lightning: 'Z', poison: 'Q', support: 't'};
 const BASE_SET = new Set(BASE_TYPES);
 
 const ALIASES = {
@@ -121,52 +115,11 @@ const ALIASES = {
   banner: 'support',
   buff: 'support',
   buffer: 'support',
-  healer: 'support',
-  harvest: 'harvest',
-  economy: 'harvest',
-  gleaner: 'harvest',
-  sunflower: 'harvest',
-  sungleaner: 'harvest'
+  healer: 'support'
 };
 
-/** Flavor ids used when a recipe id does not embed its parent names. RECIPES parents win. */
-const FLAVOR_PAIRS = {
-  cinderbolt: ['bolt', 'fire'],
-  cinderquarrel: ['bolt', 'fire'],
-  emberbolt: ['bolt', 'fire'],
-  hailspike: ['bolt', 'frost'],
-  glacierbolt: ['bolt', 'frost'],
-  stormlance: ['bolt', 'lightning'],
-  thunderbolt: ['bolt', 'lightning'],
-  venomspine: ['bolt', 'poison'],
-  poisonbolt: ['bolt', 'poison'],
-  signalshot: ['bolt', 'support'],
-  signaler: ['bolt', 'support'],
-  steamvent: ['fire', 'frost'],
-  emberglass: ['fire', 'frost'],
-  plasmabrazier: ['fire', 'lightning'],
-  stormkiln: ['fire', 'lightning'],
-  blightkiln: ['fire', 'poison'],
-  plaguefire: ['fire', 'poison'],
-  warbeacon: ['fire', 'support'],
-  warhorn: ['fire', 'support'],
-  prismcoil: ['frost', 'lightning'],
-  crystalstorm: ['frost', 'lightning'],
-  rimeurn: ['frost', 'poison'],
-  blightice: ['frost', 'poison'],
-  wardglass: ['frost', 'support'],
-  wardbell: ['frost', 'support'],
-  acidarc: ['lightning', 'poison'],
-  venomcoil: ['lightning', 'poison'],
-  relaystandard: ['lightning', 'support'],
-  sparkbanner: ['lightning', 'support'],
-  plaguealtar: ['poison', 'support'],
-  plaguecenser: ['poison', 'support'],
-  censeralter: ['poison', 'support']
-};
-
+const FLAVOR_PAIRS = {};
 const recipeById = new Map();
-indexRecipes(RECIPES);
 
 const cache = new Map();
 
@@ -176,8 +129,7 @@ const TOWER_PAINTERS = {
   frost: paintFrost,
   lightning: paintLightning,
   poison: paintPoison,
-  support: paintSupport,
-  harvest: paintHarvest
+  support: paintSupport
 };
 
 const HYBRID_PAINTERS = {

@@ -91,42 +91,18 @@ function render(language, phase) {
   return container;
 }
 
-test('a victory result offers endless in the active language', () => {
+test('a victory result offers endless in the active language and hides it on defeat', () => {
   const zh = render('zh', 'victory');
-  const button = findByTestId(zh, 'btn-results-endless');
-  assert.equal(button?.textContent, '进入无尽');
-  assert.equal(findByTestId(zh, 'endless-offer')?.textContent, '进入无尽？胜利报酬已经保存。');
-  assert.equal(findByTestId(zh, 'endless-note')?.textContent, '无尽不会再次发放主线报酬。');
-  assert.equal(findByTestId(zh, 'btn-endless-stay')?.textContent, '暂不进入');
-  assert.equal(findByTestId(render('en', 'victory'), 'btn-results-endless')?.textContent, 'Enter endless');
-  assert.equal(findByTestId(render('zh', 'defeat'), 'btn-results-endless'), null);
+  assert.equal(findByTestId(zh, 'btn-endless')?.textContent, '进入无尽');
+  const en = render('en', 'victory');
+  assert.equal(findByTestId(en, 'btn-endless')?.textContent, 'Enter endless');
+  assert.equal(findByTestId(render('zh', 'defeat'), 'btn-endless'), null);
 });
 
-test('a defeat result names the cheapest Armory buy still out of reach', () => {
-  const zh = findByTestId(render('zh', 'defeat'), 'result-next')?.textContent || '';
-  const en = findByTestId(render('en', 'defeat'), 'result-next')?.textContent || '';
-  assert.match(zh, /还差 35 才能购买深根，价格 35/);
-  assert.match(en, /You need 35 more for Deep Roots, which costs 35/);
-  assert.equal(findByTestId(render('en', 'victory'), 'result-next'), null);
-});
-
-test('not now hides endless and leaves the saved reward', () => {
-  const doc = documentStub();
-  const container = element(doc, 'div');
-  const profile = createProfile('en');
-  const run = createRun({seed: 3, difficulty: 'normal', runId: 'endless-stay', profile});
-  run.phase = 'victory';
-  run.settlement = {result: 'victory', currency: 12};
-  renderMetaPanel(container, 'results', run, profile, {
-    t: key => t('en', key),
-    act: () => { throw new Error('stay must not call an action'); },
-    getUI: () => ({}),
-  });
-  const stay = findByTestId(container, 'btn-endless-stay');
-  assert.equal(stay?.textContent, 'Not now');
-  for (const fn of stay.listeners.click) fn({preventDefault() {}, stopPropagation() {}});
-  assert.equal(findByTestId(container, 'btn-results-endless'), null);
-  assert.equal(findByTestId(container, 'endless-offer'), null);
-  assert.equal(run.settlement.currency, 12);
-  assert.equal(profile.currency, 0);
+test('a defeat result shows an Armory unlock recommendation in both languages', () => {
+  const zh = findByTestId(render('zh', 'defeat'), 'result-armory-tip')?.textContent || '';
+  const en = findByTestId(render('en', 'defeat'), 'result-armory-tip')?.textContent || '';
+  assert.match(zh, /35/);
+  assert.match(en, /35/);
+  assert.equal(findByTestId(render('en', 'victory'), 'result-armory-tip'), null);
 });

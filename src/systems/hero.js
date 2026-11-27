@@ -39,11 +39,11 @@ export const HERO_UPGRADES = deepFreeze({
   shrapnel:upgrade('shrapnel',3,'Thermobaric','温压破片','Explosive rounds burn enemies for 2.6 seconds. Rank 2+ leaves scorch fire.','爆炸弹溅射并灼烧敌群 2.6 秒，2 级起留下灼烧火坑。',{splash:30,burn:{dps:4,duration:2.6}}),
   frostbite:upgrade('frostbite',3,'Cryo Rounds','急冻弹头','Slow targets and increase damage they take. Rank 2+ shatters on death.','减速目标并使其易伤，2 级起击杀触发冰霜碎裂。',{brittle:{power:0.1,duration:2.6}}),
   focus:upgrade('focus',3,'Kill Switch','弱点锁定','Stronger critical hits. Rank 2 unlocks execution.','提高暴击率与倍率，2 级解锁残血斩杀。',{critChance:0.1,critMultiplier:0.3}),
-  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 80 fence HP, 35% surge power and 20% field HP.','栅栏生命 +80，冲击波威力 +35%，工事生命 +20%。',{fence:80}),
+  bastion:upgrade('bastion',2,'Bastion Ward','堡垒工程','Gain 100 wall HP, 40% surge power, and +1 Aegis wall immunity.','城墙生命 +100，冲击波威力 +40%，城墙免疫 +1 次。',{fence:100}),
   split_shot:upgrade('split_shot',3,'Split Shrapnel','子母分裂弹','Gain 3 damage. Hits burst into 2/3/4 piercing shrapnel bolts.','伤害 +3，命中后向四周分裂出 2/3/4 发贯穿子母弹。',{damageAdd:3}),
   ricochet:upgrade('ricochet',3,'EM Ricochet','电磁穿刺','Gain 2 damage. Shots chain to 2/3/4 foes and call periodic EM sky-strikes.','伤害 +2，子弹电弧弹射 2/3/4 名敌人，并周期降下自动雷击。',{damageAdd:2}),
   napalm:upgrade('napalm',3,'Napalm Barrage','燃油弹火海','Gain 24 px blast radius and auto-lob Napalm canisters leaving a fire sea.','溅射范围 +24 像素，周期自动空投燃油弹形成大范围持续火海。',{splash:24}),
-  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 fence HP and periodically dispatch an Armored Sweeper truck up the densest lane.','栅栏生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
+  armored_car:upgrade('armored_car',3,'Armored Sweeper','重装装甲车','Gain 60 wall HP and periodically dispatch an Armored Sweeper truck up the densest lane.','城墙生命 +60，周期自动从城墙派出重装装甲车碾压整列尸潮。',{fence:60}),
   cryo_barrage:upgrade('cryo_barrage',3,'Glacial Barrage','干冰连发柱','Apply brittle (+10%/rank) and periodically launch a sweeping fan of 5/7/9 piercing ice shards.','附加易伤（+10%/级），周期自动齐射 5/7/9 道贯穿干冰柱击退尸潮。',{brittle:{power:0.1,duration:2.6}}),
   orbital_beam:upgrade('orbital_beam',3,'Orbital Laser','高能射线','Gain +0.25x crit multiplier and periodically fire a vertical piercing laser beam.','暴击倍率 +0.25，周期自动发射纵贯战场的高能激光柱重创整列与首领。',{critMultiplier:0.25})
 });
@@ -126,7 +126,7 @@ export function getHeroStats(unit, state) {
     range: HERO_BASE.range + bonus.range,
     critChance: round4(HERO_BASE.critChance + 0.1 * focus + bonus.critChance),
     critMultiplier: round4(HERO_BASE.critMultiplier + 0.3 * focus + 0.25 * orbital_beam),
-    fence: levels.bastion * 80 + armored_car * 60,
+    fence: levels.bastion * 100 + armored_car * 60,
     pierce: pierce + extraPierce,
     armorPen: pierce * 0.25,
     critKnockback: (strike ? 18 : 0) + finiteOr(rawBonus.critKnockback, 0),
@@ -161,7 +161,6 @@ export function getHeroStats(unit, state) {
 /**
  * Raise one hero upgrade by 1. Returns {ok:true} or {ok:false, reason}.
  * Reasons: unknown_upgrade, invalid_state, no_hero, upgrade_capped.
- * Only hero.upgrades is written.
  */
 export function applyHeroUpgrade(state, id) {
   const def = typeof id === 'string' ? HERO_UPGRADES[id] : undefined;
@@ -190,14 +189,9 @@ export function applyHeroUpgrade(state, id) {
   try {
     upgrades[id] = current + 1;
     if (id === 'bastion' && state.fence) {
-      state.fence.maxHp += 80;
-      state.fence.hp += 80;
-      for (const {unit} of state.fieldSlots || []) {
-        if (!unit) continue;
-        const gain = unit.maxHp * 0.2 / (1 + current*0.2);
-        unit.maxHp += gain;
-        unit.hp += gain;
-      }
+      state.fence.maxHp += 100;
+      state.fence.hp += 100;
+      state.wallImmunity = Math.max(0, Math.floor(state.wallImmunity || 0)) + 1;
     }
     if (id === 'armored_car' && state.fence) {
       state.fence.maxHp += 60;

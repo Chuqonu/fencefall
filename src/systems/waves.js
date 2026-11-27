@@ -18,8 +18,8 @@ const INTRO_HINTS = {
     zh: '尘啮成群出现。一只不足为惧，一群就会啃栅栏。',
   },
   spitter: {
-    en: 'Stops 135 px from the fence and spits acid. A bulwark in its path intercepts the shot.',
-    zh: '在距栅栏 135 像素处停步喷酸，弹道上的铁棘壁可拦截酸液。',
+    en: 'Stops 135 px from the fence and spits acid. Set Priority targeting to drop it fast.',
+    zh: '在距防线 135 像素处停步喷酸，切换「高危」索敌优先集火清理。',
   },
   armored: {
     en: 'Plate walkers shrug off more than half of each hit. Focus them down.',
@@ -34,8 +34,8 @@ const INTRO_HINTS = {
     zh: '冠裂兽存活期间都会召唤尘啮。半血只会让它狂暴。它只攻击栅栏。',
   },
   leaper: {
-    en: 'Vulnerable while walking and crouching. A bulwark catches its jump and stuns it for 1.2 s.',
-    zh: '行进与蹲伏时均可射击。铁棘壁能拦下跳跃并眩晕 1.2 秒。',
+    en: 'Crouches briefly then leaps forward. Frost slow and Lightning stun stop its charge.',
+    zh: '短暂蹲伏后向前扑跃，寒霜减速与电弧麻痹可有效打断其突进。',
   },
   splitter: {
     en: 'Crack broods release two dust gnawers when they die.',
@@ -46,8 +46,8 @@ const INTRO_HINTS = {
     zh: '烬补者会治疗伤得最重的同伴，不会治疗自己。',
   },
   shade: {
-    en: 'Fades every 1.4 s. Flares and Pyre reveal it. Spikes and clouds damage it while faded.',
-    zh: '每 1.4 秒切换虚实。耀光灯塔和烽坛可显隐，地刺与云雾能伤及虚化状态。',
+    en: 'Fades every 1.4 s to dodge direct shots. Burn and poison clouds still hurt it while faded.',
+    zh: '每 1.4 秒虚化规避直射，但灼烧与毒雾在虚化期间依然生效。',
   },
   banner: {
     en: 'A standard wretch triples the pace of enemies near it. Kill it before that pack arrives.',
@@ -209,10 +209,7 @@ export function updateWaves(state, dt = 0) {
     director.nextWave += 1;
     state.wave = director.nextWave;
     if (wave.horde) {
-      const amount=Math.min(15,state.maxEnergy-state.energy);
-      state.energy+=amount;
-      emit(state,'energy_gain',{amount,source:'wave'});
-      emit(state,'wave_horde',{wave:state.wave,name:wave.name,count});
+      emit(state, 'wave_horde', {wave: state.wave, name: wave.name, count});
     }
     sys.waveStartedAt = state.time;
     sys.current = snapshotWave(wave);
@@ -473,10 +470,7 @@ function pumpEndless(state, sys) {
     sys.endlessWave += 1;
     state.wave += 1;
     if (wave.horde) {
-      const amount=Math.min(15,state.maxEnergy-state.energy);
-      state.energy+=amount;
-      emit(state,'energy_gain',{amount,source:'wave'});
-      emit(state,'wave_horde',{wave:state.wave,name:wave.name,count});
+      emit(state, 'wave_horde', {wave: state.wave, name: wave.name, count});
     }
     sys.waveStartedAt = state.time;
     sys.current = snapshotWave(wave);

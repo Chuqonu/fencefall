@@ -1,6 +1,4 @@
 import {getProfileBonuses} from '../systems/progression.js';
-import {ARENA, BASE_TYPES, slotGeometry} from '../shared.js';
-import {RECIPES} from './recipes.js';
 import {getHeroStats} from '../systems/hero.js';
 
 export const MIN_USEFUL_RANGE = 210;
@@ -20,38 +18,38 @@ export const AURA_RULES = Object.freeze({
 
 /**
  * Rank-1 stats are multiplied by these tables. Index 0 is rank 1.
- * chain/pierce/splash/poison stacks only grow when the baseline already has them.
+ * Tuned for direct 1-card = +1 level turret progression (Lv.1 -> Lv.4).
  */
 export const RANK_SCALE = Object.freeze({
   maxRank: 4,
-  damage: Object.freeze([1, 2.25, 4.6, 9.2]),
+  damage: Object.freeze([1, 1.9, 3.1, 4.8]),
   interval: Object.freeze([1, 0.91, 0.83, 0.76]),
   rangeAdd: Object.freeze([0, 16, 32, 48]),
-  critAdd: Object.freeze([0, 0.015, 0.03, 0.05]),
-  critMultiplierAdd: Object.freeze([0, 0.05, 0.1, 0.15]),
+  critAdd: Object.freeze([0, 0.02, 0.04, 0.07]),
+  critMultiplierAdd: Object.freeze([0, 0.06, 0.12, 0.2]),
   projectileSpeedAdd: Object.freeze([0, 20, 40, 60]),
   splashAdd: Object.freeze([0, 6, 12, 18]),
-  chainAdd: Object.freeze([0, 0, 1, 2]),
-  chainRangeAdd: Object.freeze([0, 8, 14, 20]),
-  pierceAdd: Object.freeze([0, 0, 0, 1]),
-  effect: Object.freeze([1, 2, 3.8, 7.2]),
+  chainAdd: Object.freeze([0, 1, 1, 2]),
+  chainRangeAdd: Object.freeze([0, 8, 16, 24]),
+  pierceAdd: Object.freeze([0, 0, 1, 2]),
+  effect: Object.freeze([1, 1.7, 2.7, 4.1]),
   duration: Object.freeze([1, 1.1, 1.2, 1.32]),
-  slowFactorReduce: Object.freeze([0, 0.04, 0.08, 0.12]),
-  poisonStacksAdd: Object.freeze([0, 0, 0, 1]),
-  auraPower: Object.freeze([1, 1.18, 1.36, 1.54]),
-  auraRangeAdd: Object.freeze([0, 8, 16, 24]),
+  slowFactorReduce: Object.freeze([0, 0.05, 0.1, 0.14]),
+  poisonStacksAdd: Object.freeze([0, 0, 1, 2]),
+  auraPower: Object.freeze([1, 1.2, 1.42, 1.65]),
+  auraRangeAdd: Object.freeze([0, 10, 20, 30]),
   intervalFloor: 0.4,
-  critChanceCap: 0.4,
+  critChanceCap: 0.45,
   critMultiplierCap: 2.5,
   projectileSpeedCap: 680,
   splashCap: 84,
-  chainCap: 4,
-  chainRangeCap: 130,
-  pierceCap: 3,
+  chainCap: 5,
+  chainRangeCap: 140,
+  pierceCap: 4,
   durationCap: 8,
   slowFactorFloor: 0.42,
   poisonStacksCap: 6,
-  auraRangeCap: 160
+  auraRangeCap: 170
 });
 
 /** How UnitStats effect blocks map onto the shared status object. */
@@ -60,8 +58,6 @@ export const STATUS_HOOKS = Object.freeze({
   poison: Object.freeze({type: 'poison', power: 'dps per stack', remaining: 'duration', stacks: 'start at 1 and cap at maxStacks'}),
   slow: Object.freeze({type: 'slow', power: 'remaining speed factor, not a percentage reduction', remaining: 'duration'})
 });
-
-const CORE_FIELDS = ['damage', 'interval', 'range', 'critChance', 'critMultiplier', 'projectileSpeed', 'splash', 'chain', 'chainRange', 'pierce'];
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -103,7 +99,7 @@ function withDefaults(stats) {
     chain: Math.max(0, num(src.chain, 0)),
     chainRange: num(src.chainRange, 70) > 0 ? num(src.chainRange, 70) : 70,
     pierce: Math.max(0, num(src.pierce, 0)),
-    mechanics: Array.isArray(src.mechanics) ? src.mechanics.filter(item => typeof item === 'string') : []
+    mechanics: Array.isArray(src.mechanics) ? src.mechanics.filter((item) => typeof item === 'string') : []
   };
   for (const key of Object.keys(src)) if (!known.has(key)) out[key] = src[key];
   if (src.burn && typeof src.burn === 'object') {
@@ -183,39 +179,55 @@ function inertStats() {
   });
 }
 
-function findRecipe(type) {
-  if (typeof type !== 'string' || !Array.isArray(RECIPES)) return null;
-  for (const recipe of RECIPES) {
-    if (recipe && recipe.id === type && recipe.stats && typeof recipe.stats === 'object') return recipe;
-  }
-  return null;
-}
-
-function finiteTree(value) {
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (!value || typeof value !== 'object') return true;
-  return Object.values(value).every(item => finiteTree(item));
-}
-
 function tower(id, en, zh, roleEn, roleZh, summary, detail, damage, interval, range, effects) {
-  return {id,name:{en,zh},role:{en:roleEn,zh:roleZh},description:{en:summary,zh:detail},
-    stats:withDefaults({damage,interval,range,...effects,mechanics:['projectile',...Object.keys(effects)
-      .filter(k=>!['chainRange','critMultiplier','projectileSpeed'].includes(k)).map(k=>k==='critChance'?'crit':k)]})};
+  return {
+    id,
+    name: {en, zh},
+    role: {en: roleEn, zh: roleZh},
+    description: {en: summary, zh: detail},
+    stats: withDefaults({
+      damage,
+      interval,
+      range,
+      ...effects,
+      mechanics: ['projectile', ...Object.keys(effects)
+        .filter((k) => !['chainRange', 'critMultiplier', 'projectileSpeed'].includes(k))
+        .map((k) => (k === 'critChance' ? 'crit' : k))]
+    })
+  };
 }
+
 export const TOWERS = {
-  harvest:tower('harvest','Sun Gleaner','辉穗','Economy','经济','Produces energy and XP. Rear row gains 30%.','周期产辉光与经验，后排收益 +30%。',0,5,0,{}),
-  bolt:tower('bolt','Rivet','穿钉','Projectile','投射','Pierce a second target with a fast critical bolt.','快速弩矢可暴击并贯穿第二个目标。',13,0.68,295,
-    {pierce:1,critChance:0.16,critMultiplier:1.85,projectileSpeed:440}),
-  fire:tower('fire','Cinder','烬火','Fire','火焰','Burn clustered enemies in a 42 px burst.','火弹在 42 像素范围内溅射并灼烧。',11,0.98,280,
-    {splash:42,burn:{dps:5,duration:2.8},projectileSpeed:300}),
-  frost:tower('frost','Rime','霜结','Frost','冰霜','Frost splashes slow a group to 64% speed.','冰弹溅射，使敌群移速降至 64%。',9,0.85,290,
-    {splash:24,slow:{factor:0.64,duration:2.4}}),
-  lightning:tower('lightning','Arc','弧雷','Lightning','闪电','Chain across three targets with a chance to stun.','电弧连锁三个目标，有概率麻痹。',12,1.1,315,
-    {chain:2,chainRange:92,stun:{duration:0.25,chance:0.2},projectileSpeed:560}),
-  poison:tower('poison','Blight','瘴毒','Poison','毒素','Stack venom on armored enemies.','穿透 35% 护甲，最多叠四层毒。',6,0.78,285,
-    {poison:{dps:3.5,duration:4.5,maxStacks:4},armorPen:0.35}),
-  support:tower('support','Banner','旌旗','Support','辅助','Buff nearby allies and expose priority targets.','光环强化友军，普攻使高危目标易伤。',6,1.05,280,
-    {aura:{range:120,damage:0.14,haste:0.1},brittle:{power:0.1,duration:2}})
+  bolt: tower('bolt', 'Rivet', '穿钉', 'Projectile', '投射',
+    'Pierce a second target with a fast critical bolt.',
+    '快速弩矢可暴击并贯穿第二个目标。',
+    14, 0.65, 300,
+    {pierce: 1, critChance: 0.16, critMultiplier: 1.85, projectileSpeed: 460}),
+  fire: tower('fire', 'Cinder', '烬火', 'Fire', '火焰',
+    'Burn clustered enemies in a 44 px burst.',
+    '火弹在 44 像素范围内溅射并灼烧敌群。',
+    12, 0.94, 285,
+    {splash: 44, burn: {dps: 5.5, duration: 2.8}, projectileSpeed: 320}),
+  frost: tower('frost', 'Rime', '霜结', 'Frost', '冰霜',
+    'Frost splashes slow a group to 62% speed.',
+    '冰弹溅射，使敌群移速降至 62%。',
+    10, 0.84, 295,
+    {splash: 28, slow: {factor: 0.62, duration: 2.5}}),
+  lightning: tower('lightning', 'Arc', '弧雷', 'Lightning', '闪电',
+    'Chain across three targets with a chance to stun.',
+    '电弧连锁三个目标，有概率麻痹。',
+    13, 1.06, 320,
+    {chain: 2, chainRange: 96, stun: {duration: 0.28, chance: 0.22}, projectileSpeed: 560}),
+  poison: tower('poison', 'Blight', '瘴毒', 'Poison', '毒素',
+    'Stack armor-piercing venom on tough targets.',
+    '穿透 40% 护甲，持续叠毒瓦解重甲。',
+    7, 0.76, 290,
+    {poison: {dps: 4, duration: 4.5, maxStacks: 4}, armorPen: 0.4}),
+  support: tower('support', 'Banner', '旌旗', 'Support', '辅助',
+    'Buff nearby allies and expose priority targets.',
+    '光环强化周边火力与攻速，并令高危目标易伤。',
+    7, 1.0, 290,
+    {aura: {range: 130, damage: 0.16, haste: 0.12}, brittle: {power: 0.14, duration: 2.4}})
 };
 
 function heroStats(unit, state) {
@@ -225,23 +237,22 @@ function heroStats(unit, state) {
 }
 
 /**
- * Fresh UnitStats for a hero, base tower, or hybrid.
- * Hybrid lookup uses RECIPES[].id === unit.type. Same-type towers keep their base id.
+ * Fresh UnitStats for the hero or a bastion turret (Lv.1-Lv.4).
  * Unknown tower ids return finite zero damage instead of throwing.
  * @param {{kind?:string,type?:string,rank?:number}|null|undefined} unit
- * @param {object} [state] Passed through to getHeroStats. Unused for towers.
+ * @param {object} [state] Passed through to getHeroStats.
  */
 export function getUnitStats(unit, state) {
   if (!unit || typeof unit !== 'object') return inertStats();
   if (unit.kind === 'hero' || unit.type === 'hero') return heroStats(unit, state);
-  const base=TOWERS[unit.type] || findRecipe(unit.type);
+  const base = TOWERS[unit.type];
   if (!base) return inertStats();
-  const stats=scaleStats(base.stats,unit.rank);
-  const bonus=state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot);
-  stats.damage*=1+(bonus.damage||0)+(unit.kind==='hybrid'?bonus.hybridDamage||0:0);
-  stats.interval/=1+(bonus.haste||0);
-  stats.critChance+=bonus.critChance||0;
-  if (bonus.critKnockback) stats.critKnockback=bonus.critKnockback;
+  const stats = scaleStats(base.stats, unit.rank);
+  const bonus = state?.systems?.integration?.bonuses || getProfileBonuses(state?.profileSnapshot);
+  stats.damage *= 1 + (bonus.damage || 0);
+  stats.interval /= 1 + (bonus.haste || 0);
+  stats.critChance += bonus.critChance || 0;
+  if (bonus.critKnockback) stats.critKnockback = bonus.critKnockback;
   return stats;
 }
 
@@ -252,4 +263,3 @@ function deepFreeze(value) {
 }
 
 deepFreeze(TOWERS);
-

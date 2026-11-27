@@ -28,8 +28,6 @@ function heroSlots(state) {
   for (const slot of state.slots) {
     if (isHero(slot.unit)) slots.push(slot.index);
   }
-  const pending = state.pendingUnit && state.pendingUnit.unit;
-  if (isHero(pending)) slots.push('pending');
   return slots;
 }
 
@@ -108,7 +106,7 @@ test('moving the hero onto an empty slot leaves exactly one hero in the destinat
   assert.equal(state.nextId, nextId);
 });
 
-test('dropping the hero on another unit does not create a second hero or remove the hero', async () => {
+test('dropping the hero on another unit swaps cleanly and never duplicates or removes the hero', async () => {
   const api = await createController({storage: memoryStorage()});
   assert.equal(api.act('start', {seed: 11, difficulty: 'normal', runId: 'hero-drag-one-drop'}).ok, true);
   const state = api.getState();
@@ -117,51 +115,29 @@ test('dropping the hero on another unit does not create a second hero or remove 
   assert.equal(api.act('pause').paused, true);
 
   const tower = createUnit(state, 'bolt', 1, 'tower');
-  const hybrid = createUnit(state, 'cinder-bolt', 1, 'hybrid');
+  const fire = createUnit(state, 'fire', 2, 'tower');
   state.slots[4].unit = tower;
-  state.slots[8].unit = hybrid;
+  state.slots[8].unit = fire;
   const nextId = state.nextId;
-  const merges = state.stats.merges;
 
   const ontoTower = api.act('dragDrop', {from: 2, to: 4});
-  assert.equal(ontoTower.ok, false);
-  assert.equal(ontoTower.reason, 'heroProtected');
-  assert.equal(ontoTower.snapped, true);
-  assert.equal(state.slots[4].unit, tower);
-  assert.equal(state.slots[8].unit, hybrid);
-  assertOneHero(state, hero, 2, 'hero onto tower');
+  assert.equal(ontoTower.ok, true);
+  assert.equal(ontoTower.swapped, true);
+  assert.equal(state.slots[2].unit, tower);
+  assertOneHero(state, hero, 4, 'hero onto tower');
 
-  const ontoHero = api.act('dragDrop', {from: 4, to: 2});
-  assert.equal(ontoHero.ok, false);
-  assert.equal(ontoHero.reason, 'heroProtected');
-  assert.equal(ontoHero.snapped, true);
+  const ontoHero = api.act('dragDrop', {from: 2, to: 4});
+  assert.equal(ontoHero.ok, true);
+  assert.equal(ontoHero.swapped, true);
   assert.equal(state.slots[4].unit, tower);
   assertOneHero(state, hero, 2, 'tower onto hero');
 
-  const ontoHybrid = api.act('dragDrop', {from: 2, to: 8});
-  assert.equal(ontoHybrid.ok, false);
-  assert.equal(ontoHybrid.reason, 'heroProtected');
-  assert.equal(ontoHybrid.snapped, true);
-  assert.equal(state.slots[8].unit, hybrid);
-  assertOneHero(state, hero, 2, 'hero onto hybrid');
+  const ontoFire = api.act('dragDrop', {from: 2, to: 8});
+  assert.equal(ontoFire.ok, true);
+  assert.equal(ontoFire.swapped, true);
+  assert.equal(state.slots[2].unit, fire);
+  assertOneHero(state, hero, 8, 'hero onto fire');
 
-  const hybridOntoHero = api.act('dragDrop', {from: 8, to: 2});
-  assert.equal(hybridOntoHero.ok, false);
-  assert.equal(hybridOntoHero.reason, 'heroProtected');
-  assert.equal(state.slots[8].unit, hybrid);
-  assertOneHero(state, hero, 2, 'hybrid onto hero');
-
-  assert.equal(api.act('dragDrop', {from: 2, to: 0}).ok, true);
-  assertOneHero(state, hero, 0, 'moved beside units');
-  const refused = api.act('dragDrop', {from: 0, to: 4});
-  assert.equal(refused.ok, false);
-  assert.equal(refused.reason, 'heroProtected');
-  assert.equal(refused.snapped, true);
-  assert.equal(state.slots[0].unit, hero);
-  assert.equal(state.slots[4].unit, tower);
-  assert.equal(state.slots[8].unit, hybrid);
-  assertOneHero(state, hero, 0, 'after refused drop');
-  assert.equal(state.slots.filter(slot => isHero(slot.unit)).length, 1);
   assert.equal(state.nextId, nextId);
-  assert.equal(state.stats.merges, merges);
+  assert.equal(state.slots.filter(slot => slot.unit).length, 3);
 });

@@ -36,27 +36,38 @@ const NEXT_BUY_RANK = Object.freeze({
   bounty_seal: 11,
 });
 const BONUS_LABELS = {
-  damage:['team damage','全队伤害','%'],haste:['team attack speed','全队攻速','%'],critChance:['team crit chance','全队暴击率','%'],
-  reward:['reward','结算奖励','%'], hybridDamage:['hybrid damage','混合塔伤害','%'],fieldHp:['field HP','工事生命','%'],
-  fieldDiscount:['field discount','工事折扣','%'],rerollDiscount:['reroll discount','重随折扣','%'],
-  harvest:['harvest yield','辉穗收益','%'],surgePower:['surge power','冲击波威力','%'],
-  critKnockback:['critical knockback','暴击击退','px'],fence:['starting fence HP','开局栅栏生命',''],
-  thorns:['thorn damage','反伤',''],energy:['starting energy','初始辉光',''],energyRate:['energy per second','每秒辉光',''],
-  freeRerolls:['free rerolls','免费重随',''],surgeCharges:['surge charges','冲击波充能','']
+  damage: ['team damage', '全队伤害', '%'],
+  haste: ['team attack speed', '全队攻速', '%'],
+  critChance: ['team crit chance', '全队暴击率', '%'],
+  reward: ['reward', '结算奖励', '%'],
+  superweaponHaste: ['super-weapon cooldown', '超武冷却', '%'],
+  surgePower: ['surge power', '冲击波威力', '%'],
+  statusDamage: ['status damage', '异常增伤', '%'],
+  shredPercent: ['max HP shred', '斩血比例', '%'],
+  critKnockback: ['critical knockback', '暴击击退', 'px'],
+  fence: ['starting wall HP', '开局城墙生命', ''],
+  thorns: ['wall thorns', '城墙反伤', ''],
+  freeRerolls: ['extra rerolls', '额外刷新次数', ''],
+  surgeCharges: ['surge charges', '冲击波充能', ''],
+  wallImmunity: ['wall immunity', '城墙免疫', ''],
+  openingDraft: ['opening airdrop', '开局免费空投', ''],
+  heroPierce: ['hero pierce', '英雄穿透', ''],
+  starterWeapon: ['starter evolution', '开局赠送进化', '']
 };
-const FRACTION_KEYS=Object.keys(BONUS_LABELS).filter(k=>BONUS_LABELS[k][2]==='%');
-const ABSOLUTE_KEYS=Object.keys(BONUS_LABELS).filter(k=>BONUS_LABELS[k][2]!=='%');
-function formatPercent(n) {return String(Math.round(n*1000)/10);}
-function equipmentDescription(en,zh,bonuses) {
-  const parts=Object.entries(bonuses).map(([k,v])=>{
-    const [a,b,unit]=BONUS_LABELS[k], magnitude='+'+(unit==='%'?formatPercent(v):v)+unit;
-    return [magnitude+' '+a,b+magnitude];
+const FRACTION_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] === '%');
+const ABSOLUTE_KEYS = Object.keys(BONUS_LABELS).filter((k) => BONUS_LABELS[k][2] !== '%');
+function formatPercent(n) { return String(Math.round(n * 1000) / 10); }
+function equipmentDescription(en, zh, bonuses) {
+  const parts = Object.entries(bonuses).map(([k, v]) => {
+    const [a, b, unit] = BONUS_LABELS[k];
+    const magnitude = '+' + (unit === '%' ? formatPercent(v) : v) + unit;
+    return [magnitude + ' ' + a, b + magnitude];
   });
-  return {en:parts.map(p=>p[0]).join(', '),zh:parts.map(p=>p[1]).join('，')};
+  return {en: parts.map((p) => p[0]).join(', '), zh: parts.map((p) => p[1]).join('，')};
 }
-function permanentDescription(en,zh,bonuses,cap) {
-  const effect=equipmentDescription(en,zh,bonuses);
-  return {en:effect.en+' per rank (max '+cap+').',zh:'每级'+effect.zh+'，最高 '+cap+' 级。'};
+function permanentDescription(en, zh, bonuses, cap) {
+  const effect = equipmentDescription(en, zh, bonuses);
+  return {en: effect.en + ' per rank (max ' + cap + ').', zh: '每级' + effect.zh + '，最高 ' + cap + ' 级。'};
 }
 
 function gear(id, slot, cost, bonuses, flavorEn, flavorZh) {
@@ -71,22 +82,26 @@ function gear(id, slot, cost, bonuses, flavorEn, flavorZh) {
 }
 
 const equipmentNames = {
-  splinter_bow:{en:'Splinter Bow',zh:'裂片弓'}, kinetic_core:{en:'Kinetic Core',zh:'动能弹芯'},
-  prism_lens:{en:'Prism Lens',zh:'棱镜核心'},runner_charm:{en:'Runner Charm',zh:'奔行护符'},
-  sun_spindle:{en:'Sun Spindle',zh:'辉光纺锤'},bounty_seal:{en:'Bounty Seal',zh:'赏金印'},
-  fence_nails:{en:'Fence Nails',zh:'栅栏钉'},vanguard_kit:{en:'Vanguard Kit',zh:'先锋工事箱'},
-  surge_capacitor:{en:'Surge Capacitor',zh:'脉冲电容'}
+  splinter_bow: {en: 'Splinter Rifle', zh: '裂片步枪'},
+  kinetic_core: {en: 'Kinetic Core', zh: '动能弹芯'},
+  prism_lens: {en: 'Prism Overdrive', zh: '棱镜超频器'},
+  runner_charm: {en: 'Runner Charm', zh: '奔行护符'},
+  sun_spindle: {en: 'Pulse Spindle', zh: '脉冲核心'},
+  bounty_seal: {en: 'Bounty Seal', zh: '赏金印'},
+  fence_nails: {en: 'Bastion Bolts', zh: '堡垒钢钉'},
+  vanguard_kit: {en: 'Reactive Plating', zh: '反应装甲'},
+  surge_capacitor: {en: 'Surge Capacitor', zh: '脉冲电容'}
 };
 const rawEquipment = [
-  gear('splinter_bow','weapon',60,{damage:0.06}),
-  gear('kinetic_core','weapon',150,{damage:0.05,critChance:0.04,critKnockback:8}),
-  gear('prism_lens','weapon',300,{damage:0.08,hybridDamage:0.14,freeRerolls:2}),
-  gear('runner_charm','charm',55,{haste:0.06}),
-  gear('sun_spindle','charm',145,{energy:35,harvest:0.2}),
-  gear('bounty_seal','charm',260,{reward:0.15,critChance:0.03,rerollDiscount:0.25}),
-  gear('fence_nails','armor',50,{fence:40,fieldHp:0.15}),
-  gear('vanguard_kit','armor',140,{fieldDiscount:0.15,fieldHp:0.25,thorns:5}),
-  gear('surge_capacitor','armor',280,{surgeCharges:1,surgePower:0.25})
+  gear('splinter_bow', 'weapon', 60, {damage: 0.08}),
+  gear('kinetic_core', 'weapon', 150, {damage: 0.06, critChance: 0.05, critKnockback: 10}),
+  gear('prism_lens', 'weapon', 280, {damage: 0.12, superweaponHaste: 0.14, freeRerolls: 2}),
+  gear('runner_charm', 'charm', 55, {haste: 0.08}),
+  gear('sun_spindle', 'charm', 145, {haste: 0.06, superweaponHaste: 0.12, freeRerolls: 1}),
+  gear('bounty_seal', 'charm', 240, {reward: 0.2, critChance: 0.05, freeRerolls: 1}),
+  gear('fence_nails', 'armor', 50, {fence: 60}),
+  gear('vanguard_kit', 'armor', 140, {fence: 100, thorns: 8, wallImmunity: 1}),
+  gear('surge_capacitor', 'armor', 260, {surgeCharges: 1, surgePower: 0.3})
 ];
 const equipmentRecord = {};
 for (const entry of rawEquipment) {
@@ -107,10 +122,10 @@ function track(id, cap, costs, bonuses, name, flavorEn, flavorZh) {
 }
 
 const permanentRecord = {
-  economy:track('economy',5,[40,70,110,170,240],{energy:10,energyRate:0.25},{en:'Logistics',zh:'后勤补给'},'',''),
-  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.03}, {en: 'Sharpened Instinct', zh: '锐化直觉'}, 'Training that stays between runs.', '跨对局保留的训练。'),
-  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.03}, {en: 'Quick Hands', zh: '迅捷手法'}, 'Repetition that shortens the gap between shots.', '缩短射击间隔的练习。'),
-  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence:18,fieldHp:0.06}, {en: 'Deep Roots', zh: '深根'}, 'Deeper posts for the starting fence.', '把开局栅栏立得更深。')
+  damage: track('damage', 5, [40, 70, 110, 170, 240], {damage: 0.04}, {en: 'Firepower', zh: '火力强化'}, 'Permanent combat power across every run.', '跨对局生效的全队火力训练。'),
+  haste: track('haste', 5, [40, 70, 110, 170, 240], {haste: 0.04}, {en: 'Quick Reload', zh: '迅捷装填'}, 'Shorten firing intervals for hero and turrets.', '缩短英雄与炮塔的射击间隔。'),
+  vitality: track('vitality', 5, [35, 60, 100, 150, 220], {fence: 30}, {en: 'Steel Wall', zh: '钢铁城墙'}, 'Reinforce the bastion wall with extra HP.', '加固城墙结构，提高开局城墙生命。'),
+  economy: track('economy', 5, [40, 70, 110, 170, 240], {reward: 0.05, superweaponHaste: 0.04}, {en: 'War Chest', zh: '战备增幅'}, 'Boost currency payout and auto super-weapon recharge.', '提升结算货币并加快全自动超武充能。')
 };
 
 function deepFreeze(value) {
@@ -171,8 +186,8 @@ export const GEMS = deepFreeze({
     tier: 'epic',
     name: {en: 'Opening Airdrop Gem', zh: '空投先锋宝石'},
     description: {
-      en: 'Start every battle with 1 free instant 3-choice airdrop draft to power up right away.',
-      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞跳过前期刮痧。'
+      en: 'Start every battle with 1 free instant 3-choice airdrop draft.',
+      zh: '每局开场立即获得 1 次免费三选一空投，开局直接起飞。'
     },
     bonuses: {openingDraft: 1},
   },
@@ -182,8 +197,8 @@ export const GEMS = deepFreeze({
     tier: 'epic',
     name: {en: 'Aegis Bastion Gem', zh: '城墙免疫宝石'},
     description: {
-      en: 'Negate the first 5 hits on the wall and knock back attackers with a shock pulse.',
-      zh: '城墙每局前 5 次受击完全免疫，并释放震荡波击退贴墙尸群。'
+      en: 'Negate the first 5 hits on the wall and knock back attackers.',
+      zh: '城墙每局前 5 次受击完全免疫，并震退贴墙尸群。'
     },
     bonuses: {wallImmunity: 5},
   },
@@ -193,8 +208,8 @@ export const GEMS = deepFreeze({
     tier: 'epic',
     name: {en: 'Pierce Core Gem', zh: '贯穿核心宝石'},
     description: {
-      en: 'Hero shots gain +1 pierce and +8% team damage for effortless horde clearing.',
-      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松贯穿整排尸潮。'
+      en: 'Hero shots gain +1 pierce and +8% team damage.',
+      zh: '英雄枪械基础穿透 +1，全队伤害 +8%，轻松穿透尸潮。'
     },
     bonuses: {heroPierce: 1, damage: 0.08},
   },
@@ -204,8 +219,8 @@ export const GEMS = deepFreeze({
     tier: 'legend',
     name: {en: 'Elemental Surge Gem', zh: '冰火共鸣宝石'},
     description: {
-      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned enemies.',
-      zh: '攻击处于燃烧、减速、易伤或中毒状态的敌人时，伤害额外 +25%。'
+      en: 'Deal +25% bonus damage to burning, slowed, brittle, or poisoned foes.',
+      zh: '攻击燃烧、减速、易伤或中毒敌人时，伤害额外 +25%。'
     },
     bonuses: {statusDamage: 0.25},
   },
@@ -215,8 +230,8 @@ export const GEMS = deepFreeze({
     tier: 'legend',
     name: {en: 'HP Shredder Gem', zh: '百分比斩杀宝石'},
     description: {
-      en: 'Critical hits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
-      zh: '暴击附带目标 4% 最大生命额外伤害（对首领单次上限 180），专克重甲与首领。'
+      en: 'Crits deal +4% target max HP bonus damage (capped at 180 vs bosses).',
+      zh: '暴击附带目标 4% 最大生命额外伤害（对首领上限 180）。'
     },
     bonuses: {shredPercent: 0.04},
   },
@@ -226,10 +241,10 @@ export const GEMS = deepFreeze({
     tier: 'legend',
     name: {en: 'Overdrive Arsenal Gem', zh: '超武充能宝石'},
     description: {
-      en: 'Auto super-weapons cycle 22% faster, start with 1 random evolution, and +25% Sun Gleaner yield.',
-      zh: '全自动超武冷却 -22%，开局额外赠送 1 项随机弹幕/超武进化，辉穗收益 +25%。'
+      en: 'Auto super-weapons cycle 25% faster and start with 1 random evolution.',
+      zh: '全自动超武冷却缩短 25%，开局免费附带 1 项随机超武进化。'
     },
-    bonuses: {superweaponHaste: 0.22, starterWeapon: 1, harvest: 0.25},
+    bonuses: {superweaponHaste: 0.25, starterWeapon: 1},
   },
 });
 

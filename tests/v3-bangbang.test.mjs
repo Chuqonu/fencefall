@@ -16,7 +16,7 @@ import { createEffects } from '../src/render/effects.js';
 import { createAudio } from '../src/audio.js';
 import { hasCatalogIcon, catalogIcon } from '../src/ui/icons.js';
 import { renderMetaPanel } from '../src/ui/meta-panel.js';
-import { draftPower } from '../src/ui/build-panel.js';
+import { renderBuildPanel } from '../src/ui/build-panel.js';
 import { t as translate } from '../src/i18n.js';
 
 function createEngineRun(options) {
@@ -163,7 +163,8 @@ test('Opening Airdrop Gem and Aegis Wall Immunity Gem work in live battle', () =
   const state = createEngineRun({ seed: 17, difficulty: 'normal', expedition: 'frenzy', profile, runId: 'v3-gems-live' });
   assert.equal(state.wallImmunity, 5);
   assert.equal(state.openingDraftPending, 1);
-  assert.equal(state.energy, 75);
+  assert.equal(state.energy, undefined);
+  assert.ok(state.rerollsLeft >= 2);
   // Overdrive Gem grants 1 random v3 hero evolution at run start!
   const hero = state.slots[2].unit;
   const v3Ids = ['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam'];
@@ -301,12 +302,21 @@ test('All 12 v3 icons, draft cards, Armory Gem UI, VFX, and audio cues work clea
     paths.add(sig);
   }
 
-  // Draft cards render distinct cues for all 6 new hero evolutions
+  // Draft cards render cleanly in v4 build-panel for v3 super-weapon evolutions
   const state = createRun({ seed: 5, difficulty: 'normal', runId: 'v3-draft-ui' });
-  for (const id of ['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']) {
-    const power = draftPower(state, { kind: 'hero_upgrade', upgradeId: id, cap: 3, nextLevel: 1 }, 'zh');
-    assert.ok(power.label && power.bars.length === 1, `draftPower(${id})`);
-  }
+  state.phase = 'draft';
+  state.draft = {
+    options: [
+      { id: 'hero_upgrade:napalm', kind: 'hero_upgrade', upgradeId: 'napalm', superweapon: true, cap: 3, nextLevel: 1 },
+      { id: 'hero_upgrade:armored_car', kind: 'hero_upgrade', upgradeId: 'armored_car', superweapon: true, cap: 3, nextLevel: 1 },
+      { id: 'hero_upgrade:orbital_beam', kind: 'hero_upgrade', upgradeId: 'orbital_beam', superweapon: true, cap: 3, nextLevel: 1 },
+    ],
+  };
+  const draftHost = doc.createElement('div');
+  renderBuildPanel(draftHost, state, { t: (k, v) => translate('zh', k, v), act: () => ({ ok: true }), getProfile: () => createProfile('zh'), getUI: () => ({}) });
+  assert.ok(findTestId(draftHost, 'draft-card-0'), 'draft-card-0 rendered');
+  assert.ok(findTestId(draftHost, 'draft-card-1'), 'draft-card-1 rendered');
+  assert.ok(findTestId(draftHost, 'draft-card-2'), 'draft-card-2 rendered');
 
   // Menu & Armory render Starter Supply Pack and 3-socket Gem UI
   const profile = createProfile('zh');

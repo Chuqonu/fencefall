@@ -77,45 +77,8 @@ function flame(dx, dy, color, scale = 1) {
 }
 
 const MARKS = {
-  harvest: () => [
-    L(22, 20, 22, 37, POISON, 2.6),
-    P('M22 31 C16 30 12 26 12 23 C16 24 19 26 22 29', POISON, 1.8, POISON),
-    P('M22 28 C28 27 32 23 32 20 C28 21 25 23 22 26', POISON, 1.8, POISON),
-    L(22, 6, 22, 10, GOLD, 2.2),
-    L(14, 9, 17, 12, GOLD, 2.2),
-    L(30, 9, 27, 12, GOLD, 2.2),
-    L(11, 15, 15, 15, GOLD, 2.2),
-    L(33, 15, 29, 15, GOLD, 2.2),
-    C(22, 15, 6.2, GOLD, INK, 1.1),
-    C(22, 15, 2.5, FIRE),
-  ],
-  bulwark: () => [
-    G('11,16 13,8 15,16', PIERCE),
-    G('20,16 22,7 24,16', PIERCE),
-    G('29,16 31,8 33,16', PIERCE),
-    R(8, 16, 28, 18, '#5a3f28', GOLD, 2),
-    L(8, 22, 36, 22, MUTED, 2.4),
-    L(8, 29, 36, 29, MUTED, 2.4),
-    C(13, 22, 1.3, INK),
-    C(22, 22, 1.3, INK),
-    C(31, 22, 1.3, INK),
-  ],
-  spikes: () => [
-    R(7, 30, 30, 5, PLATE, MUTED, 1.5),
-    G('9,30 14,13 19,30', PIERCE, MUTED, 1.2),
-    G('17,30 22,10 27,30', INK, GOLD, 1.2),
-    G('25,30 30,13 35,30', PIERCE, MUTED, 1.2),
-  ],
-  flare: () => [
-    C(22, 17, 13, 'none', GOLD, 1.2),
-    flame(0, -7, GOLD, 0.52),
-    P('M12 22 H32 L29 29 H15 Z', GOLD, 1.6, '#4c3818'),
-    L(17, 29, 13, 37, MUTED, 2.2),
-    L(27, 29, 31, 37, MUTED, 2.2),
-    L(22, 29, 22, 37, MUTED, 2.2),
-  ],
-  economy:()=>[C(22,20,12,GOLD),C(22,20,7,PLATE),L(22,14,22,26,GOLD,2)],
-  bastion:()=>[R(9,15,26,20,PLATE,GOLD),L(10,14,34,14,INK,4)],
+  economy: () => [C(22, 20, 12, GOLD), C(22, 20, 7, PLATE), L(22, 14, 22, 26, GOLD, 2)],
+  bastion: () => [R(9, 15, 26, 20, PLATE, GOLD), L(10, 14, 34, 14, INK, 4)],
   splinter_bow: () => [
     ...bow(14, GOLD),
     ...dart(20, 37, 22, GOLD),
@@ -574,3 +537,35 @@ export function catalogIcon(doc, id) {
 export function hasCatalogIcon(id) {
   return typeof id === 'string' && Object.prototype.hasOwnProperty.call(MARKS, id);
 }
+
+const UI_PATHS = {
+  battle: 'M12 2L4 6v6c0 5.5 3.4 9.6 8 11 4.6-1.4 8-5.5 8-11V6l-8-4zm0 4.2l4.5 2.3v3.5c0 3.2-1.8 5.9-4.5 7-2.7-1.1-4.5-3.8-4.5-7V8.5L12 6.2z',
+  armory: 'M12 2l3 5.5L21 9l-4.5 4.2 1.2 6.3L12 16.5 6.3 19.5l1.2-6.3L3 9l6-1.5L12 2z',
+  codex: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3V4zm3 3v10h8V7H8z',
+  settings: 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.2 4.6l-1.7 1a6.9 6.9 0 0 1-.6 1.4l.5 1.9-1.8 1.8-1.9-.5a6.9 6.9 0 0 1-1.4.6l-1 1.7H9.7l-1-1.7a6.9 6.9 0 0 1-1.4-.6l-1.9.5-1.8-1.8.5-1.9a6.9 6.9 0 0 1-.6-1.4l-1.7-1v-2.2l1.7-1a6.9 6.9 0 0 1 .6-1.4l-.5-1.9 1.8-1.8 1.9.5a6.9 6.9 0 0 1 1.4-.6l1-1.7h2.6l1 1.7a6.9 6.9 0 0 1 1.4.6l1.9-.5 1.8 1.8-.5 1.9a6.9 6.9 0 0 1 .6 1.4l1.7 1v2.2z',
+  coin: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 3a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm-1 2.5v7h2v-7h-2z',
+  soundOn: 'M4 9v6h4l5 4V5L8 9H4zm12.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2zm-2-7.3v2.1a5.8 5.8 0 0 1 0 10.4v2.1a7.8 7.8 0 0 0 0-14.6z',
+  soundOff: 'M4 9v6h4l5 4V5L8 9H4zm12.6 3l2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7z',
+  pause: 'M6 5h4v14H6V5zm8 0h4v14h-4V5z',
+  play: 'M7 5v14l12-7L7 5z',
+  menu: 'M4 6h16v2.2H4V6zm0 4.9h16v2.2H4v-2.2zm0 4.9h16V18H4v-2.2z',
+  reroll: 'M17.6 6.4A7.5 7.5 0 1 0 19.3 14h-2.2a5.4 5.4 0 1 1-1.1-5.8L13.5 11H20V4.5l-2.4 1.9z',
+  shield: 'M12 2L4 5.5v6c0 5.1 3.4 9.4 8 10.8 4.6-1.4 8-5.7 8-10.8v-6L12 2z',
+};
+
+export function navIcon(doc, name, size = 20) {
+  const svg = svgElement(doc, 'svg', {
+    class: 'ui-icon',
+    viewBox: '0 0 24 24',
+    width: String(size),
+    height: String(size),
+    'aria-hidden': 'true',
+    focusable: 'false',
+  });
+  svg.appendChild(svgElement(doc, 'path', {
+    d: UI_PATHS[name] || UI_PATHS.battle,
+    fill: 'currentColor',
+  }));
+  return svg;
+}
+

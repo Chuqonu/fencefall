@@ -91,7 +91,6 @@ test('the same kill ends in victory and leaves the draft closed when the directo
   const {state, threshold} = crossingKill(true);
   assert.equal(state.phase, 'victory');
   assert.equal(state.draft, null);
-  assert.equal(state.pendingUnit, null);
   assert.equal(state.draftLevel, 0);
   assert.equal(state.xp, threshold);
   assert.equal(state.nextDraftXp, threshold);

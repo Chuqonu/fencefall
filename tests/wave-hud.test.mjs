@@ -125,8 +125,16 @@ function mount(state, language = 'en') {
     text(id) { return findByTestId(root, id)?.textContent ?? ''; },
     fenceFill() {
       const meter = findByTestId(root, 'hud-fence');
-      const track = meter?.children?.find(child => String(child.className).includes('meter-track'));
-      return track?.children?.find(child => String(child.className).includes('meter-fill'))?.className ?? '';
+      const findFill = (node) => {
+        if (!node) return '';
+        if (String(node.className).includes('meter-fill')) return node.className;
+        for (const child of node.children || []) {
+          const hit = findFill(child);
+          if (hit) return hit;
+        }
+        return '';
+      };
+      return findFill(meter);
     },
     render() { view.render(); },
     close() {
@@ -215,7 +223,7 @@ test('a failing fence uses the danger chip unless pause wins', () => {
   low.fence.maxHp = 600;
   const zh = mount(low, 'zh');
   try {
-    assert.equal(zh.text('hud-phase'), '栅栏岌岌可危');
+    assert.equal(zh.text('hud-phase'), '防线危急');
     assert.match(zh.fenceFill(), /is-low/);
   } finally {
     zh.close();
@@ -248,7 +256,7 @@ test('an approaching boss puts the next wave hint on the battle line', () => {
   updateWaves(state);
   const hud = mount(state, 'en');
   try {
-    assert.equal(hud.text('hud-phase'), 'Boss approaching');
+    assert.equal(hud.text('hud-phase'), 'Boss Incoming');
     assert.equal(hud.text('hud-hint'), state.director.nextHint.en);
     assert.equal(hud.text('hud-hint').includes('Current ash'), false);
   } finally {

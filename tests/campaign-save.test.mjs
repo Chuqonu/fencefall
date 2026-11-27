@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProfile, createRun, exportRun} from '../src/engine.js';
-import {cancelPlacement, chooseDraft, draftXpCost, placePending, updateDrafts} from '../src/systems/drafts.js';
+import {chooseDraft, draftXpCost, updateDrafts} from '../src/systems/drafts.js';
 import {settleRun} from '../src/systems/progression.js';
 import {exportSave, importSave, loadProfile, loadRun} from '../src/storage.js';
+import {BASE_TYPES, createUnit} from '../src/shared.js';
 
 function memoryStorage() {
   const data = new Map();
@@ -43,8 +44,8 @@ function liveStamp(state) {
     xp: state.xp,
     draftLevel: state.draftLevel,
     nextDraftXp: state.nextDraftXp,
+    rerollsLeft: state.rerollsLeft,
     draft: state.draft,
-    pendingUnit: state.pendingUnit,
     slots: state.slots.map(slot => slot.unit)
   });
 }
@@ -62,36 +63,21 @@ function boardView(state) {
 
 function openDraft(state) {
   assert.equal(state.phase, 'playing');
-  assert.equal(state.pendingUnit, null);
   assert.equal(state.draft, null);
   if (!(state.xp >= state.nextDraftXp)) state.xp = state.nextDraftXp;
   const opened = updateDrafts(state);
   assert.equal(opened.ok, true, opened.reason);
   assert.equal(state.phase, 'draft');
-  assert.equal(state.pendingUnit, null);
   assert.equal(state.draft.options.length, 3);
   return opened;
 }
 
-function placeableTowerIndex(state) {
-  return state.draft.options.findIndex(option => option.kind === 'tower' && option.replace !== true);
-}
-
 function fillBoard(state) {
-  for (let placed = 0; placed < 9; placed += 1) {
-    openDraft(state);
-    const index = placeableTowerIndex(state);
-    assert.ok(index >= 0, 'an empty slot must offer a tower that can be placed');
-    const chosen = chooseDraft(state, index);
-    assert.equal(chosen.ok, true, chosen.reason);
-    assert.equal(state.phase, 'placing');
-    const slotIndex = state.slots.findIndex(slot => slot.unit == null);
-    assert.ok(slotIndex >= 0);
-    const result = placePending(state, slotIndex);
-    assert.equal(result.ok, true, result.reason);
-    assert.equal(state.phase, 'playing');
-    assert.equal(state.pendingUnit, null);
-    assert.equal(state.draft, null);
+  let typeIdx = 0;
+  for (let i = 0; i < state.slots.length; i += 1) {
+    if (state.slots[i].unit) continue;
+    state.slots[i].unit = createUnit(state, BASE_TYPES[typeIdx % BASE_TYPES.length], 1, 'tower');
+    typeIdx += 1;
   }
   assert.equal(state.slots.filter(slot => slot.unit).length, 10);
 }
@@ -113,13 +99,13 @@ function assertRoundTrip(loaded, state) {
   assert.equal(loaded.xp, state.xp);
   assert.equal(loaded.draftLevel, state.draftLevel);
   assert.equal(loaded.nextDraftXp, state.nextDraftXp);
+  assert.equal(loaded.rerollsLeft, state.rerollsLeft);
   assert.equal(loaded.difficulty, state.difficulty);
   assert.equal(loaded.speed, state.speed);
   assert.equal(loaded.fence.hp, state.fence.hp);
   assert.equal(loaded.fence.maxHp, state.fence.maxHp);
   assert.deepEqual(boardView(loaded), boardView(state));
   assert.deepEqual(jsonView(loaded.draft), jsonView(state.draft));
-  assert.deepEqual(jsonView(loaded.pendingUnit), jsonView(state.pendingUnit));
 }
 
 function exportText(profile, state) {
@@ -149,7 +135,7 @@ function importText(text) {
   return {storage, loaded, loadedProfile};
 }
 
-test('a draft-phase run exports and imports with the same offer', () => {
+test('a draft-phase run exports and imports with the same offer and 1-tap deploys immediately', () => {
   const {profile, state} = beginRun(2101, 'campaign-draft');
   assert.equal(state.nextDraftXp, draftXpCost(0));
   openDraft(state);
@@ -162,69 +148,22 @@ test('a draft-phase run exports and imports with the same offer', () => {
   const {loaded, loadedProfile} = importText(exportText(profile, state));
   assertRoundTrip(loaded, state);
   assert.equal(loaded.phase, 'draft');
-  assert.equal(loaded.pendingUnit, null);
   assert.equal(loadedProfile.currency, profile.currency);
   assert.equal(state.phase, 'draft');
   assert.ok(state.events.some(event => event.type === 'draft'));
 
-  const choice = placeableTowerIndex(loaded);
+  const choice = loaded.draft.options.findIndex(option => option.kind === 'tower');
   assert.ok(choice >= 0);
   const card = loaded.draft.options[choice];
   const chosen = chooseDraft(loaded, choice);
   assert.equal(chosen.ok, true, chosen.reason);
-  assert.equal(loaded.phase, 'placing');
-  assert.equal(loaded.pendingUnit.unit.type, card.type);
-  assert.equal(loaded.pendingUnit.unit.kind, 'tower');
-  assert.equal(loaded.pendingUnit.unit.rank, 1);
-  assert.equal(loaded.pendingUnit.replace, card.replace);
-  assert.equal(loaded.slots.filter(slot => slot.unit).length, 1);
-});
-
-test('a tower waiting to be placed survives export and can still be placed or cancelled', () => {
-  const {profile, state} = beginRun(2102, 'campaign-placing');
-  openDraft(state);
-  const choice = placeableTowerIndex(state);
-  assert.ok(choice >= 0);
-  const card = state.draft.options[choice];
-  assert.equal(chooseDraft(state, choice).ok, true);
-  assert.equal(state.phase, 'placing');
-  assert.equal(state.pendingUnit.unit.type, card.type);
-  assert.equal(state.pendingUnit.unit.kind, 'tower');
-  assert.equal(state.pendingUnit.unit.rank, 1);
-  assert.equal(state.pendingUnit.replace, card.replace);
-  assert.equal(state.draft.options.length, 3);
-  assert.equal(state.slots.filter(slot => slot.unit).length, 1);
-  const pendingId = state.pendingUnit.unit.id;
-  const offered = jsonView(state.draft.options);
-
-  const text = exportText(profile, state);
-  assert.equal(state.phase, 'placing');
-  assert.equal(state.pendingUnit.unit.id, pendingId);
-
-  const placed = importText(text);
-  const cancelled = importText(text);
-  assertRoundTrip(placed.loaded, state);
-  assertRoundTrip(cancelled.loaded, state);
-  assert.equal(placed.loaded.phase, 'placing');
-  assert.equal(placed.loaded.pendingUnit.unit.id, pendingId);
-  assert.equal(placed.loaded.slots.some(slot => slot.unit?.id === pendingId), false);
-
-  const slotIndex = placed.loaded.slots.findIndex(slot => slot.unit == null);
-  assert.ok(slotIndex >= 0);
-  assert.equal(placePending(placed.loaded, slotIndex).ok, true);
-  assert.equal(placed.loaded.phase, 'playing');
-  assert.equal(placed.loaded.pendingUnit, null);
-  assert.equal(placed.loaded.draft, null);
-  assert.equal(placed.loaded.slots[slotIndex].unit.id, pendingId);
-  assert.equal(placed.loaded.slots[slotIndex].unit.type, card.type);
-  assert.equal(placed.loaded.slots.filter(slot => slot.unit).length, 2);
-
-  assert.equal(cancelPlacement(cancelled.loaded).ok, true);
-  assert.equal(cancelled.loaded.phase, 'draft');
-  assert.equal(cancelled.loaded.pendingUnit, null);
-  assert.deepEqual(jsonView(cancelled.loaded.draft.options), offered);
-  assert.equal(cancelled.loaded.slots.some(slot => slot.unit?.id === pendingId), false);
-  assert.equal(cancelled.loaded.slots.filter(slot => slot.unit).length, 1);
+  assert.equal(loaded.phase, 'playing');
+  assert.equal(loaded.draft, null);
+  const deployed = loaded.slots.find(slot => slot.unit && slot.unit.type === card.type);
+  assert.ok(deployed, '1-tap draft must auto-deploy the chosen turret');
+  assert.equal(deployed.unit.kind, 'tower');
+  assert.equal(deployed.unit.rank, 1);
+  assert.equal(loaded.slots.filter(slot => slot.unit).length, 2);
 });
 
 test('a board that already has ten units exports and imports every defender', () => {
@@ -237,7 +176,6 @@ test('a board that already has ten units exports and imports every defender', ()
   marked.unit.cooldown = 0.5;
   assert.equal(state.phase, 'playing');
   assert.equal(state.draft, null);
-  assert.equal(state.pendingUnit, null);
   assert.equal(state.slots.filter(slot => slot.unit?.kind === 'hero').length, 1);
 
   const {loaded, loadedProfile} = importText(exportText(profile, state));

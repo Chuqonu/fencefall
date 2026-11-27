@@ -1165,7 +1165,6 @@ describe('simulation', {concurrency: 1}, () => {
     assert.equal(restarted.projectiles.length, 0);
     assert.equal(restarted.clouds.length, 0);
     assert.equal(restarted.draft, null);
-    assert.equal(restarted.pendingUnit, null);
     assert.equal(restarted.settlement, null);
     assert.equal(restarted.fence.hp, restarted.fence.maxHp);
     assert.equal(restarted.fence.maxHp, DIFFICULTIES.hard.fence);

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {advance, createRun, setSpeed} from '../src/engine.js';
 import {createProfile} from '../src/state.js';
 import {settleRun} from '../src/systems/progression.js';
-import {chooseDraft, placePending} from '../src/systems/drafts.js';
+import {chooseDraft} from '../src/systems/drafts.js';
 import {STEP} from '../src/shared.js';
 
 const SEEDS = [71414, 16016];
@@ -42,18 +42,8 @@ function resolveDecision(state, wait) {
     assert.equal(state.draft.options.length, 3);
     const chosen = chooseDraft(state, 0);
     assert.equal(chosen.ok, true, chosen.reason);
-    if (state.phase === 'placing' && wait) wait.draftSeconds += hold(state, DRAFT_SECONDS);
+    assert.equal(state.phase, 'playing');
   }
-  if (state.phase !== 'placing') return;
-  let index = state.slots.findIndex(slot => slot && !slot.unit);
-  let replace = false;
-  if (index < 0) {
-    index = state.slots.findIndex(slot => slot?.unit && slot.unit.kind !== 'hero' && slot.unit.type !== 'hero');
-    replace = true;
-  }
-  assert.ok(index >= 0, 'no slot for the pending tower');
-  const placed = placePending(state, index, {replace});
-  assert.equal(placed.ok, true, placed.reason);
 }
 
 function play(seed, speed, waiting) {
@@ -69,7 +59,7 @@ function play(seed, speed, waiting) {
   let guard = 0;
   while (state.tick < TARGET_TICK && state.phase !== 'victory' && state.phase !== 'defeat') {
     assert.ok(guard++ < TARGET_TICK * 8, `stuck at tick ${state.tick} phase ${state.phase}`);
-    if (state.phase === 'draft' || state.phase === 'placing') {
+    if (state.phase === 'draft') {
       resolveDecision(state, wait);
       continue;
     }

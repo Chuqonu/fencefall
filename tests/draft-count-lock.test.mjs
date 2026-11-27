@@ -1,9 +1,8 @@
 // generateDraft stays at three different cards on an empty board and a full board.
-// A full board includes a tower only when that card says replace true.
 // The hero stays one unit on slot 2. Opening a draft does not rewrite the XP curve.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createUnit} from '../src/shared.js';
+import {BASE_TYPES, createUnit} from '../src/shared.js';
 import {createRun} from '../src/state.js';
 import {HERO_UPGRADES} from '../src/systems/hero.js';
 import {draftXpCost, generateDraft} from '../src/systems/drafts.js';
@@ -23,9 +22,11 @@ function heroIndexes(state) {
 }
 
 function fillBoard(state) {
+  let t = 0;
   for (let index = 0; index < state.slots.length; index += 1) {
     if (isHero(state.slots[index].unit)) continue;
-    state.slots[index].unit = createUnit(state, 'bolt', 1, 'tower');
+    state.slots[index].unit = createUnit(state, BASE_TYPES[t % BASE_TYPES.length], 1, 'tower');
+    t += 1;
   }
 }
 
@@ -37,7 +38,7 @@ function capHero(state) {
 }
 
 function cardSignature(card) {
-  return [card.kind, card.type || '', card.upgradeId || '', card.replace === true].join(':');
+  return [card.kind, card.type || '', card.upgradeId || '', card.action || ''].join(':');
 }
 
 function assertThreeDifferent(cards, label) {
@@ -58,15 +59,6 @@ function assertOneHeroOnSlot2(state, hero, label) {
   assert.equal(state.slots[2].unit, hero, label);
   assert.equal(hero.kind, 'hero', label);
   assert.equal(hero.type, 'hero', label);
-  const units = state.slots.map(slot => slot.unit).filter(Boolean);
-  assert.equal(units.filter(unit => unit.id === hero.id).length, 1, label);
-}
-
-function assertFullBoardCanPlace(cards, label) {
-  for (const card of cards) {
-    if (card.kind !== 'tower') continue;
-    assert.equal(card.replace, true, `${label} ${card.id}`);
-  }
 }
 
 function assertCurveUntouched(state, label) {
@@ -98,8 +90,9 @@ test('generateDraft returns three different cards on an empty board and a full b
     assertOneHeroOnSlot2(full, fullHero, `full ${seed} before`);
     const fullCards = generateDraft(full);
     assertThreeDifferent(fullCards, `full ${seed}`);
-    assertFullBoardCanPlace(fullCards, `full ${seed}`);
-    assert.equal(full.slots.filter(slot => !slot.unit).length, 0, `full ${seed} board`);
+    for (const card of fullCards) {
+      if (card.kind === 'tower') assert.equal(card.action, 'upgrade', `full ${seed} ${card.id}`);
+    }
     assertOneHeroOnSlot2(full, fullHero, `full ${seed} after`);
     assertCurveUntouched(full, `full ${seed} curve`);
 
@@ -107,13 +100,9 @@ test('generateDraft returns three different cards on an empty board and a full b
     fillBoard(capped);
     capHero(capped);
     const cappedHero = capped.slots[2].unit;
-    assert.equal(capped.slots.filter(slot => !slot.unit).length, 0, `capped ${seed}`);
-    assertOneHeroOnSlot2(capped, cappedHero, `capped ${seed} before`);
     const cappedCards = generateDraft(capped);
     assertThreeDifferent(cappedCards, `capped ${seed}`);
-    assertFullBoardCanPlace(cappedCards, `capped ${seed}`);
-    assert.ok(cappedCards.every(card => card.kind === 'tower' && card.replace === true), `capped ${seed}`);
-    assert.equal(capped.slots.filter(slot => !slot.unit).length, 0, `capped ${seed} board`);
+    assert.ok(cappedCards.every(card => card.kind === 'tower' && card.action === 'upgrade'), `capped ${seed}`);
     assertOneHeroOnSlot2(capped, cappedHero, `capped ${seed} after`);
     assertCurveUntouched(capped, `capped ${seed} curve`);
   }

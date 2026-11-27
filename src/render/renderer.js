@@ -24,12 +24,11 @@
  * Inside chargeGap, and before the fuse lights, a short amber bar marks the approach.
  */
 
-import {drawWorld,drawFrontline} from './world.js';
+import {drawWorld} from './world.js';
 import {drawDefender, defenderSize} from './defenders.js';
 import {drawEnemy, enemySize} from './enemies.js';
 import {createEffects} from './effects.js';
 import {getUnitStats} from '../data/towers.js';
-import {mergeableSlotIndexes} from '../systems/merges.js';
 import {ARENA, clamp, hitSlot as hitSlotAt, slotGeometry} from '../shared.js';
 
 const LETTERBOX = '#0e171c';
@@ -1561,20 +1560,16 @@ export function createRenderer(canvas) {
         triggerShake(at, 2.2);
       } else if (type === 'em_strike') {
         triggerShake(at, 1.8);
-      } else if (type === 'boss_enrage' || type === 'field_destroy') {
+      } else if (type === 'boss_enrage') {
         triggerShake(at, 2.5);
       } else if (type === 'corpse_explode') {
         triggerShake(at, 1.5);
       } else if (type === 'wave_horde') {
         hordeAt = at;
-      } else if (type === 'merge') {
-        const from = Number.isInteger(event.from) ? event.from : event.fromIndex;
-        const to = Number.isInteger(event.to) ? event.to : event.toIndex;
-        if (Number.isInteger(from) && from >= 0 && from < 10) {
-          pushCapped(slotCues, {at, index: from, role: 'empty', duration: MERGE_CUE_MS});
-        }
-        if (Number.isInteger(to) && to >= 0 && to < 10) {
-          pushCapped(slotCues, {at, index: to, role: 'kept', duration: MERGE_CUE_MS});
+      } else if (type === 'upgrade_tower') {
+        const slotIndex = Number.isInteger(event.slot) ? event.slot : -1;
+        if (slotIndex >= 0 && slotIndex < 10) {
+          pushCapped(slotCues, {at, index: slotIndex, role: 'kept', duration: MERGE_CUE_MS});
         }
       }
     }
@@ -1690,7 +1685,7 @@ export function createRenderer(canvas) {
   }
 
   function drawTargetingPip(ctx, box, unit) {
-    if (!unit || unit.type === 'harvest') return;
+    if (!unit) return;
     const mode = unit.targeting;
     if (!mode || mode === 'foremost') return;
     const color = mode === 'priority' ? '#f0cb72' : mode === 'strongest' ? '#e86858' : '#7ad4f0';
@@ -1742,7 +1737,6 @@ export function createRenderer(canvas) {
   function paint(ctx, state, ui, now, logicalBuffer) {
     const reduced = !!(ui.settings && ui.settings.reducedMotion) || !!ui.reducedMotion;
     const selected = normalizeSlot(ui.selectedSlot);
-    const selectedField = normalizeSlot(ui.selectedField);
     const hover = normalizeSlot(ui.hoverSlot);
     const showRange = ui.range !== false;
     const time = finite(state?.time) ?? 0;
@@ -1774,17 +1768,6 @@ export function createRenderer(canvas) {
     try {
       isolate(ctx, () => drawWorld(ctx, state, {time: visualTime, reducedMotion: reduced}));
 
-      isolate(ctx, () => drawFrontline(ctx, state, ui.fieldKind, visualTime, reduced, selectedField));
-      if (state.phase === 'placing') {
-        const pulse = reduced ? 0.24 : (0.18 + 0.12 * (0.5 + 0.5 * Math.sin(visualTime * 5)));
-        for (const slot of state.slots) {
-          if (!slot.unit || (state.pendingUnit?.replace && slot.unit.kind !== 'hero')) {
-            const box = slotBox(slot, slot.index);
-            fillSlot(ctx, box, `rgba(240, 203, 114, ${pulse.toFixed(3)})`);
-            strokeSlot(ctx, box, '#f0cb72', 1);
-          }
-        }
-      }
       const clouds = Array.isArray(state.clouds) ? state.clouds : [];
       const cloudCount = Math.min(clouds.length, MAX_CLOUDS);
       const cloudStart = clouds.length - cloudCount;
@@ -1837,7 +1820,6 @@ export function createRenderer(canvas) {
       drawSweepers(ctx, state, visualTime, reduced);
 
       const hushed = boardHushed(enemies);
-      const mergeable = mergeableSlotIndexes(state);
 
       for (let index = 0; index < 10; index++) {
         const slot = slots[index];
@@ -1850,7 +1832,6 @@ export function createRenderer(canvas) {
         const flash = unitFlash(unit.id, shots, now, flashSpan);
         isolate(ctx, () => drawDefender(ctx, unit, anchorX, anchorY, {time: visualTime, scale: 1, flash}));
         if (hushed) drawHushBoardMark(ctx, anchorX, anchorY - size.height);
-        if (mergeable.includes(index)) drawMergeCorner(ctx, slot, index, anchorX, anchorY - size.height);
         if (buffed.has(unit.id)) isolate(ctx, () => drawAuraMark(ctx, anchorX, anchorY - size.height));
         drawTargetingPip(ctx, slotBox(slot, index), unit);
       }
@@ -1959,15 +1940,15 @@ export function createRenderer(canvas) {
         const box = slotBox(slots[hover], hover);
         const dropColor = intent === 'empty'
           ? '#7ecea0'
-          : intent === 'merge'
+          : intent === 'swap'
             ? '#f0cb72'
             : intent === 'illegal'
               ? '#e7a08a'
               : 'rgba(198, 214, 210, 0.9)';
-        if (intent === 'empty' || intent === 'merge' || intent === 'illegal') {
+        if (intent === 'empty' || intent === 'swap' || intent === 'illegal') {
           ctx.fillStyle = intent === 'empty'
             ? 'rgba(126, 206, 160, 0.34)'
-            : intent === 'merge'
+            : intent === 'swap'
               ? 'rgba(240, 203, 114, 0.34)'
               : 'rgba(231, 160, 138, 0.34)';
           ctx.fillRect(box.left, box.top, box.width, box.height);

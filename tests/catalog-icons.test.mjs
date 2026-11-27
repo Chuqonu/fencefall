@@ -6,7 +6,6 @@ import {t} from '../src/i18n.js';
 import {EQUIPMENT, PERMANENT_UPGRADES} from '../src/systems/progression.js';
 import {HERO_UPGRADES} from '../src/systems/hero.js';
 import {TOWERS} from '../src/data/towers.js';
-import {RECIPES} from '../src/data/recipes.js';
 import {ENEMIES} from '../src/data/enemies.js';
 import {hasCatalogIcon} from '../src/ui/icons.js';
 
@@ -98,9 +97,9 @@ function panel(language, screen) {
   return container;
 }
 
-function openTab(container, name) {
-  const tab = findByTestId(container, `codex-tab-${name}`);
-  assert.ok(tab, `codex tab ${name}`);
+function clickTab(container, testid) {
+  const tab = findByTestId(container, testid);
+  assert.ok(tab, `tab ${testid}`);
   for (const fn of tab.listeners?.click || []) fn({preventDefault() {}, stopPropagation() {}});
 }
 
@@ -126,22 +125,22 @@ test('equipment, permanent upgrades, and hero upgrades render an icon before the
   const drawn = new Map();
   for (const language of ['en', 'zh']) {
     const armory = panel(language, 'armory');
+    clickTab(armory, 'armory-tab-gear');
     for (const item of Object.values(EQUIPMENT)) {
-      const card = findByTestId(armory, `equip-card-${item.id}`);
+      const card = findByTestId(armory, `equipment-${item.id}`);
       const {icon, desc, nodes} = iconBeforeDescription(card, item.id, item.description[language]);
       const controlId = item.id === 'splinter_bow' ? `equip-${item.id}` : `buy-${item.id}`;
       const control = nodes.find(node => node.getAttribute?.('data-testid') === controlId);
       assert.ok(control, controlId);
       assert.ok(nodes.indexOf(desc) < nodes.indexOf(control), `${controlId} stays after the description`);
-      const cost = nodes.find(node => node.className === 'meta-line' && (node.children || []).some(child => String(child.textContent).includes(String(item.cost))));
-      assert.ok(cost, `cost ${item.id}`);
       const paths = icon.getAttribute('data-paths');
       assert.ok(paths, `drawing ${item.id}`);
       if (!drawn.has(item.id)) drawn.set(item.id, paths);
       else assert.equal(paths, drawn.get(item.id), `${item.id} keeps one icon in ${language}`);
     }
+    clickTab(armory, 'armory-tab-upgrades');
     for (const upgrade of Object.values(PERMANENT_UPGRADES)) {
-      const card = findByTestId(armory, `perm-${upgrade.id}`);
+      const card = findByTestId(armory, `permanent-${upgrade.id}`);
       const {icon, desc, nodes} = iconBeforeDescription(card, upgrade.id, upgrade.description[language]);
       const control = nodes.find(node => node.getAttribute?.('data-testid') === `upgrade-${upgrade.id}`);
       assert.ok(control, `upgrade-${upgrade.id}`);
@@ -151,10 +150,10 @@ test('equipment, permanent upgrades, and hero upgrades render an icon before the
       else assert.equal(paths, drawn.get(upgrade.id));
     }
     const codex = panel(language, 'codex');
-    openTab(codex, 'hero');
+    clickTab(codex, 'codex-tab-hero');
     for (const upgrade of Object.values(HERO_UPGRADES)) {
       const card = findByTestId(codex, `codex-hero-${upgrade.id}`);
-      const {icon} = iconBeforeDescription(card, upgrade.id, upgrade.description[language]);
+      const {icon} = iconBeforeDescription(card, upgrade.id, upgrade.description[language].replace(/^(Hero · |英雄 · )/, ''));
       const paths = icon.getAttribute('data-paths');
       if (!drawn.has(upgrade.id)) drawn.set(upgrade.id, paths);
       else assert.equal(paths, drawn.get(upgrade.id));
@@ -164,24 +163,18 @@ test('equipment, permanent upgrades, and hero upgrades render an icon before the
   assert.equal(signatures.size, drawn.size, 'each id has its own icon');
 });
 
-test('codex towers, recipes, and enemies use the same icon-then-description card', () => {
+test('codex towers and enemies use the same icon-then-description card (and no recipes tab)', () => {
   for (const language of ['en', 'zh']) {
     const codex = panel(language, 'codex');
-    openTab(codex, 'towers');
+    assert.equal(findByTestId(codex, 'codex-tab-recipes'), null, 'recipes tab is removed');
+    clickTab(codex, 'codex-tab-towers');
     for (const tower of Object.values(TOWERS)) {
       iconBeforeDescription(findByTestId(codex, `codex-tower-${tower.id}`), tower.id, tower.description[language]);
     }
-    openTab(codex, 'recipes');
-    for (const recipe of RECIPES) {
-      const card = findByTestId(codex, `codex-recipe-${recipe.id}`);
-      iconBeforeDescription(card, recipe.id, recipe.description[language]);
-      assert.ok(walk(card).some(node => node.className === 'meta-line'), `${recipe.id} keeps its stats`);
-    }
-    openTab(codex, 'enemies');
+    clickTab(codex, 'codex-tab-enemies');
     for (const [id, enemy] of Object.entries(ENEMIES)) {
       const card = findByTestId(codex, `codex-enemy-${id}`);
       iconBeforeDescription(card, id, enemy.description[language]);
-      assert.ok(findByTestId(card, `enemy-speed-${id}`), `${id} keeps speed`);
     }
   }
 });

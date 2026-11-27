@@ -38,7 +38,14 @@ function makeNode(tag) {
       remove(name) { names.delete(name); },
       contains(name) { return names.has(name); }
     },
-    textContent: '',
+    _text: '',
+    get textContent() {
+      if (node._text) return node._text;
+      return node.children.map(child => child.textContent || '').join('');
+    },
+    set textContent(value) {
+      node._text = value == null ? '' : String(value);
+    },
     hidden: false,
     disabled: false,
     inert: false,
@@ -222,7 +229,7 @@ test('a hidden fight in Chinese uses the short resume label', async () => {
   try {
     const button = findByTestId(fight.root, 'btn-pause');
     assert.equal(button.disabled, false);
-    assert.equal(button.textContent, '恢复');
+    assert.equal(button.textContent, '继续');
     assert.equal(button.textContent.includes('页面已隐藏'), false);
     assert.equal(findByTestId(fight.root, 'hud-phase').textContent, '已暂停');
     assert.equal(findByTestId(fight.root, 'btn-fight-menu').textContent, '菜单');

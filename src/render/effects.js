@@ -88,7 +88,6 @@ const PALETTES = Object.freeze({
   draft: { core: '#fff6d4', hot: '#f0cb72', mid: '#d7a441', dim: '#6a4a16' },
   boss: { core: '#ffe8ff', hot: '#e2a0ea', mid: '#8d3eae', dim: '#3c1848' },
   heal: { core: '#f3fff8', hot: '#9be7c4', mid: '#3eae86', dim: '#145445' },
-  harvest: { core: '#fffbe0', hot: '#ffe066', mid: '#e8a832', dim: '#7a5214' },
   surge: { core: '#ffffff', hot: '#9ef0ff', mid: '#4ac8f0', dim: '#185470' },
   steam: { core: '#ffffff', hot: '#e6fbff', mid: '#ffaa5a', dim: '#3c7a90' },
   catalyst: { core: '#ffffff', hot: '#e4ff7a', mid: '#b0ff3a', dim: '#3e6a14' },
@@ -130,17 +129,14 @@ const ELEMENT_BEHAVIOR = Object.freeze({
   hero: 'hero',
   split_shot: 'hero',
   armored_car: 'bolt',
-  harvest: 'harvest',
-  spikes: 'bolt',
 });
 
 const FEEDBACK = new Set([
-  'shot', 'hit', 'kill', 'fence_hit', 'merge', 'draft',
+  'shot', 'hit', 'kill', 'fence_hit', 'upgrade_tower', 'draft',
   'victory', 'defeat', 'ui', 'status', 'boss',
   'leap', 'split', 'mend', 'phase',
   'fence_surge', 'corpse_explode', 'cloud_spawn', 'knockback',
-  'field_build', 'field_hit', 'field_destroy', 'field_repair', 'field_remove',
-  'energy_gain', 'wave_horde', 'draft_reroll', 'targeting_change',
+  'wave_horde', 'draft_reroll', 'targeting_change',
   'napalm_blast', 'armored_car', 'cryo_barrage', 'orbital_beam',
   'em_strike', 'wall_immune', 'bullet_split', 'cryo_shatter',
 ]);
@@ -162,8 +158,6 @@ const ALIAS = Object.freeze({
   death: 'kill',
   enemy_killed: 'kill',
   killed: 'kill',
-  merged: 'merge',
-  merge_units: 'merge',
   draft_open: 'draft',
   win: 'victory',
   lose: 'defeat',
@@ -1313,82 +1307,6 @@ export function createEffects() {
     pushStreak(point.x, point.y + 4, 0, -1, 9, PALETTES.ui, false, 0.18);
   }
 
-  function spawnFieldBuild(desc, seed) {
-    const point = visualPoint(desc);
-    if (!point) return;
-    const col = desc.fieldKind === 'flare' ? PALETTES.draft : desc.fieldKind === 'spikes' ? PALETTES.ui : PALETTES.fence;
-    pushRing(point.x, point.y, 10, 38, col.hot, 0.34, 2);
-    pushPlus(point.x, point.y, 4, col.hot, col.core, 0.22);
-    burst(point.x, point.y, 8, 52, 48, true, col.hot, 0.32, seed, 2);
-  }
-
-  function spawnFieldHit(desc, seed) {
-    const point = visualPoint(desc);
-    if (!point) return;
-    pushPlus(point.x, point.y - 4, 3, PALETTES.fence.hot, PALETTES.fence.core, 0.16);
-    burst(point.x, point.y - 4, 4, 42, 70, true, PALETTES.fence.mid, 0.24, seed, 2);
-  }
-
-  function spawnFieldDestroy(desc, seed) {
-    const point = visualPoint(desc);
-    if (!point) return;
-    pushRing(point.x, point.y, 10, 44, PALETTES.defeat.hot, 0.36, 2);
-    burst(point.x, point.y, 12, 68, 85, true, PALETTES.fence.hot, 0.42, seed, 2);
-    burst(point.x, point.y, 5, 48, 40, false, PALETTES.defeat.mid, 0.3, seed + 19, 2);
-  }
-
-  function spawnFieldRepair(desc, seed) {
-    const point = visualPoint(desc);
-    if (!point) return;
-    pushRing(point.x, point.y, 9, 24, PALETTES.heal.hot, 0.34, 1);
-    for (let i = 0; i < 4; i++) {
-      pushParticle({
-        kind: 'mote',
-        x: point.x + (i - 1.5) * 7,
-        y: point.y + 4,
-        vx: 0,
-        vy: -(22 + i * 4),
-        size: 2,
-        color: i % 2 ? PALETTES.heal.core : PALETTES.heal.hot,
-        life: 0.42,
-        maxLife: 0.42,
-        motionOnly: true,
-      });
-    }
-    const text = formatDamage(desc.amount);
-    if (text) pushFloater(point.x, point.y, `+${text}`, PALETTES.heal.hot, 2, false, 'heal', 0.56, seed);
-  }
-
-  function spawnFieldRemove(desc, seed) {
-    const point = visualPoint(desc);
-    if (!point) return;
-    pushRing(point.x, point.y, 8, 28, PALETTES.draft.hot, 0.28, 1);
-    burst(point.x, point.y, 5, 40, -18, true, PALETTES.draft.hot, 0.28, seed, 2);
-  }
-
-  function spawnEnergyGain(desc, seed) {
-    if (desc.source !== 'harvest') return;
-    const point = visualPoint(desc);
-    if (!point) return;
-    pushRing(point.x, point.y - 6, 7, 26, PALETTES.harvest.hot, 0.38, 1, 0.72);
-    for (let i = 0; i < 5; i++) {
-      pushParticle({
-        kind: 'mote',
-        x: point.x + (rand01(seed + i * 7) - 0.5) * 16,
-        y: point.y - 6,
-        vx: (rand01(seed + i * 13) - 0.5) * 14,
-        vy: -(24 + rand01(seed + i * 19) * 22),
-        size: 2,
-        color: i % 2 ? PALETTES.harvest.core : PALETTES.harvest.hot,
-        life: 0.48,
-        maxLife: 0.48,
-        motionOnly: true,
-      });
-    }
-    const text = formatDamage(desc.amount);
-    if (text) pushFloater(point.x, point.y - 6, `+${text}`, PALETTES.harvest.hot, 2, false, 'energy', 0.62, seed);
-  }
-
   function spawnNapalmBlast(desc, seed) {
     const point = visualPoint(desc);
     if (!point) return;
@@ -1475,7 +1393,7 @@ export function createEffects() {
       case 'hit': spawnHit(desc, seed); break;
       case 'kill': spawnKill(desc, seed); break;
       case 'fence_hit': spawnFence(desc, seed); break;
-      case 'merge': spawnMerge(desc, seed); break;
+      case 'upgrade_tower': spawnMerge(desc, seed); break;
       case 'draft': spawnDraft(desc); break;
       case 'victory': spawnVictory(desc, seed); break;
       case 'defeat': spawnDefeat(desc, seed); break;
@@ -1490,12 +1408,6 @@ export function createEffects() {
       case 'corpse_explode': spawnCorpseExplode(desc, seed); break;
       case 'cloud_spawn': spawnCloudSpawn(desc); break;
       case 'knockback': spawnKnockback(desc); break;
-      case 'field_build': spawnFieldBuild(desc, seed); break;
-      case 'field_hit': spawnFieldHit(desc, seed); break;
-      case 'field_destroy': spawnFieldDestroy(desc, seed); break;
-      case 'field_repair': spawnFieldRepair(desc, seed); break;
-      case 'field_remove': spawnFieldRemove(desc, seed); break;
-      case 'energy_gain': spawnEnergyGain(desc, seed); break;
       case 'napalm_blast': spawnNapalmBlast(desc, seed); break;
       case 'armored_car': spawnArmoredCar(desc, seed); break;
       case 'cryo_barrage': spawnCryoBarrage(desc, seed); break;

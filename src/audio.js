@@ -45,7 +45,7 @@ const AUDIO_LIMITS = Object.freeze({
   hit: 4,
   kill: 3,
   fence_hit: 2,
-  merge: 2,
+  upgrade_tower: 2,
   draft: 1,
   victory: 1,
   defeat: 1,
@@ -54,12 +54,6 @@ const AUDIO_LIMITS = Object.freeze({
   boss: 1,
   fence_surge: 1,
   corpse_explode: 2,
-  field_build: 1,
-  field_hit: 2,
-  field_destroy: 1,
-  field_repair: 1,
-  field_remove: 1,
-  energy_gain: 1,
   wave_horde: 1,
   draft_reroll: 1,
   targeting_change: 1,
@@ -78,7 +72,7 @@ const GAPS = Object.freeze({
   hit: 0.03,
   kill: 0.05,
   fence_hit: 0.07,
-  merge: 0.18,
+  upgrade_tower: 0.16,
   draft: 0.2,
   victory: 0.35,
   defeat: 0.35,
@@ -87,12 +81,6 @@ const GAPS = Object.freeze({
   boss: 0.25,
   fence_surge: 0.35,
   corpse_explode: 0.09,
-  field_build: 0.1,
-  field_hit: 0.09,
-  field_destroy: 0.16,
-  field_repair: 0.28,
-  field_remove: 0.12,
-  energy_gain: 0.35,
   wave_horde: 0.6,
   draft_reroll: 0.12,
   targeting_change: 0.05,
@@ -113,7 +101,7 @@ const PRIORITY = Object.freeze({
   orbital_beam: 2,
   napalm_blast: 3,
   armored_car: 3,
-  merge: 3,
+  upgrade_tower: 3,
   draft: 4,
   cryo_barrage: 4,
   em_strike: 4,
@@ -121,21 +109,15 @@ const PRIORITY = Object.freeze({
   boss: 5,
   wave_horde: 5,
   fence_hit: 6,
-  field_destroy: 6,
   corpse_explode: 7,
   cryo_shatter: 7,
   kill: 7,
-  field_build: 7,
   draft_reroll: 7,
   hit: 8,
-  field_hit: 8,
   bullet_split: 9,
   shot: 9,
-  field_repair: 9,
-  field_remove: 9,
   targeting_change: 9,
   ui: 10,
-  energy_gain: 10,
   status: 11,
 });
 
@@ -148,7 +130,6 @@ const PITCH = Object.freeze({
   support: 640,
   hero: 500,
   brittle: 340,
-  harvest: 880,
   neutral: 420,
 });
 
@@ -639,47 +620,6 @@ export function createAudio(options) {
     ));
   }
 
-  function playFieldBuild(desc, delay) {
-    const high = desc.fieldKind === 'flare' ? 660 : desc.fieldKind === 'spikes' ? 520 : 280;
-    return safe(() => layers(
-      tone({ freq: 150, dur: 0.07, type: 'triangle', gain: 0.22, slide: -35, delay }),
-      tone({ freq: high, dur: 0.055, type: 'sine', gain: 0.18, slide: 120, delay: delay + 0.03 }),
-    ));
-  }
-
-  function playFieldHit(delay) {
-    return safe(() => layers(
-      noise({ dur: 0.035, gain: 0.16, band: 420, q: 0.75, delay }),
-      tone({ freq: 135, dur: 0.045, type: 'triangle', gain: 0.15, slide: -30, delay }),
-    ));
-  }
-
-  function playFieldDestroy(delay) {
-    return safe(() => layers(
-      noise({ dur: 0.1, gain: 0.24, band: 320, q: 0.55, delay }),
-      tone({ freq: 210, dur: 0.12, type: 'sawtooth', gain: 0.2, slide: -130, delay }),
-    ));
-  }
-
-  function playFieldRepair(delay) {
-    return safe(() => layers(
-      tone({ freq: 523, dur: 0.06, type: 'sine', gain: 0.14, slide: 110, delay }),
-      tone({ freq: 784, dur: 0.07, type: 'triangle', gain: 0.12, delay: delay + 0.045 }),
-    ));
-  }
-
-  function playFieldRemove(delay) {
-    return safe(() => tone({ freq: 420, dur: 0.065, type: 'triangle', gain: 0.16, slide: -120, delay }));
-  }
-
-  function playEnergyGain(desc, delay) {
-    if (desc.source !== 'harvest') return false;
-    return safe(() => layers(
-      tone({ freq: 784, dur: 0.055, type: 'sine', gain: 0.11, slide: 120, delay }),
-      tone({ freq: 1174, dur: 0.065, type: 'triangle', gain: 0.08, delay: delay + 0.04 }),
-    ));
-  }
-
   function playWaveHorde(delay) {
     return safe(() => layers(
       tone({ freq: 146, dur: 0.16, type: 'sawtooth', gain: 0.2, slide: 28, delay }),
@@ -828,7 +768,7 @@ export function createAudio(options) {
       case 'hit': return playHit(desc, delay);
       case 'kill': return playKill(desc, delay);
       case 'fence_hit': return playFence(desc, delay);
-      case 'merge': return playMerge(desc, delay);
+      case 'upgrade_tower': return playMerge(desc, delay);
       case 'draft': return playDraft(delay);
       case 'victory': return playVictory();
       case 'defeat': return playDefeat();
@@ -837,12 +777,6 @@ export function createAudio(options) {
       case 'boss': return playBoss(desc, delay);
       case 'fence_surge': return playFenceSurge(delay);
       case 'corpse_explode': return playCorpseExplode(delay);
-      case 'field_build': return playFieldBuild(desc, delay);
-      case 'field_hit': return playFieldHit(delay);
-      case 'field_destroy': return playFieldDestroy(delay);
-      case 'field_repair': return playFieldRepair(delay);
-      case 'field_remove': return playFieldRemove(delay);
-      case 'energy_gain': return playEnergyGain(desc, delay);
       case 'wave_horde': return playWaveHorde(delay);
       case 'draft_reroll': return playDraftReroll(delay);
       case 'targeting_change': return playTargetingChange(delay);

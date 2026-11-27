@@ -2,11 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProfile, createRun} from '../src/state.js';
 import {createUnit} from '../src/shared.js';
-import {mergeUnits} from '../src/systems/merges.js';
+import {chooseDraft} from '../src/systems/drafts.js';
 import {exportSave, importSave, loadRun} from '../src/storage.js';
 
 const TYPE = 'bolt';
-const SOURCE = 0;
 const TARGET = 1;
 
 function memoryStorage() {
@@ -28,7 +27,7 @@ function heroSlots(state) {
   return state.slots.filter(slot => slot.unit && (slot.unit.kind === 'hero' || slot.unit.type === 'hero'));
 }
 
-test('a same-type merge to rank 2 survives export and import', () => {
+test('a 1-tap turret upgrade to rank 2 survives export and import', () => {
   const profile = createProfile();
   const state = createRun({seed: 8, difficulty: 'normal', profile, runId: 'rank-save'});
   state.paused = true;
@@ -37,15 +36,21 @@ test('a same-type merge to rank 2 survives export and import', () => {
   const heroId = hero[0].unit.id;
   const heroIndex = state.slots.findIndex(slot => slot.unit && slot.unit.id === heroId);
 
-  state.slots[SOURCE].unit = createUnit(state, TYPE, 1, 'tower');
   state.slots[TARGET].unit = createUnit(state, TYPE, 1, 'tower');
+  state.phase = 'draft';
+  state.draft = {
+    options: [
+      {id: `tower:${TYPE}`, kind: 'tower', type: TYPE, action: 'upgrade', rank: 1, nextRank: 2, cap: 4},
+      {id: 'tower:fire', kind: 'tower', type: 'fire', action: 'deploy', rank: 0, nextRank: 1, cap: 4},
+      {id: 'hero_upgrade:strike', kind: 'hero_upgrade', upgradeId: 'strike', superweapon: false, cap: 5, nextLevel: 1}
+    ]
+  };
 
-  const merged = mergeUnits(state, SOURCE, TARGET);
-  assert.equal(merged.ok, true, merged.reason);
+  const upgraded = chooseDraft(state, 0);
+  assert.equal(upgraded.ok, true, upgraded.reason);
   assert.equal(state.slots[TARGET].unit.type, TYPE);
   assert.equal(state.slots[TARGET].unit.kind, 'tower');
   assert.equal(state.slots[TARGET].unit.rank, 2);
-  assert.equal(state.slots[SOURCE].unit, null);
 
   const text = exportSave(profile, state);
   const storage = memoryStorage();
@@ -57,7 +62,6 @@ test('a same-type merge to rank 2 survives export and import', () => {
     assert.equal(saved.slots[TARGET].unit.type, TYPE);
     assert.equal(saved.slots[TARGET].unit.kind, 'tower');
     assert.equal(saved.slots[TARGET].unit.rank, 2);
-    assert.equal(saved.slots[SOURCE].unit, null);
     const savedHeroes = heroSlots(saved);
     assert.equal(savedHeroes.length, 1);
     assert.equal(savedHeroes[0].unit.id, heroId);

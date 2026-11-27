@@ -1,7 +1,6 @@
 // Fixed-step integration. Speed changes how many STEP updates run per wall
 // second; gameplay systems always receive STEP, never a scaled delta.
 import {STEP, clone, emit, random} from './shared.js';
-import {updateField} from './systems/field.js';
 import {updateMovement} from './systems/movement.js';
 import {damageEnemy, killEnemy, updateCombat} from './systems/combat.js';
 import {updateStatuses} from './systems/status.js';
@@ -12,7 +11,7 @@ import {applyHeroUpgrade} from './systems/hero.js';
 
 export {createRun, createProfile} from './state.js';
 
-const ZERO_BONUSES = Object.freeze({damage:0, haste:0, range:0, critChance:0, fence:0, reward:0});
+const ZERO_BONUSES = Object.freeze({damage: 0, haste: 0, range: 0, critChance: 0, fence: 0, reward: 0});
 const STARTER_EVOLUTIONS = Object.freeze(['split_shot', 'ricochet', 'napalm', 'armored_car', 'cryo_barrage', 'orbital_beam']);
 
 function requireFn(fn, name) {
@@ -34,9 +33,8 @@ function sanitizeBonuses(value) {
   if (!value || typeof value !== 'object') return out;
   for (const key of [
     ...Object.keys(out),
-    'hybridDamage','critKnockback','energy','harvest','freeRerolls','rerollDiscount',
-    'fieldHp','fieldDiscount','thorns','surgePower','surgeCharges','energyRate',
-    'openingDraft','heroPierce','wallImmunity','shredPercent','statusDamage','superweaponHaste','starterWeapon'
+    'critKnockback', 'freeRerolls', 'thorns', 'surgePower', 'surgeCharges',
+    'openingDraft', 'heroPierce', 'wallImmunity', 'shredPercent', 'statusDamage', 'superweaponHaste', 'starterWeapon'
   ]) {
     const number = Number(value[key]);
     if (Number.isFinite(number)) out[key] = number;
@@ -49,14 +47,13 @@ export function applyProfileBonuses(state, bonuses) {
   if (!state || state.initialized) return state;
   if (!state.systems || typeof state.systems !== 'object' || Array.isArray(state.systems)) state.systems = {};
   const clean = sanitizeBonuses(bonuses);
-  state.systems.integration = {bonuses:clean};
+  state.systems.integration = {bonuses: clean};
   if (clean.fence > 0 && state.fence && Number.isFinite(state.fence.maxHp) && Number.isFinite(state.fence.hp)) {
     state.fence.maxHp += clean.fence;
     state.fence.hp = Math.min(state.fence.maxHp, state.fence.hp + clean.fence);
   }
-  state.energy=Math.min(state.maxEnergy,state.energy+(clean.energy||0));
-  state.freeRerollsLeft=clean.freeRerolls || 0;
-  state.surge.charges=state.surge.maxCharges=1+(clean.surgeCharges||0);
+  state.rerollsLeft = Math.min(20, 2 + Math.max(0, Math.floor(clean.freeRerolls || 0)));
+  state.surge.charges = state.surge.maxCharges = 1 + Math.max(0, Math.floor(clean.surgeCharges || 0));
   state.wallImmunity = Math.max(0, Math.floor(clean.wallImmunity || 0));
   state.openingDraftPending = Math.max(0, Math.floor(clean.openingDraft || 0));
   if ((clean.starterWeapon || 0) > 0) {
@@ -74,10 +71,10 @@ export function prepare(state) {
 
 export function integrationInfo() {
   return {
-    contract:2,
-    present:{movement:true, combat:true, status:true, waves:true, drafts:true, progression:true},
-    missing:[],
-    failed:{},
+    contract: 3,
+    present: {movement: true, combat: true, status: true, waves: true, drafts: true, progression: true},
+    missing: [],
+    failed: {},
   };
 }
 
@@ -92,8 +89,8 @@ function cleanup(state) {
     if (!enemy || enemy.dead || !(typeof enemy.hp === 'number') || enemy.hp > 0) continue;
     killEnemy(state, enemy, null);
   }
-  state.enemies = state.enemies.filter(enemy => enemy && enemy.dead !== true && typeof enemy.hp === 'number' && enemy.hp > 0);
-  state.projectiles = state.projectiles.filter(projectile => projectile && !(typeof projectile.life === 'number' && projectile.life <= 0));
+  state.enemies = state.enemies.filter((enemy) => enemy && enemy.dead !== true && typeof enemy.hp === 'number' && enemy.hp > 0);
+  state.projectiles = state.projectiles.filter((projectile) => projectile && !(typeof projectile.life === 'number' && projectile.life <= 0));
 }
 
 function resolveOutcome(state) {
@@ -101,15 +98,15 @@ function resolveOutcome(state) {
   if (state.phase === 'playing' && typeof hp === 'number' && hp <= 0) {
     state.fence.hp = 0;
     state.phase = 'defeat';
-    emit(state, 'defeat', {time:state.time, wave:state.wave, kills:state.kills});
+    emit(state, 'defeat', {time: state.time, wave: state.wave, kills: state.kills});
     return;
   }
-  const alive = Array.isArray(state.enemies) && state.enemies.some(enemy => enemy && enemy.dead !== true && enemy.hp > 0);
+  const alive = Array.isArray(state.enemies) && state.enemies.some((enemy) => enemy && enemy.dead !== true && enemy.hp > 0);
   const queue = state.director?.queue;
   const queueEmpty = !Array.isArray(queue) || queue.length === 0;
   if (state.phase === 'playing' && state.endless !== true && state.director?.done === true && queueEmpty && !alive) {
     state.phase = 'victory';
-    emit(state, 'victory', {time:state.time, wave:state.wave, kills:state.kills});
+    emit(state, 'victory', {time: state.time, wave: state.wave, kills: state.kills});
   }
 }
 
@@ -120,14 +117,13 @@ function stepBody(state) {
     state.tick += 1;
     state.fence.hp = 0;
     state.phase = 'defeat';
-    emit(state, 'defeat', {time:state.time, wave:state.wave, kills:state.kills});
+    emit(state, 'defeat', {time: state.time, wave: state.wave, kills: state.kills});
     return;
   }
   state.time += STEP;
   state.tick += 1;
   updateWaves(state, STEP);
   if (halted(state)) return;
-  updateField(state, STEP, damageEnemy);
   updateMovement(state, STEP);
   if (halted(state)) return;
   updateStatuses(state, STEP, damageEnemy);

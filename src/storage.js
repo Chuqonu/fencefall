@@ -34,7 +34,7 @@
  * Storage sanity ceilings are higher than gameplay caps: permanent levels <= 1000,
  * currency <= 1e9, import text <= 1_500_000 characters.
  */
-import {CONTRACT_VERSION, BASE_TYPES, DIFFICULTIES, ARENA, TARGET_MODES, fieldSlotGeometry, slotGeometry} from './shared.js';
+import {CONTRACT_VERSION, BASE_TYPES, DIFFICULTIES, ARENA, TARGET_MODES, slotGeometry} from './shared.js';
 
 export const PROFILE_KEY = 'fencefall.v1.profile';
 export const RUN_KEY = 'fencefall.v1.run';
@@ -71,7 +71,7 @@ const UINT32 = 4294967295;
 const BASE_TYPE_SET = new Set(BASE_TYPES);
 const ENEMY_KINDS = new Set(['shambler', 'runner', 'brute', 'armored', 'spitter', 'swarm', 'boss', 'leaper', 'splitter', 'mender', 'shade', 'banner', 'warden', 'charge', 'hush']);
 const STATUS_TYPES = new Set(['burn', 'poison', 'slow', 'stun', 'brittle']);
-const PHASES = new Set(['playing', 'draft', 'placing', 'victory', 'defeat']);
+const PHASES = new Set(['playing', 'draft', 'victory', 'defeat']);
 const RESULTS = new Set(['victory', 'defeat', 'abandon']);
 const EQUIPPED_SLOTS = ['weapon', 'charm', 'armor'];
 const PERMANENT_KEYS = ['damage', 'haste', 'vitality', 'economy'];
@@ -83,13 +83,13 @@ const SETTINGS_KEYS = new Set(['language', 'sound', 'reducedMotion', 'difficulty
 const RUN_KEYS = new Set([
   'version', 'runId', 'seed', 'rng', 'nextId', 'time', 'tick', 'accumulator', 'phase', 'paused', 'hiddenPaused',
   'speed', 'difficulty', 'wave', 'waveTime', 'director', 'kills', 'xp', 'nextDraftXp', 'draftLevel', 'fence',
-  'slots', 'enemies', 'projectiles', 'clouds', 'events', 'draft', 'pendingUnit', 'profileSnapshot', 'settlement',
-  'stats', 'initialized', 'endless', 'systems', 'expedition'
+  'slots', 'enemies', 'projectiles', 'clouds', 'events', 'draft', 'profileSnapshot', 'settlement',
+  'stats', 'initialized', 'endless', 'systems', 'expedition', 'rerollsLeft', 'draftRerollsUsed', 'surge'
 ]);
 const DIRECTOR_KEYS = new Set(['nextWave', 'queue', 'done']);
 const FENCE_KEYS = new Set(['hp', 'maxHp']);
-const STAT_KEYS = new Set(['damage', 'fenceDamage', 'merges', 'crits']);
-const UNIT_KEYS = new Set(['id', 'kind', 'type', 'rank', 'upgrades', 'cooldown', 'kills']);
+const STAT_KEYS = new Set(['damage', 'fenceDamage', 'crits']);
+const UNIT_KEYS = new Set(['id', 'kind', 'type', 'rank', 'upgrades', 'cooldown', 'kills', 'targeting']);
 const ENEMY_KEYS = new Set([
   'id', 'kind', 'x', 'y', 'hp', 'maxHp', 'speed', 'radius', 'damage', 'attackInterval', 'attackCooldown',
   'xp', 'armor', 'driftPhase', 'driftVelocity', 'statuses', 'attacking', 'dead'
@@ -99,9 +99,8 @@ const PROJECTILE_KEYS = new Set([
   'id', 'sourceId', 'targetId', 'x', 'y', 'speed', 'damage', 'crit', 'tags', 'splash', 'chain', 'chainRange',
   'pierce', 'visited', 'life'
 ]);
-const OPTION_KEYS = new Set(['id', 'kind', 'type', 'upgradeId', 'replace']);
+const OPTION_KEYS = new Set(['id', 'kind', 'type', 'upgradeId', 'action', 'rank', 'nextRank', 'cap', 'nextLevel', 'superweapon']);
 const DRAFT_KEYS = new Set(['options']);
-const PENDING_KEYS = new Set(['unit', 'replace']);
 const SETTLEMENT_KEYS = new Set(['runId', 'currency', 'difficulty', 'result', 'time', 'kills', 'wave']);
 
 function fail(reason) {
@@ -230,12 +229,22 @@ function copyExtensions(source, target, known) {
 
 function validateProfile(profile) {
   if (!isPlain(profile)) return fail('invalid_profile');
-  if (profile.version===1 && isPlain(profile.permanent) && isPlain(profile.equipped) && Array.isArray(profile.equipmentOwned)) {
-    const rename={hawk_brace:'kinetic_core',stormglass_edge:'prism_lens',survey_bead:'sun_spindle',ward_planks:'vanguard_kit',bastion_mail:'surge_capacitor'};
-    const mapped=id=>Object.hasOwn(rename,id) ? rename[id] : id;
-    profile={...profile,version:2,permanent:{economy:0,...profile.permanent},
-      equipmentOwned:[...new Set(profile.equipmentOwned.map(mapped))],
-      equipped:Object.fromEntries(Object.entries(profile.equipped).map(([slot,id])=>[slot,mapped(id)]))};
+  if ((profile.version === 1 || profile.version === 2) && isPlain(profile.permanent) && isPlain(profile.equipped) && Array.isArray(profile.equipmentOwned)) {
+    const rename = {
+      hawk_brace: 'kinetic_core',
+      stormglass_edge: 'prism_lens',
+      survey_bead: 'sun_spindle',
+      ward_planks: 'vanguard_kit',
+      bastion_mail: 'surge_capacitor'
+    };
+    const mapped = (id) => (Object.hasOwn(rename, id) ? rename[id] : id);
+    profile = {
+      ...profile,
+      version: CONTRACT_VERSION,
+      permanent: {economy: 0, ...profile.permanent},
+      equipmentOwned: [...new Set(profile.equipmentOwned.map(mapped))],
+      equipped: Object.fromEntries(Object.entries(profile.equipped).map(([slot, id]) => [slot, mapped(id)]))
+    };
   }
   if (profile.version !== CONTRACT_VERSION) return fail('invalid_version');
   if (typeof profile.currency !== 'number' || !Number.isFinite(profile.currency)) return fail('invalid_profile');
@@ -259,7 +268,7 @@ function validateProfile(profile) {
   for (const slot of EQUIPPED_SLOTS) {
     if (!Object.hasOwn(profile.equipped, slot)) return fail('invalid_profile');
   }
-  if (Object.keys(profile.equipped).some(key => !EQUIPPED_SLOTS.includes(key))) return fail('invalid_profile');
+  if (Object.keys(profile.equipped).some((key) => !EQUIPPED_SLOTS.includes(key))) return fail('invalid_profile');
   const equipped = {weapon: null, charm: null, armor: null};
   const used = new Set();
   for (const slot of EQUIPPED_SLOTS) {
@@ -275,11 +284,12 @@ function validateProfile(profile) {
     if (typeof profile.permanent[key] !== 'number' || !Number.isFinite(profile.permanent[key])) return fail('invalid_profile');
     if (!isInt(profile.permanent[key], 0, MAX_PERMANENT)) return fail('invalid_bounds');
   }
-  if (Object.keys(profile.permanent).some(key => !PERMANENT_KEYS.includes(key))) return fail('invalid_profile');
+  if (Object.keys(profile.permanent).some((key) => !PERMANENT_KEYS.includes(key))) return fail('invalid_profile');
   const permanent = {
     damage: profile.permanent.damage,
     haste: profile.permanent.haste,
-    economy:profile.permanent.economy, vitality: profile.permanent.vitality
+    economy: profile.permanent.economy,
+    vitality: profile.permanent.vitality
   };
 
   const settledRuns = [];
@@ -341,13 +351,10 @@ function validateUnit(unit, role, ids, mark) {
   } else if (kind === 'tower') {
     if (!BASE_TYPE_SET.has(type)) return fail('invalid_enum');
     if (!isInt(rank, 1, 4)) return fail('invalid_bounds');
-  } else if (kind === 'hybrid') {
-    if (type === 'hero' || !isId(type, 64)) return fail('invalid_enum');
-    if (!isInt(rank, 1, 4)) return fail('invalid_bounds');
   } else {
     return fail('invalid_enum');
   }
-  if (type==='harvest' ? !isNum(unit.harvestTimer,-1e-8,5) : !TARGET_MODES.includes(unit.targeting)) return fail('invalid_run');
+  if (!TARGET_MODES.includes(unit.targeting)) return fail('invalid_run');
   const upgrades = validateUpgrades(unit.upgrades);
   if (!upgrades.ok) return upgrades;
   if (!isNum(unit.cooldown, 0, 600)) return fail(typeof unit.cooldown === 'number' ? 'invalid_bounds' : 'invalid_run');
@@ -359,7 +366,8 @@ function validateUnit(unit, role, ids, mark) {
     rank,
     upgrades: upgrades.value,
     cooldown: unit.cooldown,
-    kills: unit.kills
+    kills: unit.kills,
+    targeting: unit.targeting
   };
   const extra = copyExtensions(unit, value, UNIT_KEYS);
   if (!extra.ok) return extra;
@@ -536,7 +544,7 @@ function validateCloud(cloud, ids, mark) {
 }
 
 function optionSignature(option) {
-  return `${option.kind}|${option.type || ''}|${option.upgradeId || ''}|${option.replace ? '1' : '0'}`;
+  return `${option.kind}|${option.type || ''}|${option.upgradeId || ''}`;
 }
 
 function validateOption(option) {
@@ -546,15 +554,39 @@ function validateOption(option) {
     if (!BASE_TYPE_SET.has(option.type)) return fail('invalid_enum');
     if (option.upgradeId != null) return fail('invalid_run');
     value.type = option.type;
+    if (option.action !== undefined) {
+      if (option.action !== 'deploy' && option.action !== 'upgrade') return fail('invalid_enum');
+      value.action = option.action;
+    }
+    if (option.rank !== undefined) {
+      if (!isInt(option.rank, 0, 4)) return fail('invalid_bounds');
+      value.rank = option.rank;
+    }
+    if (option.nextRank !== undefined) {
+      if (!isInt(option.nextRank, 1, 4)) return fail('invalid_bounds');
+      value.nextRank = option.nextRank;
+    }
+    if (option.cap !== undefined) {
+      if (!isInt(option.cap, 1, 4)) return fail('invalid_bounds');
+      value.cap = option.cap;
+    }
   } else if (option.kind === 'hero_upgrade') {
     if (!isId(option.upgradeId, 64) || option.type != null) return fail('invalid_run');
     value.upgradeId = option.upgradeId;
+    if (option.superweapon !== undefined) {
+      if (!isBool(option.superweapon)) return fail('invalid_run');
+      value.superweapon = option.superweapon;
+    }
+    if (option.cap !== undefined) {
+      if (!isInt(option.cap, 1, 32)) return fail('invalid_bounds');
+      value.cap = option.cap;
+    }
+    if (option.nextLevel !== undefined) {
+      if (!isInt(option.nextLevel, 1, 32)) return fail('invalid_bounds');
+      value.nextLevel = option.nextLevel;
+    }
   } else {
     return fail('invalid_enum');
-  }
-  if (option.replace !== undefined) {
-    if (!isBool(option.replace)) return fail('invalid_run');
-    value.replace = option.replace;
   }
   const extra = copyExtensions(option, value, OPTION_KEYS);
   if (!extra.ok) return extra;
@@ -563,7 +595,7 @@ function validateOption(option) {
 
 function validateDraft(draft) {
   if (draft === null) return pass(null);
-  if (!isPlain(draft) || !Array.isArray(draft.options) || draft.options.length !== 3) return fail('invalid_run');
+  if (!isPlain(draft) || !Array.isArray(draft.options) || draft.options.length < 1 || draft.options.length > 3) return fail('invalid_run');
   const options = [];
   const ids = new Set();
   const signatures = new Set();
@@ -620,14 +652,13 @@ function validateSettlement(settlement, runId, difficulty) {
     wave: settlement.wave
   };
   const extra = copyExtensions(settlement, value, SETTLEMENT_KEYS);
-  if (!extra.ok) return fail(extra.reason === 'invalid_bounds' ? 'invalid_settlement' : 'invalid_settlement');
+  if (!extra.ok) return fail('invalid_settlement');
   return pass(value);
 }
 
-function validatePhaseShape(phase, draft, pendingUnit) {
-  if (phase === 'draft') return draft !== null && pendingUnit === null;
-  if (phase === 'placing') return draft !== null && pendingUnit !== null;
-  return draft === null && pendingUnit === null;
+function validatePhaseShape(phase, draft) {
+  if (phase === 'draft') return draft !== null;
+  return draft === null;
 }
 
 function validateRun(state) {
@@ -657,7 +688,7 @@ function validateRun(state) {
   if (fenceHp === null || fenceHp < 0) return fail('invalid_bounds');
   if (!isPlain(state.stats)) return fail('invalid_run');
   if (!isNum(state.stats.damage, 0, MAX_STAT) || !isNum(state.stats.fenceDamage, 0, MAX_STAT)) return fail('invalid_bounds');
-  if (!isInt(state.stats.merges, 0, MAX_UNIT_KILLS) || !isInt(state.stats.crits, 0, MAX_UNIT_KILLS)) return fail('invalid_bounds');
+  if (!isInt(state.stats.crits, 0, MAX_UNIT_KILLS)) return fail('invalid_bounds');
 
   const director = validateDirector(state.director);
   if (!director.ok) return director;
@@ -681,25 +712,13 @@ function validateRun(state) {
 
   const ids = new Set();
   const mark = {high: 0};
-  if (state.maxEnergy!==999 || !isNum(state.energy,0,999) || !isInt(state.freeRerollsLeft,0,2) ||
-      !isInt(state.draftRerollsUsed,0,3) || !isPlain(state.fieldCooldowns) ||
-      !['bulwark','spikes','flare'].every(k=>isNum(state.fieldCooldowns[k],0,6))) return fail('invalid_run');
-  const surge=state.surge;
-  if (!isPlain(surge) || !isInt(surge.maxCharges,1,2) || !isInt(surge.charges,0,surge.maxCharges) ||
-      !isNum(surge.cooldown,0,10) || !isNum(surge.shieldTimer,0,3) || !Array.isArray(surge.thresholdsUsed) ||
-      surge.thresholdsUsed.length>2 || new Set(surge.thresholdsUsed).size!==surge.thresholdsUsed.length ||
-      surge.thresholdsUsed.some(t=>t!==0.5 && t!==0.2)) return fail('invalid_run');
-  if (!Array.isArray(state.fieldSlots) || state.fieldSlots.length!==10) return fail('invalid_slots');
-  for (let i=0;i<10;i++) {
-    const pad=state.fieldSlots[i], geometry=fieldSlotGeometry(i);
-    if (!isPlain(pad) || Object.keys(geometry).some(k=>pad[k]!==geometry[k])) return fail('invalid_slots');
-    const u=pad.unit;
-    if (u===null) continue;
-    if (!isPlain(u) || !['bulwark','spikes','flare'].includes(u.kind) || !isId(u.id) || !claimId(u.id,ids) ||
-        u.rank!==1 || !isNum(u.maxHp,1,5000) || !isNum(u.hp,0.000001,u.maxHp) || !isNum(u.armor,0,1) ||
-        !isNum(u.timer,-1e-8,6) || !isInt(u.kills,0,MAX_UNIT_KILLS)) return fail('invalid_run');
-    noteUid(u.id,mark);
-  }
+  if (!isInt(state.rerollsLeft, 0, 20) || !isInt(state.draftRerollsUsed, 0, 3)) return fail('invalid_run');
+  const surge = state.surge;
+  if (!isPlain(surge) || !isInt(surge.maxCharges, 1, 2) || !isInt(surge.charges, 0, surge.maxCharges) ||
+      !isNum(surge.cooldown, 0, 10) || !isNum(surge.shieldTimer, 0, 3) || !Array.isArray(surge.thresholdsUsed) ||
+      surge.thresholdsUsed.length > 2 || new Set(surge.thresholdsUsed).size !== surge.thresholdsUsed.length ||
+      surge.thresholdsUsed.some((t) => t !== 0.5 && t !== 0.2)) return fail('invalid_run');
+
   const slots = [];
   let heroes = 0;
   for (let index = 0; index < 10; index++) {
@@ -715,17 +734,7 @@ function validateRun(state) {
     slots.push({...slotGeometry(index), unit});
   }
   if (heroes !== 1) return fail('invalid_hero');
-
-  let pendingUnit = null;
-  if (state.pendingUnit !== null) {
-    if (!isPlain(state.pendingUnit) || !isBool(state.pendingUnit.replace)) return fail('invalid_run');
-    const next = validateUnit(state.pendingUnit.unit, 'defender', ids, mark);
-    if (!next.ok) return next;
-    pendingUnit = {unit: next.value, replace: state.pendingUnit.replace};
-    const extra = copyExtensions(state.pendingUnit, pendingUnit, PENDING_KEYS);
-    if (!extra.ok) return extra;
-  }
-  if (!validatePhaseShape(state.phase, draft.value, pendingUnit)) return fail('invalid_run');
+  if (!validatePhaseShape(state.phase, draft.value)) return fail('invalid_run');
 
   const enemies = [];
   for (const enemy of state.enemies) {
@@ -758,7 +767,6 @@ function validateRun(state) {
   const stats = {
     damage: state.stats.damage,
     fenceDamage: state.stats.fenceDamage,
-    merges: state.stats.merges,
     crits: state.stats.crits
   };
   const statsExtra = copyExtensions(state.stats, stats, STAT_KEYS);
@@ -792,12 +800,20 @@ function validateRun(state) {
     clouds,
     events: [],
     draft: draft.value,
-    pendingUnit,
     profileSnapshot: snapshot.value,
     settlement: settlement.value,
     stats,
     initialized: state.initialized,
-    endless: state.endless
+    endless: state.endless,
+    rerollsLeft: state.rerollsLeft,
+    draftRerollsUsed: state.draftRerollsUsed,
+    surge: {
+      charges: surge.charges,
+      maxCharges: surge.maxCharges,
+      shieldTimer: surge.shieldTimer,
+      cooldown: surge.cooldown,
+      thresholdsUsed: [...surge.thresholdsUsed]
+    }
   };
   if (state.systems !== undefined) {
     if (!isPlain(state.systems)) return fail('invalid_run');
@@ -924,9 +940,18 @@ export function saveProfile(profile, storage) {
 }
 
 export function legacyRunNotice(storage) {
-  const raw=readRaw(resolveStorage(storage,'read'),RUN_KEY);
-  try { return raw && JSON.parse(raw).version===1 ? 'legacyRunReset' : ''; } catch { return ''; }
+  const store = resolveStorage(storage, 'read');
+  if (!store) return '';
+  const raw = readRaw(store, RUN_KEY);
+  if (!raw.ok || !raw.value) return '';
+  try {
+    const ver = JSON.parse(raw.value)?.version;
+    return (ver === 1 || ver === 2) ? 'legacyRunReset' : '';
+  } catch {
+    return '';
+  }
 }
+
 export function loadRun(storage) {
   const store = resolveStorage(storage, 'read');
   if (!store) return null;
@@ -983,15 +1008,15 @@ export function importSave(text, storage) {
   }
   if (!isPlain(parsed)) return {ok: false, reason: 'invalid_format'};
   const keys = Object.keys(parsed);
-  if (keys.length !== 4 || keys.some(key => !['format', 'version', 'profile', 'run'].includes(key))) {
+  if (keys.length !== 4 || keys.some((key) => !['format', 'version', 'profile', 'run'].includes(key))) {
     return {ok: false, reason: 'invalid_format'};
   }
   if (parsed.format !== SAVE_FORMAT) return {ok: false, reason: 'invalid_format'};
-  if (parsed.version!==1 && parsed.version !== CONTRACT_VERSION) return {ok: false, reason: 'invalid_version'};
+  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== CONTRACT_VERSION) return {ok: false, reason: 'invalid_version'};
   const profile = validateProfile(parsed.profile);
   if (!profile.ok) return {ok: false, reason: profile.reason};
   let run = null;
-  const runReset=parsed.version===1 && parsed.run?.version===1;
+  const runReset = (parsed.version === 1 || parsed.version === 2) && parsed.run != null;
   if (parsed.run !== null && !runReset) {
     const validatedRun = validateRun(parsed.run);
     if (!validatedRun.ok) return {ok: false, reason: validatedRun.reason};
@@ -1026,5 +1051,5 @@ export function importSave(text, storage) {
     }
     return {ok: false, reason: isQuotaError(error) ? 'quota' : 'storage_unavailable'};
   }
-  return {ok: true, profile: profile.value, run,...(runReset?{notice:'legacyRunReset'}:{})};
+  return {ok: true, profile: profile.value, run, ...(runReset ? {notice: 'legacyRunReset'} : {})};
 }

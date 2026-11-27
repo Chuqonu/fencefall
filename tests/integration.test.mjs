@@ -116,7 +116,8 @@ test('controller actions obey planning rules without pretending missing modules 
   assert.equal(state.tick, running);
   assert.equal(state.slots[6].unit.kind, 'hero');
   assert.equal(state.slots[2].unit, null);
-  assert.equal(api.act('mergePreview', {from:6, to:0}).reason, 'heroProtected');
+  assert.equal(api.act('setTargeting', {index:6, mode:'strongest'}).ok, true);
+  assert.equal(state.slots[6].unit.targeting, 'strongest');
   assert.equal(state.slots[6].unit.kind, 'hero');
   const speed = api.act('speed', {value:2});
   assert.equal(speed.ok, false);
