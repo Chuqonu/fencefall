@@ -1353,6 +1353,17 @@ textarea {
   white-space: nowrap;
 }
 
+.dock-sound {
+  min-width: 44px;
+  width: 44px;
+  padding: 0;
+}
+
+.dock-sound.is-active {
+  border-color: rgba(242, 200, 100, 0.42);
+  color: var(--gold);
+}
+
 .speed-row {
   flex: 1 1 auto;
   display: grid;
@@ -1390,7 +1401,8 @@ textarea {
 @media (max-width: 390px) {
   .dock-btn { padding: 0 8px; gap: 4px; font-size: 0.74rem; }
   .dock-lbl { display: none; }
-  .dock-btn { min-width: 44px; width: 44px; padding: 0; }
+  .dock-btn { min-width: 42px; width: 42px; padding: 0; }
+  .battle-dock { gap: 4px; padding: 7px 6px max(8px, env(safe-area-inset-bottom)); }
 }
 
 /* =========================================================================

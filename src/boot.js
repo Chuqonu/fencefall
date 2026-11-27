@@ -228,13 +228,29 @@ export async function createController(options = {}) {
     if (action === 'sound') {
       const value = typeof payload.value === 'boolean' ? payload.value : profile.settings.sound !== true;
       profile.settings.sound = value;
-      try { audio?.setEnabled(value); } catch (error) { console.error(error); }
+      try {
+        audio?.setEnabled(value);
+        if (value) {
+          const unlocked = audio?.unlock?.();
+          if (unlocked && typeof unlocked.then === 'function') {
+            unlocked.then(() => {
+              syncMusic();
+              try { audio?.playEvents?.([{type: 'ui', time: 0}], {reducedMotion: profile.settings.reducedMotion === true}); } catch { /* ignore */ }
+            });
+          } else {
+            syncMusic();
+          }
+        } else {
+          syncMusic();
+        }
+      } catch (error) { console.error(error); }
       saveProfile();
       return {ok: true, sound: value};
     }
     if (action === 'reducedMotion') {
       const value = typeof payload.value === 'boolean' ? payload.value : profile.settings.reducedMotion !== true;
       profile.settings.reducedMotion = value;
+      try { audio?.playEvents?.([], {reducedMotion: value}); } catch { /* ignore */ }
       saveProfile();
       return {ok: true, reducedMotion: value};
     }
@@ -370,6 +386,36 @@ export async function createController(options = {}) {
     return {ok: true, notice: imported.notice};
   }
 
+  const UI_CUE_ACTIONS = new Set([
+    'start', 'restart', 'resume', 'pause', 'speed', 'language', 'screen', 'chooseDraft',
+    'buyEquipment', 'equip', 'upgradePermanent', 'buyGem', 'equipGem', 'unequipGem',
+    'claimStarterPack', 'endless', 'exportSave', 'importSave',
+  ]);
+
+  function computeMusicMode() {
+    if (globalThis.document?.hidden) return 'silent';
+    if (profile.settings?.sound !== true) return 'silent';
+    if (ui.screen === 'results') return 'silent';
+    if (ui.screen !== 'battle') return 'menu';
+    const state = run || storedRun;
+    if (!state || state.paused || state.hiddenPaused) return 'silent';
+    if (state.phase === 'victory' || state.phase === 'defeat') return 'silent';
+    if (state.phase === 'draft') return 'draft';
+    const hasBoss = Array.isArray(state.enemies) && state.enemies.some((e) => e && !e.dead && e.kind === 'boss');
+    if (hasBoss || waves.bossApproaching?.(state)) return 'boss';
+    return 'battle';
+  }
+
+  let lastMusicMode = '';
+
+  function syncMusic(force = false) {
+    if (!audio || typeof audio.setMusicMode !== 'function') return;
+    const next = computeMusicMode();
+    if (!force && next === lastMusicMode) return;
+    lastMusicMode = next;
+    try { audio.setMusicMode(next); } catch (error) { console.error(error); }
+  }
+
   function act(action, payload = {}) {
     let outcome;
     try {
@@ -380,6 +426,16 @@ export async function createController(options = {}) {
     }
     if (!outcome.ok) ui.message = outcome.reason || 'invalid';
     else ui.message = outcome.notice || '';
+    if (action !== 'hover' && action !== 'sound') {
+      try {
+        if (!outcome.ok) {
+          audio?.playEvents?.([{type: 'ui', cue: 'error', time: 0}], {reducedMotion: profile.settings.reducedMotion === true});
+        } else if (UI_CUE_ACTIONS.has(action)) {
+          audio?.playEvents?.([{type: 'ui', time: 0}], {reducedMotion: profile.settings.reducedMotion === true});
+        }
+      } catch { /* ignore */ }
+    }
+    syncMusic();
     return outcome;
   }
 
@@ -398,10 +454,26 @@ export async function createController(options = {}) {
     }),
     setAudio(instance) {
       audio = instance || null;
-      try { audio?.setEnabled(profile.settings.sound === true); } catch (error) { console.error(error); }
+      lastMusicMode = '';
+      try {
+        audio?.setEnabled(profile.settings.sound === true);
+        syncMusic(true);
+      } catch (error) { console.error(error); }
     },
-    unlockAudio() { try { audio?.unlock?.(); } catch (error) { console.error(error); } },
-    publish(events) { if (events?.length) try { audio?.playEvents?.(events); } catch (error) { console.error(error); } },
+    unlockAudio() {
+      try {
+        const res = audio?.unlock?.();
+        if (res && typeof res.then === 'function') res.then(() => syncMusic());
+        else syncMusic();
+      } catch (error) { console.error(error); }
+    },
+    syncMusic,
+    publish(events) {
+      if (events?.length) {
+        try { audio?.playEvents?.(events, {reducedMotion: profile.settings.reducedMotion === true}); }
+        catch (error) { console.error(error); }
+      }
+    },
     settleTerminal,
     integration: () => ({engine: integrationInfo(), modules: Object.fromEntries(Object.entries(MODULES).map(([key, value]) => [key, !!value]))}),
   };
@@ -437,7 +509,7 @@ async function mount() {
     try { renderer = modules.renderer.createRenderer(canvas); renderer.resize?.(); } catch (error) { console.error(error); renderer = null; }
   }
   if (typeof modules.audio?.createAudio === 'function') {
-    try { api.setAudio(modules.audio.createAudio()); } catch (error) { console.error(error); }
+    try { api.setAudio(modules.audio.createAudio({settings: api.getProfile().settings})); } catch (error) { console.error(error); }
   }
 
   let last = performance.now();
@@ -458,6 +530,7 @@ async function mount() {
   const refresh = () => {
     const view = api.getUI();
     const state = api.getState();
+    api.syncMusic?.();
     const selectedUnit = state?.slots?.[view.selectedSlot]?.unit;
     const mark = [
       view.screen,
@@ -507,10 +580,12 @@ async function mount() {
     }
   };
   document.addEventListener('pointerdown', () => api.unlockAudio(), {passive: true});
+  document.addEventListener('keydown', () => api.unlockAudio(), {passive: true});
   document.addEventListener('visibilitychange', () => {
     const state = api.getState();
     if (state && document.hidden) state.hiddenPaused = true;
     last = performance.now();
+    api.syncMusic?.();
     refresh();
   });
   const frame = (now) => {

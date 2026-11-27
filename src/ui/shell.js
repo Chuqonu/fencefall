@@ -176,10 +176,12 @@ export function mountShell(root, api) {
   });
   const speedRow = el('div', {class: 'speed-row', role: 'group'});
   speedRow.append(...speedButtons);
+  const battleSoundButton = controlButton('btn-battle-sound', 'sound');
+  battleSoundButton.className = 'btn dock-btn dock-sound';
   const menuButton = controlButton('btn-fight-menu', 'screen');
   menuButton.className = 'btn dock-btn dock-menu';
   menuButton.dataset.name = 'menu';
-  battleDock.append(pauseButton, speedRow, menuButton);
+  battleDock.append(pauseButton, speedRow, battleSoundButton, menuButton);
 
   // --- Non-Battle Mobile Sticky Bottom Tab Bar ---
   const bottomNav = el('nav', {class: 'bottom-nav', 'data-testid': 'screen-nav'});
@@ -422,6 +424,14 @@ export function mountShell(root, api) {
     soundButton.setAttribute('aria-label', soundOn ? text('soundOn') : text('soundOff'));
     soundButton.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
     soundButton.classList.toggle('is-active', soundOn);
+
+    if (battleSoundButton.dataset.iconKey !== soundIconKey) {
+      battleSoundButton.dataset.iconKey = soundIconKey;
+      battleSoundButton.replaceChildren(navIcon(doc, soundIconKey, 17));
+    }
+    battleSoundButton.setAttribute('aria-label', soundOn ? text('soundOn') : text('soundOff'));
+    battleSoundButton.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+    battleSoundButton.classList.toggle('is-active', soundOn);
 
     // Bottom Navigation Tabs (non-battle)
     bottomNav.setAttribute('aria-label', titleText || 'Fencefall');

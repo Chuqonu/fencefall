@@ -10,7 +10,7 @@ export function createProfile(language = 'en') {
     permanent: {damage: 0, haste: 0, vitality: 0, economy: 0},
     settledRuns: [],
     best: {},
-    settings: {language: language === 'zh' ? 'zh' : 'en', sound: false, reducedMotion: false, difficulty: 'normal'}
+    settings: {language: language === 'zh' ? 'zh' : 'en', sound: true, reducedMotion: false, difficulty: 'normal'}
   };
 }
 
